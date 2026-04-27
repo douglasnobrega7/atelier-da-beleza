@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import {
   advances as initialAdvances,
   appointments as initialAppointments,
@@ -174,12 +174,12 @@ function calculateCommissionDetails(appointment, employee) {
 }
 
 function getAppointmentCommission(appointment, employees) {
-  if (appointment.status !== 'Concluído') return 0
+  if (appointment.status !== 'ConcluÃ­do') return 0
   return Number(appointment.comissaoCalculada ?? appointment.commission ?? calculateCommission(appointment, employees) ?? 0)
 }
 
 function formatCommissionRule(rule) {
-  if (!rule) return 'Sem comissão'
+  if (!rule) return 'Sem comissÃ£o'
   const type = rule.type ?? rule.tipoComissao
   const value = Number(rule.value ?? rule.valorComissaoConfigurado ?? 0)
   return type === 'fixed' ? money.format(value) : `${value}%`
@@ -189,25 +189,45 @@ function isProfessional(employee) {
   return (employee?.employeeType ?? 'professional') === 'professional'
 }
 
+function normalizeLoginPart(value, fallback) {
+  const normalized = (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+  return normalized || fallback
+}
+
+function getSalonDomain(settings) {
+  return `${normalizeLoginPart(settings?.salonName ?? 'Atelier da Beleza', 'salao')}.com`
+}
+
+function getSuggestedAccessEmail({ name, employeeType = 'professional', salonSettings }) {
+  const domain = getSalonDomain(salonSettings)
+  if (employeeType === 'admin') return `admin@${domain}`
+  if (employeeType === 'cashier') return `caixa@${domain}`
+  return `${normalizeLoginPart(name, 'profissional')}@${domain}`
+}
+
 function getProfessionals(employees) {
   return employees.filter(isProfessional)
 }
 
 function withCommission(appointment, employees) {
-  if (appointment.status !== 'Concluído') return { ...appointment, commission: 0, comissaoCalculada: 0 }
+  if (appointment.status !== 'ConcluÃ­do') return { ...appointment, commission: 0, comissaoCalculada: 0 }
   const employee = employees.find((item) => item.name === appointment.professional)
   return { ...appointment, ...calculateCommissionDetails(appointment, employee) }
 }
 
 function getClientInsights(clientName, appointments) {
-  const visits = appointments.filter((item) => item.client === clientName && item.status === 'Concluído')
+  const visits = appointments.filter((item) => item.client === clientName && item.status === 'ConcluÃ­do')
   const serviceCounts = visits.reduce((acc, item) => ({ ...acc, [item.service]: (acc[item.service] || 0) + 1 }), {})
-  const favoriteService = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Sem histórico'
+  const favoriteService = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Sem histÃ³rico'
   const total = visits.reduce((sum, item) => sum + Number(item.value ?? item.valor ?? 0), 0)
   const lastVisit = visits.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))[0]?.date
   return {
     favoriteService,
-    lastVisit: lastVisit ? formatDate(lastVisit) : 'Sem visita concluída',
+    lastVisit: lastVisit ? formatDate(lastVisit) : 'Sem visita concluÃ­da',
     visitCount: visits.length,
     averageTicket: visits.length ? total / visits.length : 0
   }
@@ -250,7 +270,7 @@ function createAdvanceCashEntry(advance) {
   return {
     id: Date.now() + 1,
     tipo: 'saida',
-    type: 'Saída',
+    type: 'SaÃ­da',
     categoria: 'Vale',
     category: 'Vale',
     descricao: `Vale - ${advance.employee}`,
@@ -270,13 +290,13 @@ const adminMenu = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'agenda', label: 'Agenda' },
   { id: 'clientes', label: 'Clientes' },
-  { id: 'servicos', label: 'Serviços' },
-  { id: 'funcionarios', label: 'Funcionários' },
+  { id: 'servicos', label: 'ServiÃ§os' },
+  { id: 'funcionarios', label: 'FuncionÃ¡rios' },
   { id: 'caixa', label: 'Caixa' },
   { id: 'vales', label: 'Vales' },
   { id: 'estoque', label: 'Estoque' },
-  { id: 'relatorios', label: 'Relatórios' },
-  { id: 'configuracoes', label: 'Configurações' }
+  { id: 'relatorios', label: 'RelatÃ³rios' },
+  { id: 'configuracoes', label: 'ConfiguraÃ§Ãµes' }
 ]
 
 const cashierMenu = [
@@ -284,8 +304,8 @@ const cashierMenu = [
   { id: 'clientes', label: 'Clientes' },
   { id: 'caixa', label: 'Caixa' },
   { id: 'vales', label: 'Vales' },
-  { id: 'funcionarios', label: 'Funcionários' },
-  { id: 'servicos', label: 'Serviços' },
+  { id: 'funcionarios', label: 'FuncionÃ¡rios' },
+  { id: 'servicos', label: 'ServiÃ§os' },
   { id: 'estoque', label: 'Estoque' }
 ]
 
@@ -297,15 +317,15 @@ const professionalMenu = [
 const statusStyles = {
   Aguardando: 'bg-amber-50 text-amber-700 border-amber-200',
   Confirmado: 'bg-lilacSoft/40 text-violet-700 border-violet-100',
-  Concluído: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'ConcluÃ­do': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Cancelado: 'bg-rose-50 text-rose-700 border-rose-200'
 }
 
-const employeeStatuses = ['Ativo', 'De folga', 'Horário de almoço']
+const employeeStatuses = ['Ativo', 'De folga', 'HorÃ¡rio de almoÃ§o']
 const employeeStatusStyles = {
   Ativo: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   'De folga': 'bg-rose-50 text-rose-700 border-rose-200',
-  'Horário de almoço': 'bg-amber-50 text-amber-700 border-amber-200'
+  'HorÃ¡rio de almoÃ§o': 'bg-amber-50 text-amber-700 border-amber-200'
 }
 
 function getStoredTheme() {
@@ -313,8 +333,47 @@ function getStoredTheme() {
   return window.localStorage.getItem('salon-theme') === 'dark' ? 'dark' : 'light'
 }
 
+const sessionKey = 'salon-session'
+
+function toSessionUser(user) {
+  if (!user) return null
+  const { password, temporaryPassword, ...sessionUser } = user
+  return sessionUser
+}
+
+function getStoredSession() {
+  if (typeof window === 'undefined') return null
+
+  const sessionData = window.localStorage.getItem(sessionKey) ?? window.sessionStorage.getItem(sessionKey)
+  if (!sessionData) return null
+
+  try {
+    const parsed = JSON.parse(sessionData)
+    const sessionUser = toSessionUser(parsed?.user)
+    return sessionUser?.role && sessionUser.email ? sessionUser : null
+  } catch {
+    window.localStorage.removeItem(sessionKey)
+    window.sessionStorage.removeItem(sessionKey)
+    return null
+  }
+}
+
+function saveSession(user, keepConnected) {
+  const targetStorage = keepConnected ? window.localStorage : window.sessionStorage
+  const otherStorage = keepConnected ? window.sessionStorage : window.localStorage
+  const sessionUser = toSessionUser(user)
+  otherStorage.removeItem(sessionKey)
+  targetStorage.setItem(sessionKey, JSON.stringify({ user: sessionUser, savedAt: new Date().toISOString() }))
+}
+
+function clearStoredSession() {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(sessionKey)
+  window.sessionStorage.removeItem(sessionKey)
+}
+
 function App() {
-  const [currentUser, setCurrentUser] = useState(null)
+  const [currentUser, setCurrentUser] = useState(getStoredSession)
   const [activePage, setActivePage] = useState('dashboard')
   const [agendaProfessional, setAgendaProfessional] = useState('all')
   const [theme, setTheme] = useState(getStoredTheme)
@@ -326,7 +385,7 @@ function App() {
   const [cashClosures, setCashClosures] = useState([])
   const [advances, setAdvances] = useState(initialAdvances)
   const [blockedSlots, setBlockedSlots] = useState([])
-  const [salonSettings, setSalonSettings] = useState({ receptionWhatsapp: '5511988889090' })
+  const [salonSettings, setSalonSettings] = useState({ salonName: 'Atelier da Beleza', receptionWhatsapp: '5511988889090' })
   const [serviceItems, setServiceItems] = useState(initialServices)
   services = serviceItems
   const [appointments, setAppointments] = useState(initialAppointments.map((appointment) => withCommission({ ...appointment, date: appointment.date ?? todayIso }, initialEmployees)))
@@ -364,35 +423,40 @@ function App() {
     setToast({ text, type, id: Date.now() })
   }
 
-  function handleLogin(email, password) {
+  function handleLogin(email, password, keepConnected) {
     const normalizedEmail = email.trim().toLowerCase()
     const user = users.find((item) => item.email.toLowerCase() === normalizedEmail && item.password === password)
     if (user) {
-      setCurrentUser(user)
-      setActivePage(user.role === 'admin' ? 'dashboard' : 'caixa')
+      const sessionUser = toSessionUser(user)
+      setCurrentUser(sessionUser)
+      saveSession(sessionUser, keepConnected)
+      setActivePage(sessionUser.role === 'admin' ? 'dashboard' : 'caixa')
       return true
     }
 
-    const professional = employees.find((item) => (
-      isProfessional(item) &&
+    const employeeUser = employees.find((item) => (
       item.loginActive &&
       item.accessEmail?.toLowerCase() === normalizedEmail &&
       item.temporaryPassword === password
     ))
-    if (!professional) return false
-    setCurrentUser({
-      role: 'professional',
-      employeeId: professional.id,
-      name: professional.name,
-      title: professional.role,
-      email: professional.accessEmail,
-      phone: professional.phone
-    })
-    setActivePage('minha-agenda')
+    if (!employeeUser) return false
+    const professional = isProfessional(employeeUser)
+    const professionalUser = {
+      role: professional ? 'professional' : 'cashier',
+      employeeId: employeeUser.id,
+      name: employeeUser.name,
+      title: employeeUser.role,
+      email: employeeUser.accessEmail,
+      phone: employeeUser.phone
+    }
+    setCurrentUser(professionalUser)
+    saveSession(professionalUser, keepConnected)
+    setActivePage(professional ? 'minha-agenda' : 'caixa')
     return true
   }
 
   function handleLogout() {
+    clearStoredSession()
     setCurrentUser(null)
     setActivePage('dashboard')
     setAgendaProfessional('all')
@@ -465,13 +529,14 @@ function App() {
 }
 
 function LoginScreen({ onLogin, theme, onThemeChange }) {
-  const [email, setEmail] = useState('admin@atelierdabeleza.com')
-  const [password, setPassword] = useState('123456')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [keepConnected, setKeepConnected] = useState(false)
   const [error, setError] = useState('')
 
   function submit(event) {
     event.preventDefault()
-    if (!onLogin(email, password)) {
+    if (!onLogin(email, password, keepConnected)) {
       setError('E-mail ou senha incorretos.')
     }
   }
@@ -486,13 +551,13 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
                 <ThemeToggle theme={theme} onChange={onThemeChange} />
               </div>
               <div className="mb-10 inline-flex items-center gap-3 rounded-full border border-white/80 bg-white/70 px-4 py-2 text-sm font-semibold text-goldSoft shadow-sm dark:border-white/10 dark:bg-white/10">
-                Sistema leve para salão
+                Sistema leve para salÃ£o
               </div>
               <h1 className="max-w-xl text-4xl font-bold leading-tight text-graphite sm:text-5xl">
-                Salão Atelier da Beleza
+                SalÃ£o Atelier da Beleza
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-gray-600 dark:text-gray-300">
-                Controle agenda, clientes, serviços, caixa, estoque e equipe em uma interface simples para o dia a dia do salão.
+                Controle agenda, clientes, serviÃ§os, caixa, estoque e equipe em uma interface simples para o dia a dia do salÃ£o.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -510,21 +575,19 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
               <Field label="E-mail" value={email} onChange={setEmail} type="email" />
               <Field label="Senha" value={password} onChange={setPassword} type="password" />
             </div>
+            <label className="mt-4 flex items-center gap-3 text-sm font-semibold text-gray-600 dark:text-gray-300">
+              <input
+                className="h-4 w-4 rounded border-gray-300 text-graphite focus:ring-graphite"
+                checked={keepConnected}
+                onChange={(event) => setKeepConnected(event.target.checked)}
+                type="checkbox"
+              />
+              Manter conectado
+            </label>
             {error && <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
             <button className="focus-ring mt-6 rounded-2xl bg-graphite px-5 py-3 font-semibold text-white shadow-soft transition hover:bg-[#343039]">
               Entrar no sistema
             </button>
-            <div className="mt-6 grid gap-3 text-sm text-gray-600">
-              <button type="button" onClick={() => { setEmail('admin@atelierdabeleza.com'); setPassword('123456') }} className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-left hover:bg-blush/30">
-                <strong className="text-graphite">Dono/Admin</strong><br />admin@atelierdabeleza.com · senha 123456
-              </button>
-              <button type="button" onClick={() => { setEmail('funcionario@atelierdabeleza.com'); setPassword('123456') }} className="rounded-2xl border border-lilacSoft bg-white px-4 py-3 text-left hover:bg-lilacSoft/25">
-                <strong className="text-graphite">Funcionário Caixa</strong><br />funcionario@atelierdabeleza.com · senha 123456
-              </button>
-              <button type="button" onClick={() => { setEmail('camila@atelierdabeleza.com'); setPassword('123456') }} className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-left hover:bg-emerald-50">
-                <strong className="text-graphite">Profissional</strong><br />camila@atelierdabeleza.com · senha 123456
-              </button>
-            </div>
           </form>
         </div>
       </div>
@@ -555,7 +618,7 @@ function Sidebar({ user, menu, activePage, onNavigate, onLogout }) {
     <aside className="border-b border-blush/80 bg-white/90 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-[#1a171f]/95 lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
       <div className="flex items-center justify-between gap-4 lg:block">
         <div className="min-w-0 break-words">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃO</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃƒO</p>
           <h1 className="text-xl font-bold text-graphite">Atelier da Beleza</h1>
         </div>
           <button onClick={onLogout} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/10 lg:hidden">
@@ -592,9 +655,9 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
   const search = query.trim().toLowerCase()
   const results = canSearchGlobal && search ? [
     ...clients.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Cliente', page: 'clientes' })),
-    ...services.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Serviço', page: 'servicos' })),
-    ...employees.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Funcionário', page: 'funcionarios' })),
-    ...appointments.filter((item) => `${item.client} ${item.service} ${item.professional}`.toLowerCase().includes(search)).map((item) => ({ label: `${item.client} · ${item.time}`, detail: `Agenda · ${item.service}`, page: 'agenda' }))
+    ...services.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'ServiÃ§o', page: 'servicos' })),
+    ...employees.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'FuncionÃ¡rio', page: 'funcionarios' })),
+    ...appointments.filter((item) => `${item.client} ${item.service} ${item.professional}`.toLowerCase().includes(search)).map((item) => ({ label: `${item.client} Â· ${item.time}`, detail: `Agenda Â· ${item.service}`, page: 'agenda' }))
   ].slice(0, 8) : []
 
   function openResult(page) {
@@ -607,14 +670,14 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
       <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-graphite">{title}</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Hoje, {formatDate(todayIso)} · atendimento rápido e organizado</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Hoje, {formatDate(todayIso)} Â· atendimento rÃ¡pido e organizado</p>
         </div>
         {canSearchGlobal && <div className="relative w-full sm:max-w-xs">
           <input
             className="focus-ring w-full rounded-2xl border border-blush bg-white px-4 py-2 text-sm font-semibold dark:border-white/10 dark:bg-[#24202c]"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar clientes, serviços, agenda..."
+            placeholder="Buscar clientes, serviÃ§os, agenda..."
           />
           {results.length > 0 && (
             <div className="absolute right-0 z-30 mt-2 w-full overflow-hidden rounded-2xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#24202c]">
@@ -630,7 +693,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
         <div className="flex flex-wrap items-center gap-3">
           <ThemeToggle theme={theme} onChange={onThemeChange} />
           <div className="rounded-full border border-blush bg-white px-4 py-2 text-sm font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
-            {user.role === 'admin' ? 'Perfil Admin' : user.role === 'professional' ? 'Perfil Profissional' : 'Funcionário Caixa'}
+            {user.role === 'admin' ? 'Perfil Admin' : user.role === 'professional' ? 'Perfil Profissional' : 'FuncionÃ¡rio Caixa'}
           </div>
         </div>
       </div>
@@ -662,7 +725,7 @@ function PageRouter({ page, user, appointments, setAppointments, clients, setCli
     agenda: <Agenda appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
     clientes: <Clients user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
     servicos: <Services user={user} services={services} setServices={setServices} notify={notify} />,
-    funcionarios: <Employees user={user} employees={employees} setEmployees={setEmployees} onOpenAgendaForProfessional={onOpenAgendaForProfessional} />,
+    funcionarios: <Employees user={user} employees={employees} setEmployees={setEmployees} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
     caixa: <CashRegister entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} notify={notify} />,
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
@@ -677,7 +740,7 @@ function PageRouter({ page, user, appointments, setAppointments, clients, setCli
 
 function AdminDashboard({ appointments, employees, clients, cashEntries, advances }) {
   const professionals = getProfessionals(employees)
-  const completed = appointments.filter((item) => item.status === 'Concluído')
+  const completed = appointments.filter((item) => item.status === 'ConcluÃ­do')
   const dayRevenue = completed.reduce((sum, item) => sum + item.value, 0)
   const monthRevenue = completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
   const commissions = professionals.map((employee) => ({ name: employee.name, value: completed.filter((item) => item.professional === employee.name).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0) }))
@@ -695,61 +758,61 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const pendingAdvances = advances.filter((item) => item.status !== 'Descontado').reduce((sum, item) => sum + Number(item.value ?? 0), 0)
   const dayCashEntries = cashEntries.filter((item) => (item.date ?? item.data) === todayIso || (!item.date && !item.data))
   const cashIncome = dayCashEntries.filter((item) => cashType(item) === 'entrada').reduce((sum, item) => sum + cashValue(item), 0)
-  const cashOutcome = dayCashEntries.filter((item) => cashType(item) === 'saída' || cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
+  const cashOutcome = dayCashEntries.filter((item) => cashType(item) === 'saÃ­da' || cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric title="Faturamento do dia" value={money.format(dayRevenue)} detail="Concluídos hoje" />
-        <Metric title="Faturamento do mês" value={money.format(monthRevenue)} detail="Abril de 2026" />
+        <Metric title="Faturamento do dia" value={money.format(dayRevenue)} detail="ConcluÃ­dos hoje" />
+        <Metric title="Faturamento do mÃªs" value={money.format(monthRevenue)} detail="Abril de 2026" />
         <Metric title="Agendamentos de hoje" value={appointments.filter((item) => item.date === todayIso).length} detail="Conforme expediente da equipe" />
-        <Metric title="Clientes atendidos" value={completed.length} detail="Serviços finalizados" />
-        <Metric title="Comissões do dia" value={money.format(dayCommissions)} detail="Atendimentos concluídos" />
-        <Metric title="Comissões do mês" value={money.format(monthCommissions)} detail="Total calculado" />
-        <Metric title="Vales do dia" value={money.format(dayAdvances)} detail="Saídas no caixa" />
-        <Metric title="Vales do mês" value={money.format(monthAdvances)} detail="Total registrado" />
-        <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Ainda não descontados" />
-        <Metric title="Saldo líquido do dia" value={money.format(cashIncome - cashOutcome)} detail="Caixa com saídas" />
+        <Metric title="Clientes atendidos" value={completed.length} detail="ServiÃ§os finalizados" />
+        <Metric title="ComissÃµes do dia" value={money.format(dayCommissions)} detail="Atendimentos concluÃ­dos" />
+        <Metric title="ComissÃµes do mÃªs" value={money.format(monthCommissions)} detail="Total calculado" />
+        <Metric title="Vales do dia" value={money.format(dayAdvances)} detail="SaÃ­das no caixa" />
+        <Metric title="Vales do mÃªs" value={money.format(monthAdvances)} detail="Total registrado" />
+        <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Ainda nÃ£o descontados" />
+        <Metric title="Saldo lÃ­quido do dia" value={money.format(cashIncome - cashOutcome)} detail="Caixa com saÃ­das" />
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Faturamento semanal">
           <WeeklyRevenueChart appointments={appointments} />
         </Panel>
-        <Panel title="Serviços mais vendidos">
+        <Panel title="ServiÃ§os mais vendidos">
           <CompactList items={serviceSales.map(([label, count]) => `${label}: ${count} venda(s)`)} />
         </Panel>
       </div>
       <div className="grid gap-5 xl:grid-cols-3">
-        <Panel title="Comissão por funcionário">
+        <Panel title="ComissÃ£o por funcionÃ¡rio">
           <div className="space-y-3">
             {commissions.map((item) => <LineItem key={item.name} label={item.name} value={money.format(item.value)} />)}
           </div>
         </Panel>
-        <Panel title="Comissão por serviço">
-          <CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissões calculadas']} />
+        <Panel title="ComissÃ£o por serviÃ§o">
+          <CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissÃµes calculadas']} />
         </Panel>
         <Panel title="Cliente que mais frequenta">
           <CompactList items={[topClient ? `${topClient[0]}: ${topClient[1]} visita(s)` : 'Sem dados suficientes']} />
         </Panel>
-        <Panel title="Horários mais cheios">
+        <Panel title="HorÃ¡rios mais cheios">
           <CompactList items={busyHours.length ? busyHours.map(([label, count]) => `${label}: ${count} agendamento(s)`) : ['Sem dados']} />
         </Panel>
         <Panel title="Dia que mais fatura">
           <CompactList items={[bestWeekday ? `${bestWeekday[0]}: ${money.format(bestWeekday[1])}` : 'Sem dados']} />
         </Panel>
-        <Panel title="Serviços mais lucrativos">
+        <Panel title="ServiÃ§os mais lucrativos">
           <CompactList items={serviceRevenue.length ? serviceRevenue.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem dados']} />
         </Panel>
-        <Panel title="Entradas e saídas">
+        <Panel title="Entradas e saÃ­das">
           <LineItem label="Entradas" value={money.format(cashIncome)} positive />
-          <LineItem label="Saídas" value={money.format(cashOutcome)} negative />
+          <LineItem label="SaÃ­das" value={money.format(cashOutcome)} negative />
           <LineItem label="Saldo do dia" value={money.format(cashIncome - cashOutcome)} />
         </Panel>
-        <Panel title="Próximos agendamentos">
+        <Panel title="PrÃ³ximos agendamentos">
           <div className="space-y-3">
             {appointments.filter((item) => item.status !== 'Cancelado').slice(0, 4).map((item) => (
               <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-3 text-sm">
-                <p className="font-semibold">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                <p className="font-semibold">{formatDate(item.date)} Â· {item.time} Â· {item.client}</p>
                 <p className="text-gray-500">{item.service} com {item.professional}</p>
               </div>
             ))}
@@ -764,7 +827,7 @@ function WeeklyRevenueChart({ appointments }) {
   const [tooltip, setTooltip] = useState(null)
   const weekDates = getWeekDates(todayIso).slice(1).concat(getWeekDates(todayIso).slice(0, 1))
   const chartData = weekDates.map((date) => {
-    const completed = appointments.filter((item) => item.date === date && item.status === 'Concluído')
+    const completed = appointments.filter((item) => item.date === date && item.status === 'ConcluÃ­do')
     const fallback = weeklyRevenue.find((item) => item.day === getWeekdayLabel(date).replace('.', '').slice(0, 3))
     return {
       date,
@@ -860,7 +923,7 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
       if (user.role !== 'admin' && user.role !== 'cashier' && item.professional !== user.name) return item
       return withCommission({ ...item, status }, allEmployees)
     }))
-    if (status === 'Concluído') notify?.('Comissão calculada automaticamente.')
+    if (status === 'ConcluÃ­do') notify?.('ComissÃ£o calculada automaticamente.')
   }
 
   function sendConfirmation(appointment) {
@@ -870,23 +933,23 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
       notify?.('Cliente sem telefone cadastrado.', 'error')
       return
     }
-    const message = `Olá ${appointment.client}\nSeu horário está marcado para dia ${formatDate(appointment.date)} às ${appointment.time} com ${appointment.professional}.\nServiço: ${appointment.service}\nQualquer dúvida é só avisar`
+    const message = `OlÃ¡ ${appointment.client}\nSeu horÃ¡rio estÃ¡ marcado para dia ${formatDate(appointment.date)} Ã s ${appointment.time} com ${appointment.professional}.\nServiÃ§o: ${appointment.service}\nQualquer dÃºvida Ã© sÃ³ avisar`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
   }
 
   function saveBlock(data) {
     if (!data.professional || !data.date || !data.start || !data.end || timeToMinutes(data.end) <= timeToMinutes(data.start)) {
-      notify?.('Erro ao bloquear: confira profissional, data e horários.', 'error')
+      notify?.('Erro ao bloquear: confira profissional, data e horÃ¡rios.', 'error')
       return
     }
     setBlockedSlots((current) => [...current, { ...data, id: Date.now() }])
     setBlockModalOpen(false)
-    notify?.('Horário bloqueado com sucesso.')
+    notify?.('HorÃ¡rio bloqueado com sucesso.')
   }
 
   function saveQuickService(data) {
     if (!data.client.trim() || !data.service || !data.professional || Number(data.value) <= 0) {
-      notify?.('Erro ao salvar: confira cliente, serviço, profissional e valor.', 'error')
+      notify?.('Erro ao salvar: confira cliente, serviÃ§o, profissional e valor.', 'error')
       return
     }
     const professional = employees.find((item) => item.name === data.professional)
@@ -905,29 +968,29 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
       valor: Number(data.value) || 0,
       duration: serviceDurationToMinutes(services.find((item) => item.name === data.service)?.duration, professional?.defaultDuration ?? 60),
       duracao: serviceDurationToMinutes(services.find((item) => item.name === data.service)?.duration, professional?.defaultDuration ?? 60),
-      status: 'Concluído',
+      status: 'ConcluÃ­do',
       paymentMethod: data.paymentMethod
     }, allEmployees)
     setAppointments((current) => [...current, appointment])
-    setCashEntries((current) => [...current, { id: Date.now() + 1, type: 'Entrada', description: `Atendimento rápido - ${data.client}`, method: data.paymentMethod, value: Number(data.value) || 0, date }])
+    setCashEntries((current) => [...current, { id: Date.now() + 1, type: 'Entrada', description: `Atendimento rÃ¡pido - ${data.client}`, method: data.paymentMethod, value: Number(data.value) || 0, date }])
     setQuickModalOpen(false)
-    notify?.('Atendimento rápido concluído.')
+    notify?.('Atendimento rÃ¡pido concluÃ­do.')
   }
 
   function addAppointment(event) {
     event.preventDefault()
     const requiredFields = [
       ['client', 'cliente'],
-      ['service', 'serviço'],
+      ['service', 'serviÃ§o'],
       ['professional', 'profissional'],
       ['date', 'data'],
-      ['time', 'horário']
+      ['time', 'horÃ¡rio']
     ]
     const missingField = requiredFields.find(([key]) => !String(form[key] ?? '').trim())
 
     if (missingField) {
       setFormMessage({ type: 'error', text: `Preencha o campo ${missingField[1]} para agendar.` })
-      notify?.('Erro ao salvar: confira os campos obrigatórios.', 'error')
+      notify?.('Erro ao salvar: confira os campos obrigatÃ³rios.', 'error')
       return
     }
 
@@ -938,8 +1001,8 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
     }
 
     if (!selectedSlotAvailable) {
-      setFormMessage({ type: 'error', text: 'Escolha um horário disponível para esta data.' })
-      notify?.('Erro ao salvar: horário indisponível.', 'error')
+      setFormMessage({ type: 'error', text: 'Escolha um horÃ¡rio disponÃ­vel para esta data.' })
+      notify?.('Erro ao salvar: horÃ¡rio indisponÃ­vel.', 'error')
       return
     }
 
@@ -980,11 +1043,11 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
           <ClientSearchInput label="Cliente" value={form.client} onChange={(value) => setForm({ ...form, client: value })} clients={clients} />
           {selectedClientInsights && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
-              Última visita: {selectedClientInsights.lastVisit}<br />
-              Serviço mais comum: {selectedClientInsights.favoriteService}
+              Ãšltima visita: {selectedClientInsights.lastVisit}<br />
+              ServiÃ§o mais comum: {selectedClientInsights.favoriteService}
             </div>
           )}
-          <Select label="Serviço" value={form.service} onChange={(value) => {
+          <Select label="ServiÃ§o" value={form.service} onChange={(value) => {
             const selected = services.find((item) => item.name === value)
             setForm({ ...form, service: value, value: selected?.price ?? form.value, time: '' })
           }} options={services.map((item) => item.name)} />
@@ -992,8 +1055,8 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
           <DatePickerBar value={form.date} onChange={(value) => setForm({ ...form, date: value, time: '' })} />
           {selectedProfessional && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
-              Expediente: {selectedProfessional.workStart} às {selectedProfessional.workEnd}
-              {selectedProfessional.breakStart && selectedProfessional.breakEnd ? ` · intervalo ${selectedProfessional.breakStart} às ${selectedProfessional.breakEnd}` : ''}
+              Expediente: {selectedProfessional.workStart} Ã s {selectedProfessional.workEnd}
+              {selectedProfessional.breakStart && selectedProfessional.breakEnd ? ` Â· intervalo ${selectedProfessional.breakStart} Ã s ${selectedProfessional.breakEnd}` : ''}
             </div>
           )}
           <TimeSlotPicker value={form.time} onChange={(value) => setForm({ ...form, time: value })} slots={availableSlots} />
@@ -1004,14 +1067,14 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
           )}
           <button className="focus-ring w-full rounded-2xl bg-graphite px-4 py-3 font-semibold text-white hover:bg-[#343039]">Agendar</button>
           <div className="grid gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => setBlockModalOpen(true)} className="focus-ring rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Bloquear horário</button>
+            <button type="button" onClick={() => setBlockModalOpen(true)} className="focus-ring rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Bloquear horÃ¡rio</button>
             <button type="button" onClick={() => setQuickModalOpen(true)} className="focus-ring rounded-2xl border border-lilacSoft px-4 py-3 text-sm font-bold hover:bg-lilacSoft/20">Atender agora</button>
           </div>
         </form>
       </Panel>
       <div className="space-y-5">
         <AvailabilityPanel employee={filteredProfessional} date={form.date} service={selectedService} availableSlots={filterAvailableSlots} occupiedSlots={occupiedSlots} />
-        <Panel title={`Agenda do salão · ${formatDate(form.date)}`}>
+        <Panel title={`Agenda do salÃ£o Â· ${formatDate(form.date)}`}>
           <div className="mb-4 inline-flex rounded-2xl border border-blush bg-pearl p-1 text-sm font-bold dark:border-white/10 dark:bg-white/5">
             <button type="button" onClick={() => setAgendaView('day')} className={`rounded-xl px-5 py-2 transition ${agendaView === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Dia</button>
             <button type="button" onClick={() => setAgendaView('week')} className={`rounded-xl px-5 py-2 transition ${agendaView === 'week' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Semana</button>
@@ -1021,22 +1084,22 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
           <div className="simple-scrollbar max-h-[720px] space-y-3 overflow-auto pr-1">
             {visibleBlocks.map((block) => (
               <div key={block.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <p className="text-lg font-bold">{block.start} às {block.end} · Horário bloqueado</p>
-                <p className="mt-1">{block.professional} · {block.reason}</p>
+                <p className="text-lg font-bold">{block.start} Ã s {block.end} Â· HorÃ¡rio bloqueado</p>
+                <p className="mt-1">{block.professional} Â· {block.reason}</p>
               </div>
             ))}
             {[...visibleAppointments].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)).map((item) => (
               <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-lg font-bold">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                    <p className="text-lg font-bold">{formatDate(item.date)} Â· {item.time} Â· {item.client}</p>
                     <p className="mt-1 text-sm text-gray-600">{item.service} com {item.professional}</p>
-                    <p className="mt-2 text-sm text-gray-500">Duração: {getAppointmentDuration(item, employees.find((employee) => employee.name === item.professional))} min</p>
+                    <p className="mt-2 text-sm text-gray-500">DuraÃ§Ã£o: {getAppointmentDuration(item, employees.find((employee) => employee.name === item.professional))} min</p>
                     {user.role === 'admin' && <p className="mt-2 text-sm font-semibold text-goldSoft">{money.format(item.value)}</p>}
-                    {item.status === 'Concluído' && <p className="mt-1 text-sm font-semibold text-emerald-700">Comissão: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
+                    {item.status === 'ConcluÃ­do' && <p className="mt-1 text-sm font-semibold text-emerald-700">ComissÃ£o: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
                   </div>
                   <div className="flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
-                    <button type="button" onClick={() => sendConfirmation(item)} className="whitespace-nowrap rounded-full border border-blush px-3 py-2 text-sm font-bold hover:bg-pearl">Enviar confirmação</button>
+                    <button type="button" onClick={() => sendConfirmation(item)} className="whitespace-nowrap rounded-full border border-blush px-3 py-2 text-sm font-bold hover:bg-pearl">Enviar confirmaÃ§Ã£o</button>
                     <select className={`min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[item.status]}`} value={item.status} onChange={(event) => updateStatus(item.id, event.target.value)}>
                       {Object.keys(statusStyles).map((status) => <option key={status}>{status}</option>)}
                     </select>
@@ -1064,7 +1127,7 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
   const weeklyStatusStyles = {
     Aguardando: 'border-amber-200 bg-amber-50 text-amber-900',
     Confirmado: 'border-sky-200 bg-sky-50 text-sky-900',
-    Concluído: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    'ConcluÃ­do': 'border-emerald-200 bg-emerald-50 text-emerald-900',
     Cancelado: 'border-rose-200 bg-rose-50 text-rose-900'
   }
 
@@ -1116,13 +1179,13 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
         <Modal title="Detalhes do agendamento" onClose={() => setSelectedItem(null)}>
           <div className="space-y-3 text-sm">
             <p><strong>Data:</strong> {formatDate(selectedItem.date)}</p>
-            <p><strong>Horário:</strong> {selectedItem.time}</p>
+            <p><strong>HorÃ¡rio:</strong> {selectedItem.time}</p>
             <p><strong>Cliente:</strong> {selectedItem.client}</p>
-            <p><strong>Serviço:</strong> {selectedItem.service}</p>
+            <p><strong>ServiÃ§o:</strong> {selectedItem.service}</p>
             <p><strong>Profissional:</strong> {selectedItem.professional}</p>
-            <p><strong>Duração:</strong> {getAppointmentDuration(selectedItem, employees.find((employee) => employee.name === selectedItem.professional))} min</p>
+            <p><strong>DuraÃ§Ã£o:</strong> {getAppointmentDuration(selectedItem, employees.find((employee) => employee.name === selectedItem.professional))} min</p>
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-              <button type="button" onClick={() => onSendConfirmation(selectedItem)} className="whitespace-nowrap rounded-xl border border-blush px-4 py-2 text-sm font-bold hover:bg-pearl">Enviar confirmação</button>
+              <button type="button" onClick={() => onSendConfirmation(selectedItem)} className="whitespace-nowrap rounded-xl border border-blush px-4 py-2 text-sm font-bold hover:bg-pearl">Enviar confirmaÃ§Ã£o</button>
               {(user.role === 'admin' || user.role === 'cashier' || selectedItem.professional === user.name) && (
                 <select className={`min-w-[130px] rounded-xl border px-3 py-2 text-sm font-semibold ${statusStyles[selectedItem.status]}`} value={selectedItem.status} onChange={(event) => { onStatusChange(selectedItem.id, event.target.value); setSelectedItem({ ...selectedItem, status: event.target.value }) }}>
                   {Object.keys(statusStyles).map((status) => <option key={status}>{status}</option>)}
@@ -1138,18 +1201,18 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
 
 function BlockTimeModal({ user, employees, date, onClose, onSave }) {
   const options = user.role === 'admin' || user.role === 'cashier' ? employees.map((item) => item.name) : [user.name]
-  const [form, setForm] = useState({ professional: options[0] ?? '', date, start: '09:00', end: '10:00', reason: 'Horário bloqueado' })
+  const [form, setForm] = useState({ professional: options[0] ?? '', date, start: '09:00', end: '10:00', reason: 'HorÃ¡rio bloqueado' })
 
   return (
-    <Modal title="Bloquear horário" onClose={onClose}>
+    <Modal title="Bloquear horÃ¡rio" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <Select label="Profissional" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} options={options} />
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Horário inicial" type="time" value={form.start} onChange={(value) => setForm({ ...form, start: value })} />
-          <Field label="Horário final" type="time" value={form.end} onChange={(value) => setForm({ ...form, end: value })} />
+          <Field label="HorÃ¡rio inicial" type="time" value={form.start} onChange={(value) => setForm({ ...form, start: value })} />
+          <Field label="HorÃ¡rio final" type="time" value={form.end} onChange={(value) => setForm({ ...form, end: value })} />
         </div>
-        <Select label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} options={['Funcionário vai sair mais cedo', 'Cliente VIP reservado', 'Manutenção', 'Horário bloqueado']} />
+        <Select label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} options={['FuncionÃ¡rio vai sair mais cedo', 'Cliente VIP reservado', 'ManutenÃ§Ã£o', 'HorÃ¡rio bloqueado']} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
           <button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Bloquear</button>
@@ -1167,12 +1230,12 @@ function QuickServiceModal({ clients, employees, onClose, onSave }) {
     <Modal title="Atender agora" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <ClientSearchInput label="Cliente ou nome avulso" value={form.client} onChange={(value) => setForm({ ...form, client: value })} clients={clients} />
-        <Select label="Serviço" value={form.service} onChange={(value) => {
+        <Select label="ServiÃ§o" value={form.service} onChange={(value) => {
           const selected = services.find((item) => item.name === value)
           setForm({ ...form, service: value, value: selected?.price ?? form.value })
         }} options={services.map((item) => item.name)} />
         <Select label="Profissional" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} options={employees.filter((item) => item.active).map((item) => item.name)} />
-        <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'Cartão', 'Pendente']} />
+        <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'CartÃ£o', 'Pendente']} />
         <Field label="Valor" type="number" value={form.value} onChange={(value) => setForm({ ...form, value })} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
@@ -1199,7 +1262,7 @@ function DatePickerBar({ value, onChange }) {
             type="date"
           />
         </label>
-        <button type="button" onClick={() => onChange(shiftDate(value, 1))} className="focus-ring rounded-xl border border-blush bg-white px-3 py-2 text-lg font-bold hover:bg-pearl" aria-label="Próximo dia">
+        <button type="button" onClick={() => onChange(shiftDate(value, 1))} className="focus-ring rounded-xl border border-blush bg-white px-3 py-2 text-lg font-bold hover:bg-pearl" aria-label="PrÃ³ximo dia">
           &gt;
         </button>
         <button type="button" onClick={() => onChange(getTodayIso())} className="focus-ring rounded-xl border border-blush bg-pearl px-3 py-2 text-sm font-bold text-graphite hover:bg-blush/40">
@@ -1216,14 +1279,14 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
     return (
       <Panel title="Disponibilidade do profissional">
         <div className="rounded-2xl border border-gray-100 bg-pearl px-4 py-5 text-sm font-semibold text-gray-600">
-          Selecione um profissional no filtro para consultar horários livres e ocupados.
+          Selecione um profissional no filtro para consultar horÃ¡rios livres e ocupados.
         </div>
       </Panel>
     )
   }
 
   const dayOff = employee.workStatus === 'De folga'
-  const lunchNow = employee.workStatus === 'Horário de almoço'
+  const lunchNow = employee.workStatus === 'HorÃ¡rio de almoÃ§o'
 
   return (
     <Panel title="Disponibilidade do profissional">
@@ -1231,33 +1294,33 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
         <div className="rounded-2xl border border-blush bg-pearl p-4 text-sm">
           <p><strong>Profissional:</strong> {employee.name}</p>
           <p className="mt-1"><strong>Data:</strong> {formatDate(date)}</p>
-          <p className="mt-1"><strong>Trabalho:</strong> {employee.workStart} às {employee.workEnd}</p>
-          <p className="mt-1"><strong>Intervalo:</strong> {employee.breakStart && employee.breakEnd ? `${employee.breakStart} às ${employee.breakEnd}` : 'Sem intervalo cadastrado'}</p>
-          <p className="mt-1"><strong>Serviço base:</strong> {service?.name ?? 'Não selecionado'}</p>
+          <p className="mt-1"><strong>Trabalho:</strong> {employee.workStart} Ã s {employee.workEnd}</p>
+          <p className="mt-1"><strong>Intervalo:</strong> {employee.breakStart && employee.breakEnd ? `${employee.breakStart} Ã s ${employee.breakEnd}` : 'Sem intervalo cadastrado'}</p>
+          <p className="mt-1"><strong>ServiÃ§o base:</strong> {service?.name ?? 'NÃ£o selecionado'}</p>
         </div>
 
         {dayOff && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-            Este profissional está de folga nesta data
+            Este profissional estÃ¡ de folga nesta data
           </div>
         )}
 
         {lunchNow && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-            Este profissional está em horário de almoço neste momento
+            Este profissional estÃ¡ em horÃ¡rio de almoÃ§o neste momento
           </div>
         )}
 
         <div>
           <h4 className="mb-2 text-sm font-bold text-graphite">Ocupados</h4>
           {occupiedSlots.length === 0 ? (
-            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum horário ocupado nesta data.</p>
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum horÃ¡rio ocupado nesta data.</p>
           ) : (
             <div className="space-y-2">
               {occupiedSlots.map((appointment) => (
                 <div key={appointment.id} className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm">
                   <p className="font-bold text-rose-800">{appointment.time} - {appointment.client} - {appointment.service}</p>
-                  <p className="mt-1 text-rose-700">Duração: {getAppointmentDuration(appointment, employee)} min · {appointment.status}</p>
+                  <p className="mt-1 text-rose-700">DuraÃ§Ã£o: {getAppointmentDuration(appointment, employee)} min Â· {appointment.status}</p>
                 </div>
               ))}
             </div>
@@ -1265,11 +1328,11 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
         </div>
 
         <div>
-          <h4 className="mb-2 text-sm font-bold text-graphite">Disponíveis</h4>
+          <h4 className="mb-2 text-sm font-bold text-graphite">DisponÃ­veis</h4>
           {dayOff ? (
-            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horários disponíveis por folga.</p>
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horÃ¡rios disponÃ­veis por folga.</p>
           ) : availableSlots.length === 0 ? (
-            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horários disponíveis nesta data.</p>
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horÃ¡rios disponÃ­veis nesta data.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {availableSlots.map((slot) => (
@@ -1286,10 +1349,10 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
 function TimeSlotPicker({ value, onChange, slots }) {
   return (
     <div>
-      <span className="mb-2 block text-sm font-semibold text-gray-600">Horário disponível</span>
+      <span className="mb-2 block text-sm font-semibold text-gray-600">HorÃ¡rio disponÃ­vel</span>
       {slots.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">
-          Sem horários disponíveis nesta data
+          Sem horÃ¡rios disponÃ­veis nesta data
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -1378,7 +1441,7 @@ function Clients({ user, clients, setClients, appointments, notify }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xl font-bold">Clientes cadastrados</h3>
-          <p className="text-sm text-gray-500">Admin e funcionários podem cadastrar e editar clientes.</p>
+          <p className="text-sm text-gray-500">Admin e funcionÃ¡rios podem cadastrar e editar clientes.</p>
         </div>
         <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Cliente</button>
       </div>
@@ -1392,14 +1455,14 @@ function Clients({ user, clients, setClients, appointments, notify }) {
             <p className="text-lg font-bold">{item.name}</p>
             <span className={`rounded-full px-3 py-1 text-xs font-bold ${item.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{item.active ? 'Ativo' : 'Inativo'}</span>
           </div>
-          <p className="text-sm text-gray-500">{item.phone} · Aniv. {item.birthday}</p>
+          <p className="text-sm text-gray-500">{item.phone} Â· Aniv. {item.birthday}</p>
           <p className="mt-3 text-sm text-gray-600">{item.notes}</p>
-          <p className="mt-3 text-sm"><strong>Histórico:</strong> {(item.history?.length ? item.history : ['Sem histórico']).join(', ')}</p>
-          <p className="mt-2 text-sm text-goldSoft">Última visita: {formatDate(item.lastVisit)}</p>
+          <p className="mt-3 text-sm"><strong>HistÃ³rico:</strong> {(item.history?.length ? item.history : ['Sem histÃ³rico']).join(', ')}</p>
+          <p className="mt-2 text-sm text-goldSoft">Ãšltima visita: {formatDate(item.lastVisit)}</p>
           <div className="mt-3 rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm">
-            <p><strong>Serviço mais comum:</strong> {insights.favoriteService}</p>
+            <p><strong>ServiÃ§o mais comum:</strong> {insights.favoriteService}</p>
             <p><strong>Total de visitas:</strong> {insights.visitCount}</p>
-            <p><strong>Ticket médio:</strong> {money.format(insights.averageTicket)}</p>
+            <p><strong>Ticket mÃ©dio:</strong> {money.format(insights.averageTicket)}</p>
             <p className="mt-1 text-gray-600">Esse cliente costuma fazer {insights.favoriteService}.</p>
           </div>
           {canEdit && (
@@ -1425,8 +1488,8 @@ function ClientModal({ client, canChangeStatus, onClose, onSave }) {
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <Field label="Nome" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
-        <Field label="Aniversário" value={form.birthday} onChange={(value) => setForm({ ...form, birthday: value })} placeholder="dd/mm" />
-        <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-600">Observações</span><textarea className="focus-ring min-h-24 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
+        <Field label="AniversÃ¡rio" value={form.birthday} onChange={(value) => setForm({ ...form, birthday: value })} placeholder="dd/mm" />
+        <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-600">ObservaÃ§Ãµes</span><textarea className="focus-ring min-h-24 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
         {client && canChangeStatus && <Toggle label="Status ativo" checked={form.active} onChange={(checked) => setForm({ ...form, active: checked })} />}
         <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button><button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button></div>
       </form>
@@ -1455,7 +1518,7 @@ function Services({ user, services, setServices, notify }) {
       price: Number(data.price) || 0
     }
     if (!payload.name) {
-      notify?.('Erro ao salvar: informe o nome do serviço.', 'error')
+      notify?.('Erro ao salvar: informe o nome do serviÃ§o.', 'error')
       return
     }
     if (editing) {
@@ -1464,23 +1527,23 @@ function Services({ user, services, setServices, notify }) {
       setServices((current) => [...current, { ...payload, id: Date.now() }])
     }
     setModalOpen(false)
-    notify?.('Serviço salvo com sucesso.')
+    notify?.('ServiÃ§o salvo com sucesso.')
   }
 
   function removeService(item) {
-    if (!window.confirm(`Remover o serviço "${item.name}"?`)) return
+    if (!window.confirm(`Remover o serviÃ§o "${item.name}"?`)) return
     setServices((current) => current.filter((service) => service.id !== item.id))
-    notify?.('Serviço removido.')
+    notify?.('ServiÃ§o removido.')
   }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold">Serviços</h3>
-          <p className="text-sm text-gray-500">{canManage ? 'Cadastre e ajuste os serviços do salão.' : 'Consulta dos serviços cadastrados.'}</p>
+          <h3 className="text-xl font-bold">ServiÃ§os</h3>
+          <p className="text-sm text-gray-500">{canManage ? 'Cadastre e ajuste os serviÃ§os do salÃ£o.' : 'Consulta dos serviÃ§os cadastrados.'}</p>
         </div>
-        {canManage && <button onClick={openNew} className="focus-ring whitespace-nowrap rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Serviço</button>}
+        {canManage && <button onClick={openNew} className="focus-ring whitespace-nowrap rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo ServiÃ§o</button>}
       </div>
       <CardsGrid items={services} render={(item) => (
         <>
@@ -1488,8 +1551,8 @@ function Services({ user, services, setServices, notify }) {
             <p className="text-lg font-bold">{item.name}</p>
             <span className="whitespace-nowrap rounded-full bg-blush px-3 py-1 text-sm font-bold">{money.format(item.price)}</span>
           </div>
-          <p className="mt-2 text-sm text-gray-600">{item.duration} · {item.category}</p>
-          <p className="mt-3 text-sm">Responsável: <strong>{item.professional || 'A definir'}</strong></p>
+          <p className="mt-2 text-sm text-gray-600">{item.duration} Â· {item.category}</p>
+          <p className="mt-3 text-sm">ResponsÃ¡vel: <strong>{item.professional || 'A definir'}</strong></p>
           {canManage && (
             <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={() => openEdit(item)} className="whitespace-nowrap rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Editar</button>
@@ -1513,15 +1576,15 @@ function ServiceModal({ service, onClose, onSave }) {
   } : { name: '', price: 0, duration: '1h', professional: '', category: '' })
 
   return (
-    <Modal title={service ? 'Editar serviço' : 'Novo serviço'} onClose={onClose}>
+    <Modal title={service ? 'Editar serviÃ§o' : 'Novo serviÃ§o'} onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Field label="Nome do serviço" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
+        <Field label="Nome do serviÃ§o" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Valor" type="number" min="0" value={form.price} onChange={(value) => setForm({ ...form, price: value })} required />
-          <Field label="Duração" value={form.duration} onChange={(value) => setForm({ ...form, duration: value })} placeholder="Ex.: 1h 30min" required />
+          <Field label="DuraÃ§Ã£o" value={form.duration} onChange={(value) => setForm({ ...form, duration: value })} placeholder="Ex.: 1h 30min" required />
         </div>
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} required />
-        <Field label="Responsável padrão" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} />
+        <Field label="ResponsÃ¡vel padrÃ£o" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="whitespace-nowrap rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
           <button className="whitespace-nowrap rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button>
@@ -1531,7 +1594,7 @@ function ServiceModal({ service, onClose, onSave }) {
   )
 }
 
-function Employees({ user, employees, setEmployees, onOpenAgendaForProfessional }) {
+function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaForProfessional, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const canManage = user.role === 'admin'
@@ -1555,7 +1618,7 @@ function Employees({ user, employees, setEmployees, onOpenAgendaForProfessional 
       notify?.('Erro ao salvar: informe nome, telefone e cargo.', 'error')
       return
     }
-    if (professional && data.loginActive && (!data.accessEmail.trim() || !data.temporaryPassword.trim())) {
+    if (data.loginActive && (!data.accessEmail.trim() || !data.temporaryPassword.trim())) {
       notify?.('Erro ao salvar: login ativo precisa de email e senha.', 'error')
       return
     }
@@ -1569,9 +1632,9 @@ function Employees({ user, employees, setEmployees, onOpenAgendaForProfessional 
       workEnd: professional ? data.workEnd : '',
       breakStart: professional ? data.breakStart : '',
       breakEnd: professional ? data.breakEnd : '',
-      accessEmail: professional ? data.accessEmail : '',
-      temporaryPassword: professional ? data.temporaryPassword : '',
-      loginActive: professional ? Boolean(data.loginActive) : false,
+      accessEmail: data.accessEmail,
+      temporaryPassword: data.temporaryPassword,
+      loginActive: Boolean(data.loginActive),
       serviceCommissions: professional ? (data.serviceCommissions ?? []).map((item, index) => ({
         ...item,
         id: item.id ?? Date.now() + index,
@@ -1597,10 +1660,10 @@ function Employees({ user, employees, setEmployees, onOpenAgendaForProfessional 
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold">Equipe do salão</h3>
-          <p className="text-sm text-gray-500">{canManage ? 'Cadastro e edição disponíveis para Admin/Dono.' : 'Funcionário Caixa pode visualizar comissões, sem alterar.'}</p>
+          <h3 className="text-xl font-bold">Equipe do salÃ£o</h3>
+          <p className="text-sm text-gray-500">{canManage ? 'Cadastro e ediÃ§Ã£o disponÃ­veis para Admin/Dono.' : 'FuncionÃ¡rio Caixa pode visualizar comissÃµes, sem alterar.'}</p>
         </div>
-        {canManage && <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039] sm:shrink-0">Novo Funcionário</button>}
+        {canManage && <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039] sm:shrink-0">Novo FuncionÃ¡rio</button>}
       </div>
       <CardsGrid items={employees} render={(item) => (
         <div className="min-w-0 space-y-3 break-words">
@@ -1610,76 +1673,99 @@ function Employees({ user, employees, setEmployees, onOpenAgendaForProfessional 
             </button>
             <span className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs font-bold ${item.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{item.active ? 'Ativo' : 'Inativo'}</span>
           </div>
-          <p className="min-w-0 text-sm text-gray-500">{item.role} · {item.phone}</p>
-          <p className="min-w-0 text-sm font-semibold text-gray-600">Tipo: {isProfessional(item) ? 'Profissional' : 'Caixa/Recepção'}</p>
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong>{item.accessEmail ? ` · ${item.accessEmail}` : ''}</p>}
+          <p className="min-w-0 text-sm text-gray-500">{item.role} Â· {item.phone}</p>
+          <p className="min-w-0 text-sm font-semibold text-gray-600">Tipo: {isProfessional(item) ? 'Profissional' : 'Caixa/RecepÃ§Ã£o'}</p>
+          <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong>{item.accessEmail ? ` Â· ${item.accessEmail}` : ''}</p>
           <div>
             <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-3 py-1 text-xs font-bold ${employeeStatusStyles[item.workStatus]}`}>
               {item.workStatus}
             </span>
           </div>
-          {isProfessional(item) && <p className="min-w-0 text-sm">Comissão padrão: <strong>{item.commission}%</strong></p>}
+          {isProfessional(item) && <p className="min-w-0 text-sm">ComissÃ£o padrÃ£o: <strong>{item.commission}%</strong></p>}
           {isProfessional(item) && <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-pearl p-3 dark:border-white/10 dark:bg-white/5">
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="min-w-0 text-sm font-bold">Comissões por Serviço</p>
-              {canManage && <button onClick={() => openEdit(item)} className="w-fit max-w-full rounded-xl border border-blush px-3 py-2 text-left text-xs font-semibold whitespace-normal hover:bg-white">Adicionar comissão por serviço</button>}
+              <p className="min-w-0 text-sm font-bold">ComissÃµes por ServiÃ§o</p>
+              {canManage && <button onClick={() => openEdit(item)} className="w-fit max-w-full rounded-xl border border-blush px-3 py-2 text-left text-xs font-semibold whitespace-normal hover:bg-white">Adicionar comissÃ£o por serviÃ§o</button>}
             </div>
             <div className="mt-3 space-y-2">
               {(item.serviceCommissions ?? []).length ? item.serviceCommissions.map((rule) => (
                 <div key={rule.id} className="flex min-w-0 flex-col gap-2 overflow-hidden rounded-xl bg-white px-3 py-2 text-sm dark:bg-[#17141c] lg:flex-row lg:items-center lg:justify-between">
                   <span className="min-w-0 font-semibold break-words">{rule.service}</span>
-                  <span className="min-w-0 text-gray-600 break-words dark:text-gray-300">{rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'} · {formatCommissionRule(rule)}</span>
+                  <span className="min-w-0 text-gray-600 break-words dark:text-gray-300">{rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'} Â· {formatCommissionRule(rule)}</span>
                   {canManage && (
                     <div className="flex min-w-0 flex-wrap gap-2">
-                      <button onClick={() => openEdit(item)} className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold hover:bg-gray-50">Editar comissão</button>
-                      <button onClick={() => setEmployees((current) => current.map((employee) => employee.id === item.id ? { ...employee, serviceCommissions: (employee.serviceCommissions ?? []).filter((currentRule) => currentRule.id !== rule.id) } : employee))} className="rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50">Remover comissão</button>
+                      <button onClick={() => openEdit(item)} className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold hover:bg-gray-50">Editar comissÃ£o</button>
+                      <button onClick={() => setEmployees((current) => current.map((employee) => employee.id === item.id ? { ...employee, serviceCommissions: (employee.serviceCommissions ?? []).filter((currentRule) => currentRule.id !== rule.id) } : employee))} className="rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50">Remover comissÃ£o</button>
                     </div>
                   )}
                 </div>
-              )) : <p className="min-w-0 text-sm text-gray-500">Sem comissão específica. Usa a comissão padrão.</p>}
+              )) : <p className="min-w-0 text-sm text-gray-500">Sem comissÃ£o especÃ­fica. Usa a comissÃ£o padrÃ£o.</p>}
             </div>
           </div>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Serviços: {item.services.join(', ')}</p>}
+          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">ServiÃ§os: {(item.services ?? []).join(', ')}</p>}
           {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">
-            Expediente: <strong>{item.workStart} às {item.workEnd}</strong>
-            {item.breakStart && item.breakEnd ? ` · intervalo ${item.breakStart} às ${item.breakEnd}` : ''}
+            Expediente: <strong>{item.workStart} Ã s {item.workEnd}</strong>
+            {item.breakStart && item.breakEnd ? ` Â· intervalo ${item.breakStart} Ã s ${item.breakEnd}` : ''}
           </p>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Duração padrão: {item.defaultDuration} min</p>}
+          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">DuraÃ§Ã£o padrÃ£o: {item.defaultDuration} min</p>}
           {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Intervalo da agenda: {item.scheduleInterval} min</p>}
           {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Editar</button><button onClick={() => toggleEmployee(item)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50">{item.active ? 'Desativar' : 'Ativar'}</button></div>}
         </div>
       )} />
-      {modalOpen && <EmployeeModal employee={editing} onClose={() => setModalOpen(false)} onSave={saveEmployee} />}
+      {modalOpen && <EmployeeModal employee={editing} salonSettings={salonSettings} onClose={() => setModalOpen(false)} onSave={saveEmployee} />}
     </div>
   )
 }
 
-function EmployeeModal({ employee, onClose, onSave }) {
+function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
+  const defaultEmployeeType = employee?.employeeType ?? 'professional'
+  const defaultAccessEmail = employee?.accessEmail ?? getSuggestedAccessEmail({ name: employee?.name, employeeType: defaultEmployeeType, salonSettings })
   const [form, setForm] = useState(employee ? {
     ...employee,
-    employeeType: employee.employeeType ?? 'professional',
+    employeeType: defaultEmployeeType,
     workStatus: employee.workStatus ?? 'Ativo',
     workStart: employee.workStart ?? (employee.employeeType === 'cashier' ? '' : '09:00'),
     workEnd: employee.workEnd ?? (employee.employeeType === 'cashier' ? '' : '18:00'),
     breakStart: employee.breakStart ?? '',
     breakEnd: employee.breakEnd ?? '',
+    accessEmail: defaultAccessEmail,
+    temporaryPassword: employee.temporaryPassword ?? '',
+    loginActive: employee.loginActive ?? false,
     defaultDuration: employee.defaultDuration ?? 60,
     scheduleInterval: employee.scheduleInterval ?? employee.defaultDuration ?? 60,
     serviceCommissions: employee.serviceCommissions ?? [],
-    servicesText: employee.services.join(', ')
-  } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: '', temporaryPassword: '', loginActive: false, commission: 30, serviceCommissions: [], servicesText: '', active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
+    servicesText: (employee.services ?? []).join(', ')
+  } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: getSuggestedAccessEmail({ employeeType: 'professional', salonSettings }), temporaryPassword: '', loginActive: false, commission: 30, serviceCommissions: [], servicesText: '', active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
   const professional = form.employeeType === 'professional'
+  const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
 
-  function generateLogin() {
-    const slug = (form.name || 'profissional')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '.')
-      .replace(/(^\.|\.$)/g, '')
+  function updateName(name) {
+    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
     setForm((current) => ({
       ...current,
-      accessEmail: current.accessEmail || `${slug || 'profissional'}@atelierdabeleza.com`,
+      name,
+      accessEmail: !current.accessEmail || current.accessEmail === previousSuggestion
+        ? getSuggestedAccessEmail({ name, employeeType: current.employeeType, salonSettings })
+        : current.accessEmail
+    }))
+  }
+
+  function updateEmployeeType(employeeType) {
+    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
+    setForm((current) => ({
+      ...current,
+      employeeType,
+      role: employeeType === 'cashier' ? 'Caixa/RecepÃ§Ã£o' : current.role,
+      accessEmail: !current.accessEmail || current.accessEmail === previousSuggestion
+        ? getSuggestedAccessEmail({ name: current.name, employeeType, salonSettings })
+        : current.accessEmail
+    }))
+  }
+
+  function generateLogin() {
+    setForm((current) => ({
+      ...current,
+      accessEmail: getSuggestedAccessEmail({ name: current.name, employeeType: current.employeeType, salonSettings }),
       temporaryPassword: current.temporaryPassword || String(Math.floor(100000 + Math.random() * 900000)),
       loginActive: true
     }))
@@ -1707,61 +1793,59 @@ function EmployeeModal({ employee, onClose, onSave }) {
   }
 
   return (
-    <Modal title={employee ? 'Editar funcionário' : 'Novo funcionário'} onClose={onClose}>
+    <Modal title={employee ? 'Editar funcionÃ¡rio' : 'Novo funcionÃ¡rio'} onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Field label="Nome" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
+        <Field label="Nome" value={form.name} onChange={updateName} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
         <Field label="Cargo" value={form.role} onChange={(value) => setForm({ ...form, role: value })} required />
-        <Select label="Tipo de funcionário" value={form.employeeType} onChange={(value) => setForm({ ...form, employeeType: value, role: value === 'cashier' ? 'Caixa/Recepção' : form.role })} options={['Profissional', 'Caixa/Recepção']} values={['professional', 'cashier']} />
-        {professional && (
-          <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h4 className="font-bold">Login do Profissional</h4>
-                <p className="text-sm text-gray-500">Acesso limitado à própria agenda e perfil.</p>
-              </div>
-              <button type="button" onClick={generateLogin} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Gerar login</button>
+        <Select label="Tipo de funcionÃ¡rio" value={form.employeeType} onChange={updateEmployeeType} options={['Profissional', 'Caixa/RecepÃ§Ã£o']} values={['professional', 'cashier']} />
+        <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 className="font-bold">Login do funcionÃ¡rio</h4>
+              <p className="text-sm text-gray-500">SugestÃ£o: {suggestedAccessEmail}</p>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <Field label="Email de acesso" value={form.accessEmail ?? ''} onChange={(value) => setForm({ ...form, accessEmail: value })} type="email" />
-              <Field label="Senha temporária" value={form.temporaryPassword ?? ''} onChange={(value) => setForm({ ...form, temporaryPassword: value })} />
-            </div>
-            <div className="mt-3">
-              <Toggle label={`Status do login: ${form.loginActive ? 'ativo' : 'inativo'}`} checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
-            </div>
-          </section>
-        )}
-        {professional && <Field label="Comissão padrão (%)" type="number" value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} />}
-        {professional && <Field label="Serviços que realiza" value={form.servicesText} onChange={(value) => setForm({ ...form, servicesText: value })} placeholder="Separar por vírgula" />}
+            <button type="button" onClick={generateLogin} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Usar sugestÃ£o</button>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Field label="Email de acesso" value={form.accessEmail ?? ''} onChange={(value) => setForm({ ...form, accessEmail: value })} type="email" />
+            <Field label="Senha temporÃ¡ria" value={form.temporaryPassword ?? ''} onChange={(value) => setForm({ ...form, temporaryPassword: value })} />
+          </div>
+          <div className="mt-3">
+            <Toggle label={`Status do login: ${form.loginActive ? 'ativo' : 'inativo'}`} checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
+          </div>
+        </section>
+        {professional && <Field label="ComissÃ£o padrÃ£o (%)" type="number" value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} />}
+        {professional && <Field label="ServiÃ§os que realiza" value={form.servicesText} onChange={(value) => setForm({ ...form, servicesText: value })} placeholder="Separar por vÃ­rgula" />}
         {professional && <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h4 className="font-bold">Comissões por Serviço</h4>
-              <p className="text-sm text-gray-500">Quando não houver regra específica, o sistema usa a comissão padrão.</p>
+              <h4 className="font-bold">ComissÃµes por ServiÃ§o</h4>
+              <p className="text-sm text-gray-500">Quando nÃ£o houver regra especÃ­fica, o sistema usa a comissÃ£o padrÃ£o.</p>
             </div>
-            <button type="button" onClick={addServiceCommission} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Adicionar comissão por serviço</button>
+            <button type="button" onClick={addServiceCommission} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Adicionar comissÃ£o por serviÃ§o</button>
           </div>
           <div className="mt-4 space-y-3">
             {(form.serviceCommissions ?? []).map((rule) => (
               <div key={rule.id} className="grid gap-3 rounded-2xl bg-pearl p-3 dark:bg-white/5 md:grid-cols-[1.2fr_0.8fr_0.7fr_auto]">
-                <Select label="Serviço" value={rule.service} onChange={(value) => updateServiceCommission(rule.id, { service: value })} options={services.map((item) => item.name)} />
-                <Select label="Tipo de comissão" value={rule.type} onChange={(value) => updateServiceCommission(rule.id, { type: value })} options={['Porcentagem', 'Valor fixo']} values={['percentage', 'fixed']} />
+                <Select label="ServiÃ§o" value={rule.service} onChange={(value) => updateServiceCommission(rule.id, { service: value })} options={services.map((item) => item.name)} />
+                <Select label="Tipo de comissÃ£o" value={rule.type} onChange={(value) => updateServiceCommission(rule.id, { type: value })} options={['Porcentagem', 'Valor fixo']} values={['percentage', 'fixed']} />
                 <Field label={rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'} type="number" value={rule.value} onChange={(value) => updateServiceCommission(rule.id, { value })} />
                 <div className="flex items-end">
-                  <button type="button" onClick={() => removeServiceCommission(rule.id)} className="w-full rounded-xl border border-rose-200 px-3 py-3 text-sm font-semibold text-rose-700 hover:bg-rose-50">Remover comissão</button>
+                  <button type="button" onClick={() => removeServiceCommission(rule.id)} className="w-full rounded-xl border border-rose-200 px-3 py-3 text-sm font-semibold text-rose-700 hover:bg-rose-50">Remover comissÃ£o</button>
                 </div>
               </div>
             ))}
-            {(form.serviceCommissions ?? []).length === 0 && <p className="rounded-2xl bg-pearl px-4 py-3 text-sm font-semibold text-gray-500 dark:bg-white/5">Nenhuma comissão específica cadastrada.</p>}
+            {(form.serviceCommissions ?? []).length === 0 && <p className="rounded-2xl bg-pearl px-4 py-3 text-sm font-semibold text-gray-500 dark:bg-white/5">Nenhuma comissÃ£o especÃ­fica cadastrada.</p>}
           </div>
         </section>}
         {professional && <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Horário de início" type="time" value={form.workStart} onChange={(value) => setForm({ ...form, workStart: value })} />
-          <Field label="Horário de fim" type="time" value={form.workEnd} onChange={(value) => setForm({ ...form, workEnd: value })} />
-          <Field label="Início do intervalo" type="time" value={form.breakStart} onChange={(value) => setForm({ ...form, breakStart: value })} />
+          <Field label="HorÃ¡rio de inÃ­cio" type="time" value={form.workStart} onChange={(value) => setForm({ ...form, workStart: value })} />
+          <Field label="HorÃ¡rio de fim" type="time" value={form.workEnd} onChange={(value) => setForm({ ...form, workEnd: value })} />
+          <Field label="InÃ­cio do intervalo" type="time" value={form.breakStart} onChange={(value) => setForm({ ...form, breakStart: value })} />
           <Field label="Fim do intervalo" type="time" value={form.breakEnd} onChange={(value) => setForm({ ...form, breakEnd: value })} />
         </div>}
-        {professional && <Field label="Duração padrão dos serviços (min)" type="number" value={form.defaultDuration} onChange={(value) => setForm({ ...form, defaultDuration: value })} />}
+        {professional && <Field label="DuraÃ§Ã£o padrÃ£o dos serviÃ§os (min)" type="number" value={form.defaultDuration} onChange={(value) => setForm({ ...form, defaultDuration: value })} />}
         {professional && <Field label="Intervalo da agenda (min)" type="number" value={form.scheduleInterval} onChange={(value) => setForm({ ...form, scheduleInterval: value })} />}
         <Select label="Status atual" value={form.workStatus} onChange={(value) => setForm({ ...form, workStatus: value })} options={employeeStatuses} />
         <Toggle label="Status ativo" checked={form.active} onChange={(checked) => setForm({ ...form, active: checked })} />
@@ -1774,14 +1858,14 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const todayEntries = entries.filter((item) => !(item.date ?? item.data) || (item.date ?? item.data) === todayIso)
   const incomeEntries = todayEntries.filter((item) => cashType(item) === 'entrada')
-  const outcomeEntries = todayEntries.filter((item) => cashType(item) === 'saída' || cashType(item) === 'saida')
+  const outcomeEntries = todayEntries.filter((item) => cashType(item) === 'saÃ­da' || cashType(item) === 'saida')
   const income = incomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
   const outcome = outcomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
   const byMethod = (method) => incomeEntries.filter((item) => cashMethod(item) === method).reduce((sum, item) => sum + cashValue(item), 0)
   const alreadyClosed = closures.some((item) => item.date === todayIso)
 
   function closeDay() {
-    if (alreadyClosed && !window.confirm('O caixa de hoje já foi fechado. Registrar novo fechamento mesmo assim?')) return
+    if (alreadyClosed && !window.confirm('O caixa de hoje jÃ¡ foi fechado. Registrar novo fechamento mesmo assim?')) return
     setClosures((current) => [...current, { id: Date.now(), date: todayIso, income, outcome, balance: income - outcome }])
     notify?.('Caixa do dia fechado com sucesso.')
   }
@@ -1789,7 +1873,7 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
   function saveCashEntry(data) {
     const value = Number(data.value) || 0
     if (!data.description.trim() || value <= 0) {
-      notify?.('Erro ao salvar: informe descrição e valor maior que zero.', 'error')
+      notify?.('Erro ao salvar: informe descriÃ§Ã£o e valor maior que zero.', 'error')
       return
     }
     setEntries((current) => [...current, {
@@ -1807,7 +1891,7 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
       date: data.date
     }])
     setModalOpen(false)
-    notify?.('Movimentação salva com sucesso.')
+    notify?.('MovimentaÃ§Ã£o salva com sucesso.')
   }
 
   return (
@@ -1816,24 +1900,24 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
         <Metric title="Total do dia" value={money.format(income)} detail="Entradas" />
         <Metric title="Pix" value={money.format(byMethod('Pix'))} detail="Recebido hoje" />
         <Metric title="Dinheiro" value={money.format(byMethod('Dinheiro'))} detail="Recebido hoje" />
-        <Metric title="Cartão" value={money.format(byMethod('Cartão'))} detail="Recebido hoje" />
+        <Metric title="CartÃ£o" value={money.format(byMethod('CartÃ£o'))} detail="Recebido hoje" />
         <Metric title="Pendente" value={money.format(byMethod('Pendente'))} detail="A receber" />
-        <Metric title="Saídas" value={money.format(outcome)} detail="Hoje" />
-        <Metric title="Saldo final" value={money.format(income - outcome)} detail="Entradas - saídas" />
+        <Metric title="SaÃ­das" value={money.format(outcome)} detail="Hoje" />
+        <Metric title="Saldo final" value={money.format(income - outcome)} detail="Entradas - saÃ­das" />
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Nova movimentação</button>
+        <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Nova movimentaÃ§Ã£o</button>
         <button onClick={closeDay} className="focus-ring whitespace-nowrap rounded-2xl bg-graphite px-4 py-3 text-sm font-bold text-white">Fechar caixa do dia</button>
       </div>
-      <Panel title="Movimentações do caixa">
+      <Panel title="MovimentaÃ§Ãµes do caixa">
         <Table
           rows={todayEntries}
           columns={['date', 'description', 'type', 'category', 'value']}
-          labels={['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor']}
+          labels={['Data', 'DescriÃ§Ã£o', 'Tipo', 'Categoria', 'Valor']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
             if (key === 'description') return cashDescription(row)
-            if (key === 'type') return cashType(row) === 'entrada' ? 'Entrada' : 'Saída'
+            if (key === 'type') return cashType(row) === 'entrada' ? 'Entrada' : 'SaÃ­da'
             if (key === 'category') return cashCategory(row) || '-'
             if (key === 'value') return money.format(cashValue(row))
             return value
@@ -1841,7 +1925,7 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
         />
       </Panel>
       <Panel title="Fechamentos registrados">
-        <CompactList items={closures.length ? closures.map((item) => `${formatDate(item.date)} · saldo ${money.format(item.balance)}`) : ['Nenhum fechamento registrado']} />
+        <CompactList items={closures.length ? closures.map((item) => `${formatDate(item.date)} Â· saldo ${money.format(item.balance)}`) : ['Nenhum fechamento registrado']} />
       </Panel>
       {modalOpen && <CashEntryModal onClose={() => setModalOpen(false)} onSave={saveCashEntry} />}
     </div>
@@ -1851,13 +1935,13 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
 function CashEntryModal({ onClose, onSave }) {
   const [form, setForm] = useState({ type: 'Entrada', description: '', category: 'Operacional', method: 'Pix', value: 0, date: todayIso })
   return (
-    <Modal title="Nova movimentação" onClose={onClose}>
+    <Modal title="Nova movimentaÃ§Ã£o" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value })} options={['Entrada', 'Saída']} />
-        <Field label="Descrição" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
+        <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value })} options={['Entrada', 'SaÃ­da']} />
+        <Field label="DescriÃ§Ã£o" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Select label="Forma de pagamento" value={form.method} onChange={(value) => setForm({ ...form, method: value })} options={['Pix', 'Dinheiro', 'Cartão', 'Pendente']} />
+          <Select label="Forma de pagamento" value={form.method} onChange={(value) => setForm({ ...form, method: value })} options={['Pix', 'Dinheiro', 'CartÃ£o', 'Pendente']} />
           <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
         </div>
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
@@ -1898,7 +1982,7 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
   function saveAdvance(data) {
     const payload = { ...data, value: Number(data.value) || 0 }
     if (!payload.employee || payload.value <= 0 || !payload.date || !payload.reason.trim()) {
-      notify?.('Erro ao salvar: confira funcionário, valor, data e motivo.', 'error')
+      notify?.('Erro ao salvar: confira funcionÃ¡rio, valor, data e motivo.', 'error')
       return
     }
     if (editing) {
@@ -1918,7 +2002,7 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
       const newAdvance = { ...payload, id: Date.now() }
       setAdvances((current) => [...current, newAdvance])
       setCashEntries((current) => [...current, createAdvanceCashEntry(newAdvance)])
-      notify?.('Vale criado e lançado no caixa.')
+      notify?.('Vale criado e lanÃ§ado no caixa.')
     }
     setModalOpen(false)
   }
@@ -1932,7 +2016,7 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
     if (!window.confirm(`Excluir o vale de ${item.employee}?`)) return
     setAdvances((current) => current.filter((advance) => advance.id !== item.id))
     setCashEntries((current) => current.filter((entry) => !(entry.referenciaTipo === 'vale' && entry.referenciaId === item.id)))
-    notify?.('Vale excluído.')
+    notify?.('Vale excluÃ­do.')
   }
 
   return (
@@ -1940,14 +2024,14 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xl font-bold">Vales</h3>
-          <p className="text-sm text-gray-500">Admin e Funcionário Caixa gerenciam todos os vales.</p>
+          <p className="text-sm text-gray-500">Admin e FuncionÃ¡rio Caixa gerenciam todos os vales.</p>
         </div>
         <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Vale</button>
       </div>
 
       <Panel title="Filtros">
         <div className="grid gap-3 md:grid-cols-3">
-          <Select label="Funcionário" value={filters.employee} onChange={(value) => setFilters({ ...filters, employee: value })} options={['Todos', ...employees.map((item) => item.name)]} values={['all', ...employees.map((item) => item.name)]} />
+          <Select label="FuncionÃ¡rio" value={filters.employee} onChange={(value) => setFilters({ ...filters, employee: value })} options={['Todos', ...employees.map((item) => item.name)]} values={['all', ...employees.map((item) => item.name)]} />
           <Field label="Data" type="date" value={filters.date} onChange={(value) => setFilters({ ...filters, date: value })} />
           <Select label="Status" value={filters.status} onChange={(value) => setFilters({ ...filters, status: value })} options={['Todos', 'Aberto', 'Descontado']} values={['all', 'Aberto', 'Descontado']} />
         </div>
@@ -1995,7 +2079,7 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
   return (
     <Modal title={advance ? 'Editar vale' : 'Novo vale'} onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Select label="Funcionário" value={form.employee} onChange={(value) => setForm({ ...form, employee: value })} options={employees.map((item) => item.name)} />
+        <Select label="FuncionÃ¡rio" value={form.employee} onChange={(value) => setForm({ ...form, employee: value })} options={employees.map((item) => item.name)} />
         <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
         <Select label="Status" value={form.status} onChange={(value) => setForm({ ...form, status: value })} options={['Aberto', 'Descontado']} />
@@ -2012,7 +2096,7 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
 function AccessDenied() {
   return (
     <Panel title="Acesso bloqueado">
-      <p className="text-sm font-semibold text-gray-500">Esta área está disponível apenas para Admin e Funcionário Caixa.</p>
+      <p className="text-sm font-semibold text-gray-500">Esta Ã¡rea estÃ¡ disponÃ­vel apenas para Admin e FuncionÃ¡rio Caixa.</p>
     </Panel>
   )
 }
@@ -2066,7 +2150,7 @@ function Inventory({ user, items, setItems, notify }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xl font-bold">Estoque</h3>
-          <p className="text-sm text-gray-500">{canManage ? 'Cadastre, edite e acompanhe produtos do salão.' : 'Visualização dos produtos e alertas de estoque.'}</p>
+          <p className="text-sm text-gray-500">{canManage ? 'Cadastre, edite e acompanhe produtos do salÃ£o.' : 'VisualizaÃ§Ã£o dos produtos e alertas de estoque.'}</p>
         </div>
         {canManage && <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Produto</button>}
       </div>
@@ -2076,7 +2160,7 @@ function Inventory({ user, items, setItems, notify }) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold">{item.name}</p>
-              <p className="mt-1 text-sm text-gray-500">{item.category} · {item.unit}</p>
+              <p className="mt-1 text-sm text-gray-500">{item.category} Â· {item.unit}</p>
             </div>
             {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="h-14 w-14 rounded-xl border border-gray-100 object-cover" />}
             {item.quantity <= item.min && <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">Estoque baixo</span>}
@@ -2087,11 +2171,11 @@ function Inventory({ user, items, setItems, notify }) {
               <p className="font-bold">{item.quantity} {item.unit}</p>
             </div>
             <div className="rounded-2xl bg-pearl px-4 py-3">
-              <p className="text-gray-500">Mínimo</p>
+              <p className="text-gray-500">MÃ­nimo</p>
               <p className="font-bold">{item.min} {item.unit}</p>
             </div>
           </div>
-          <p className="mt-3 text-sm">Custo unitário: <strong>{money.format(item.cost)}</strong></p>
+          <p className="mt-3 text-sm">Custo unitÃ¡rio: <strong>{money.format(item.cost)}</strong></p>
           <p className="mt-2 text-sm text-gray-500">Fornecedor: {item.supplier}</p>
           {item.notes && <p className="mt-2 text-sm text-gray-600">Obs.: {item.notes}</p>}
           {canManage && (
@@ -2138,17 +2222,17 @@ function InventoryModal({ product, onClose, onSave }) {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Quantidade atual" type="number" value={form.quantity} onChange={(value) => setForm({ ...form, quantity: value })} />
           <Select label="Unidade" value={form.unit} onChange={(value) => setForm({ ...form, unit: value })} options={units} />
-          <Field label="Custo unitário" type="number" value={form.cost} onChange={(value) => setForm({ ...form, cost: value })} />
-          <Field label="Estoque mínimo" type="number" value={form.min} onChange={(value) => setForm({ ...form, min: value })} />
+          <Field label="Custo unitÃ¡rio" type="number" value={form.cost} onChange={(value) => setForm({ ...form, cost: value })} />
+          <Field label="Estoque mÃ­nimo" type="number" value={form.min} onChange={(value) => setForm({ ...form, min: value })} />
         </div>
         <Field label="Fornecedor" value={form.supplier} onChange={(value) => setForm({ ...form, supplier: value })} />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-gray-600">Imagem do produto</span>
           <input type="file" accept="image/*" onChange={handleImage} className="focus-ring w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" />
         </label>
-        {form.imageUrl && <img src={form.imageUrl} alt="Prévia do produto" className="h-28 w-28 rounded-2xl border border-gray-200 object-cover" />}
+        {form.imageUrl && <img src={form.imageUrl} alt="PrÃ©via do produto" className="h-28 w-28 rounded-2xl border border-gray-200 object-cover" />}
         <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-gray-600">Observações</span>
+          <span className="mb-2 block text-sm font-semibold text-gray-600">ObservaÃ§Ãµes</span>
           <textarea className="focus-ring min-h-24 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
@@ -2163,7 +2247,7 @@ function InventoryModal({ product, onClose, onSave }) {
 function Reports({ appointments, employees, user }) {
   const professionals = getProfessionals(employees)
   const visible = user.role === 'admin' ? appointments : appointments.filter((item) => item.professional === user.name)
-  const completed = visible.filter((item) => item.status === 'Concluído')
+  const completed = visible.filter((item) => item.status === 'ConcluÃ­do')
   const commissions = completed.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
   const employeeCommissions = professionals
     .map((employee) => ({
@@ -2175,11 +2259,11 @@ function Reports({ appointments, employees, user }) {
   const serviceSales = topEntries(countBy(completed, (item) => item.service))
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      {user.role === 'admin' && <Panel title="Faturamento por período"><CompactList items={[`Mês atual: ${money.format(completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0))}`, `Ticket médio: ${money.format(completed.length ? completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0) / completed.length : 0)}`]} /></Panel>}
-      <Panel title={user.role === 'admin' ? 'Comissões gerais' : 'Minha comissão'}><CompactList items={[money.format(commissions)]} /></Panel>
-      <Panel title="Comissão por funcionário"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissões calculadas']} /></Panel>
-      <Panel title="Comissão por serviço"><CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissões calculadas']} /></Panel>
-      <Panel title="Serviços mais vendidos"><CompactList items={serviceSales.length ? serviceSales.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
+      {user.role === 'admin' && <Panel title="Faturamento por perÃ­odo"><CompactList items={[`MÃªs atual: ${money.format(completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0))}`, `Ticket mÃ©dio: ${money.format(completed.length ? completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0) / completed.length : 0)}`]} /></Panel>}
+      <Panel title={user.role === 'admin' ? 'ComissÃµes gerais' : 'Minha comissÃ£o'}><CompactList items={[money.format(commissions)]} /></Panel>
+      <Panel title="ComissÃ£o por funcionÃ¡rio"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissÃµes calculadas']} /></Panel>
+      <Panel title="ComissÃ£o por serviÃ§o"><CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissÃµes calculadas']} /></Panel>
+      <Panel title="ServiÃ§os mais vendidos"><CompactList items={serviceSales.length ? serviceSales.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
       <Panel title="Clientes mais frequentes"><CompactList items={['Juliana Nunes', 'Ana Paula Martins', 'Patricia Souza']} /></Panel>
       {user.role === 'admin' && <Panel title="Pagamentos pendentes"><CompactList items={['Juliana Nunes: R$ 70,00', 'Carla Mendes: R$ 220,00']} /></Panel>}
     </div>
@@ -2205,43 +2289,43 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
 
   function requestSlot(data) {
     if (!data.client.trim() || !data.service.trim()) {
-      notify?.('Erro ao solicitar: informe cliente e serviço.', 'error')
+      notify?.('Erro ao solicitar: informe cliente e serviÃ§o.', 'error')
       return
     }
     const phone = normalizePhone(salonSettings.receptionWhatsapp)
     if (!phone) {
-      notify?.('Cadastre o WhatsApp da recepção nas configurações do salão.', 'error')
+      notify?.('Cadastre o WhatsApp da recepÃ§Ã£o nas configuraÃ§Ãµes do salÃ£o.', 'error')
       return
     }
     const message = [
-      'Olá, gostaria de marcar uma cliente.',
+      'OlÃ¡, gostaria de marcar uma cliente.',
       '',
       `Profissional: ${employee.name}`,
       `Cliente: ${data.client}`,
-      `Serviço: ${data.service}`,
+      `ServiÃ§o: ${data.service}`,
       `Data: ${formatDate(date)}`,
-      `Horário: ${selectedSlot}`,
+      `HorÃ¡rio: ${selectedSlot}`,
       data.phone ? `Telefone: ${data.phone}` : '',
-      data.notes ? `Observação: ${data.notes}` : ''
+      data.notes ? `ObservaÃ§Ã£o: ${data.notes}` : ''
     ].filter(Boolean).join('\n')
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
     setSelectedSlot(null)
-    notify?.('Solicitação enviada para a recepção.')
+    notify?.('SolicitaÃ§Ã£o enviada para a recepÃ§Ã£o.')
   }
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
         <Metric title="Minha agenda" value={formatDate(date)} detail={employee.name} />
-        <Metric title="Horários livres" value={availableSlots.length} detail={selectedService?.name ?? 'Serviço'} />
+        <Metric title="HorÃ¡rios livres" value={availableSlots.length} detail={selectedService?.name ?? 'ServiÃ§o'} />
         <Metric title="Agendamentos do dia" value={dayAppointments.length} detail="Somente meus atendimentos" />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-        <Panel title="Meus horários disponíveis">
+        <Panel title="Meus horÃ¡rios disponÃ­veis">
           <div className="space-y-4">
             <DatePickerBar value={date} onChange={setDate} />
-            <Select label="Serviço desejado" value={serviceName} onChange={setServiceName} options={serviceOptions.length ? serviceOptions : services.map((item) => item.name)} />
+            <Select label="ServiÃ§o desejado" value={serviceName} onChange={setServiceName} options={serviceOptions.length ? serviceOptions : services.map((item) => item.name)} />
             <div className="inline-flex rounded-2xl border border-blush bg-pearl p-1 text-sm font-bold dark:border-white/10 dark:bg-white/5">
               <button type="button" onClick={() => setView('day')} className={`rounded-xl px-5 py-2 transition ${view === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Dia</button>
               <button type="button" onClick={() => setView('week')} className={`rounded-xl px-5 py-2 transition ${view === 'week' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Semana</button>
@@ -2249,10 +2333,10 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
             <div className="flex flex-wrap gap-2">
               {availableSlots.map((slot) => (
                 <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100">
-                  {slot} · Solicitar agendamento
+                  {slot} Â· Solicitar agendamento
                 </button>
               ))}
-              {availableSlots.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horários disponíveis nesta data.</p>}
+              {availableSlots.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horÃ¡rios disponÃ­veis nesta data.</p>}
             </div>
           </div>
         </Panel>
@@ -2260,7 +2344,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
         <Panel title={view === 'day' ? 'Meus agendamentos do dia' : 'Minha semana'}>
           {view === 'day' ? (
             <div className="space-y-3">
-              {dayAppointments.map((item) => <LineItem key={item.id} label={`${item.time} · ${item.client} · ${item.service}`} value={item.status} />)}
+              {dayAppointments.map((item) => <LineItem key={item.id} label={`${item.time} Â· ${item.client} Â· ${item.service}`} value={item.status} />)}
               {dayAppointments.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum agendamento nesta data.</p>}
             </div>
           ) : (
@@ -2271,7 +2355,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
                   <div key={weekDate} className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
                     <p className="font-bold capitalize">{formatDate(weekDate)}</p>
                     <div className="mt-3 space-y-2">
-                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#17141c]">{item.time} · {item.client}</p>)}
+                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#17141c]">{item.time} Â· {item.client}</p>)}
                       {dayItems.length === 0 && <p className="text-sm font-semibold text-gray-500">Sem agendamentos.</p>}
                     </div>
                   </div>
@@ -2295,13 +2379,13 @@ function ScheduleRequestModal({ employee, slot, date, serviceName, onClose, onSu
     <Modal title="Solicitar agendamento" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSubmit(form) }} className="space-y-3">
         <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
-          {employee.name} · {formatDate(date)} · {slot}
+          {employee.name} Â· {formatDate(date)} Â· {slot}
         </div>
         <Field label="Nome da cliente" value={form.client} onChange={(value) => setForm({ ...form, client: value })} required />
         <Field label="Telefone da cliente (opcional)" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />
-        <Select label="Serviço desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employee.services?.length ? employee.services : services.map((item) => item.name)} />
+        <Select label="ServiÃ§o desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employee.services?.length ? employee.services : services.map((item) => item.name)} />
         <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-gray-600">Observação (opcional)</span>
+          <span className="mb-2 block text-sm font-semibold text-gray-600">ObservaÃ§Ã£o (opcional)</span>
           <textarea className="focus-ring min-h-24 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
@@ -2318,13 +2402,13 @@ function MyAppointments({ user, appointments }) {
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
         <Metric title="Atendimentos hoje" value={appointments.length} detail={user.name} />
-        <Metric title="Concluídos" value={appointments.filter((item) => item.status === 'Concluído').length} detail="Sem valores financeiros" />
-        <Metric title="Confirmados" value={appointments.filter((item) => item.status === 'Confirmado').length} detail="Próximos horários" />
-        <Metric title="Minha comissão" value={money.format(appointments.filter((item) => item.status === 'Concluído').reduce((sum, item) => sum + Number(item.comissaoCalculada ?? item.commission ?? 0), 0))} detail="Atendimentos concluídos" />
+        <Metric title="ConcluÃ­dos" value={appointments.filter((item) => item.status === 'ConcluÃ­do').length} detail="Sem valores financeiros" />
+        <Metric title="Confirmados" value={appointments.filter((item) => item.status === 'Confirmado').length} detail="PrÃ³ximos horÃ¡rios" />
+        <Metric title="Minha comissÃ£o" value={money.format(appointments.filter((item) => item.status === 'ConcluÃ­do').reduce((sum, item) => sum + Number(item.comissaoCalculada ?? item.commission ?? 0), 0))} detail="Atendimentos concluÃ­dos" />
       </div>
       <Panel title="Meus atendimentos">
         <div className="space-y-3">
-          {appointments.map((item) => <LineItem key={item.id} label={`${formatDate(item.date)} · ${item.time} · ${item.client}`} value={item.status} />)}
+          {appointments.map((item) => <LineItem key={item.id} label={`${formatDate(item.date)} Â· ${item.time} Â· ${item.client}`} value={item.status} />)}
         </div>
       </Panel>
     </div>
@@ -2351,23 +2435,27 @@ function EmployeeProfile({ user, appointments, employees, setEmployees }) {
         </div>
       </Panel>
       <Panel title="Rotina de hoje">
-        <CompactList items={appointments.map((item) => `${formatDate(item.date)} · ${item.time} · ${item.client} · ${item.service}`)} />
+        <CompactList items={appointments.map((item) => `${formatDate(item.date)} Â· ${item.time} Â· ${item.client} Â· ${item.service}`)} />
       </Panel>
     </div>
   )
 }
 
 function Settings({ settings, setSettings }) {
+  const adminEmail = getSuggestedAccessEmail({ employeeType: 'admin', salonSettings: settings })
+  const cashierEmail = getSuggestedAccessEmail({ employeeType: 'cashier', salonSettings: settings })
+
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title="Dados do salão">
+      <Panel title="Dados do salÃ£o">
         <div className="space-y-3">
-          <CompactList items={['Nome: Salão Atelier da Beleza', 'Horários definidos por funcionário', 'Moeda: Real brasileiro', 'Perfil administrativo protegido']} />
-          <Field label="WhatsApp da recepção/caixa" value={settings.receptionWhatsapp} onChange={(value) => setSettings((current) => ({ ...current, receptionWhatsapp: value }))} placeholder="Ex.: 5511999999999" />
+          <Field label="Nome do salÃ£o" value={settings.salonName ?? ''} onChange={(value) => setSettings((current) => ({ ...current, salonName: value }))} />
+          <CompactList items={[`Login Admin sugerido: ${adminEmail}`, `Login Caixa sugerido: ${cashierEmail}`, 'HorÃ¡rios definidos por funcionÃ¡rio', 'Moeda: Real brasileiro']} />
+          <Field label="WhatsApp da recepÃ§Ã£o/caixa" value={settings.receptionWhatsapp} onChange={(value) => setSettings((current) => ({ ...current, receptionWhatsapp: value }))} placeholder="Ex.: 5511999999999" />
         </div>
       </Panel>
-      <Panel title="Preferências">
-        <CompactList items={['Alertas de estoque baixo ativos', 'Agenda visível por perfil', 'Dados mockados nesta primeira versão']} />
+      <Panel title="PreferÃªncias">
+        <CompactList items={['Alertas de estoque baixo ativos', 'Agenda visÃ­vel por perfil', 'Dados mockados nesta primeira versÃ£o']} />
       </Panel>
     </div>
   )
