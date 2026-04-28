@@ -325,6 +325,12 @@ function toList(value) {
   return []
 }
 
+function formatServices(services) {
+  if (Array.isArray(services)) return services.join(', ')
+  if (typeof services === 'string') return services
+  return ''
+}
+
 function toObjectList(value) {
   return Array.isArray(value) ? value : []
 }
@@ -2322,7 +2328,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
               )) : <p className="min-w-0 text-sm text-gray-500">Sem comissão específica. Usa a comissão padrão.</p>}
             </div>
           </div>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Serviços: {toList(item.services || '').join(', ')}</p>}
+          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Serviços: {formatServices(item.services || '')}</p>}
           {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">
             Expediente: <strong>{item.workStart} às {item.workEnd}</strong>
             {item.breakStart && item.breakEnd ? ` · intervalo ${item.breakStart} às ${item.breakEnd}` : ''}
@@ -2354,7 +2360,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     defaultDuration: employee.defaultDuration ?? 60,
     scheduleInterval: employee.scheduleInterval ?? employee.defaultDuration ?? 60,
     serviceCommissions: toObjectList(employee.serviceCommissions),
-    servicesText: toList(employee.services || '').join(', ')
+    servicesText: formatServices(employee.services || '')
   } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: getSuggestedAccessEmail({ employeeType: 'professional', salonSettings }), temporaryPassword: '', loginActive: false, commission: 30, serviceCommissions: [], servicesText: '', active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
   const professional = form.employeeType === 'professional'
   const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
@@ -2905,9 +2911,10 @@ function Reports({ appointments, employees, user }) {
 
 function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salonSettings, notify }) {
   const employee = employees.find((item) => item.id === user.employeeId && isProfessional(item))
+  const employeeServices = toList(employee?.services || '')
   const [date, setDate] = useState(todayIso)
   const [view, setView] = useState('day')
-  const [serviceName, setServiceName] = useState(employee?.services?.[0] ?? services[0]?.name ?? '')
+  const [serviceName, setServiceName] = useState(employeeServices[0] ?? services[0]?.name ?? '')
   const [selectedSlot, setSelectedSlot] = useState(null)
 
   if (!employee) return <AccessDenied />
@@ -2918,7 +2925,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
   const weekAppointments = appointments.filter((item) => weekDates.includes(item.date))
   const availableSlots = getAvailableSlots({ employee, date, service: selectedService, appointments, blockedSlots })
   const occupiedSlots = getOccupiedSlots({ employee, date, appointments })
-  const serviceOptions = employee.services?.length ? employee.services : services.filter((item) => item.professional === employee.name).map((item) => item.name)
+  const serviceOptions = employeeServices.length ? employeeServices : services.filter((item) => item.professional === employee.name).map((item) => item.name)
 
   function requestSlot(data) {
     if (!data.client.trim() || !data.service.trim()) {
@@ -3007,6 +3014,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
 
 function ScheduleRequestModal({ employee, slot, date, serviceName, onClose, onSubmit }) {
   const [form, setForm] = useState({ client: '', phone: '', service: serviceName, notes: '' })
+  const employeeServices = toList(employee.services || '')
 
   return (
     <Modal title="Solicitar agendamento" onClose={onClose}>
@@ -3016,7 +3024,7 @@ function ScheduleRequestModal({ employee, slot, date, serviceName, onClose, onSu
         </div>
         <Field label="Nome da cliente" value={form.client} onChange={(value) => setForm({ ...form, client: value })} required />
         <Field label="Telefone da cliente (opcional)" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />
-        <Select label="Serviço desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employee.services?.length ? employee.services : services.map((item) => item.name)} />
+        <Select label="Serviço desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employeeServices.length ? employeeServices : services.map((item) => item.name)} />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-gray-600">Observação (opcional)</span>
           <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
