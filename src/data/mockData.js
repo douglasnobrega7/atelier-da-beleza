@@ -1,24 +1,5 @@
-﻿export const users = [
-  {
-    role: 'admin',
-    name: 'Marina Duarte',
-    title: 'Dona do salão',
-    email: 'admin@atelierdabeleza.com',
-    password: '123456',
-    phone: '(11) 98888-1010'
-  },
-  {
-    role: 'cashier',
-    name: 'Rafaela Costa',
-    title: 'Funcionário Caixa',
-    email: 'funcionario@atelierdabeleza.com',
-    password: '123456',
-    phone: '(11) 98888-9090'
-  }
-]
-
-export const employees = [
-  { id: 1, employeeType: 'professional', name: 'Camila Rocha', phone: '(11) 97777-2020', role: 'Manicure', accessEmail: 'camila@atelierdabeleza.com', temporaryPassword: '123456', loginActive: true, commission: 35, serviceCommissions: [{ id: 101, service: 'Manicure gel', type: 'percentage', value: 50 }, { id: 102, service: 'Pedicure spa', type: 'percentage', value: 45 }], services: ['Manicure gel', 'Pedicure spa', 'Sobrancelha'], active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '12:00', breakEnd: '13:00', defaultDuration: 60, scheduleInterval: 60 },
+﻿export const employees = [
+  { id: 1, employeeType: 'professional', name: 'Camila Rocha', phone: '(11) 97777-2020', role: 'Manicure', accessEmail: 'camila@atelierdabeleza.com', temporaryPassword: '', loginActive: false, commission: 35, serviceCommissions: [{ id: 101, service: 'Manicure gel', type: 'percentage', value: 50 }, { id: 102, service: 'Pedicure spa', type: 'percentage', value: 45 }], services: ['Manicure gel', 'Pedicure spa', 'Sobrancelha'], active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '12:00', breakEnd: '13:00', defaultDuration: 60, scheduleInterval: 60 },
   { id: 2, employeeType: 'professional', name: 'Livia Moreira', phone: '(11) 96666-3030', role: 'Cabeleireira', commission: 40, serviceCommissions: [{ id: 201, service: 'Escova modelada', type: 'percentage', value: 40 }, { id: 202, service: 'Coloração', type: 'percentage', value: 35 }], services: ['Corte feminino', 'Escova modelada', 'Coloração'], active: true, workStatus: 'Horário de almoço', workStart: '08:00', workEnd: '17:00', breakStart: '12:00', breakEnd: '13:00', defaultDuration: 50, scheduleInterval: 30 },
   { id: 3, employeeType: 'professional', name: 'Bianca Reis', phone: '(11) 95555-4040', role: 'Esteticista', commission: 38, serviceCommissions: [{ id: 301, service: 'Design de sobrancelhas', type: 'fixed', value: 10 }], services: ['Limpeza de pele', 'Design de sobrancelhas'], active: true, workStatus: 'De folga', workStart: '10:00', workEnd: '19:00', breakStart: '14:00', breakEnd: '15:00', defaultDuration: 60, scheduleInterval: 30 },
   { id: 4, employeeType: 'professional', name: 'Renata Lima', phone: '(11) 94444-5050', role: 'Maquiadora', commission: 42, serviceCommissions: [], services: ['Maquiagem social', 'Penteado'], active: false, workStatus: 'De folga', workStart: '11:00', workEnd: '20:00', breakStart: '', breakEnd: '', defaultDuration: 90, scheduleInterval: 30 },
@@ -31,13 +12,13 @@ export const services = [
   { id: 3, name: 'Coloração', price: 220, duration: '2h 30min', professional: 'Livia Moreira', category: 'Cabelo' },
   { id: 4, name: 'Manicure gel', price: 70, duration: '1h', professional: 'Camila Rocha', category: 'Unhas' },
   { id: 5, name: 'Pedicure spa', price: 85, duration: '1h 10min', professional: 'Camila Rocha', category: 'Unhas' },
-  { id: 6, name: 'Design de sobrancelhas', price: 55, duration: '35 min', professional: 'Bianca Reis', category: 'Estetica' },
-  { id: 7, name: 'Limpeza de pele', price: 160, duration: '1h 20min', professional: 'Bianca Reis', category: 'Estetica' },
+  { id: 6, name: 'Design de sobrancelhas', price: 55, duration: '35 min', professional: 'Bianca Reis', category: 'Estética' },
+  { id: 7, name: 'Limpeza de pele', price: 160, duration: '1h 20min', professional: 'Bianca Reis', category: 'Estética' },
   { id: 8, name: 'Maquiagem social', price: 180, duration: '1h 30min', professional: 'Renata Lima', category: 'Maquiagem' }
 ]
 
 export const clients = [
-  { id: 1, name: 'Ana Paula Martins', phone: '(11) 91234-1111', birthday: '12/03', notes: 'Prefere horarios pela manha.', history: ['Corte feminino', 'Escova modelada'], lastVisit: '26/04/2026' },
+  { id: 1, name: 'Ana Paula Martins', phone: '(11) 91234-1111', birthday: '12/03', notes: 'Prefere horários pela manhã.', history: ['Corte feminino', 'Escova modelada'], lastVisit: '26/04/2026' },
   { id: 2, name: 'Juliana Nunes', phone: '(11) 92345-2222', birthday: '28/07', notes: 'Alergia a esmalte comum.', history: ['Manicure gel', 'Pedicure spa'], lastVisit: '25/04/2026' },
   { id: 3, name: 'Carla Mendes', phone: '(11) 93456-3333', birthday: '09/10', notes: 'Gosta de tons claros.', history: ['Coloração', 'Design de sobrancelhas'], lastVisit: '22/04/2026' },
   { id: 4, name: 'Patricia Souza', phone: '(11) 94567-4444', birthday: '17/01', notes: 'Cliente recorrente quinzenal.', history: ['Limpeza de pele'], lastVisit: '18/04/2026' },
@@ -83,3 +64,5 @@ export const weeklyRevenue = [
   { day: 'Sab', value: 1720 },
   { day: 'Dom', value: 320 }
 ]
+
+
