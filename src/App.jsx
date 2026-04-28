@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { Component, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import {
   createAppointment as createAppointmentRecord,
@@ -239,7 +239,7 @@ function getSuggestedAccessEmail({ name, employeeType = 'professional', salonSet
 }
 
 function getProfessionals(employees) {
-  return employees.filter(isProfessional)
+  return (employees || []).filter(isProfessional)
 }
 
 function withCommission(appointment, employees) {
@@ -319,6 +319,16 @@ function field(row, camelKey, snakeKey = camelKey) {
   return row?.[camelKey] ?? row?.[snakeKey]
 }
 
+function toList(value) {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean)
+  return []
+}
+
+function toObjectList(value) {
+  return Array.isArray(value) ? value : []
+}
+
 function normalizeClientRecord(row) {
   return {
     ...row,
@@ -334,16 +344,22 @@ function normalizeClientRecord(row) {
 }
 
 function normalizeEmployeeRecord(row) {
-  const employeeType = field(row, 'employeeType', 'employee_type') ?? (['cashier', 'caixa'].includes(field(row, 'role')) ? 'cashier' : 'professional')
+  const rawRole = field(row, 'role')
+  const employeeType = field(row, 'employeeType', 'employee_type') ?? (['cashier', 'caixa'].includes(rawRole) ? 'cashier' : 'professional')
   const professional = employeeType === 'professional'
+  const status = field(row, 'status') || 'ativo'
+  const commissionPercent = Number(field(row, 'commission_percent') ?? field(row, 'commission') ?? 0)
   return {
     ...row,
     name: field(row, 'name') ?? '',
     phone: field(row, 'phone') ?? '',
-    role: field(row, 'position') ?? field(row, 'role') ?? '',
-    active: field(row, 'active') ?? true,
-    commission: Number(field(row, 'commission') ?? field(row, 'commission_percent') ?? 0),
-    workStatus: field(row, 'workStatus', 'work_status') ?? field(row, 'status') ?? 'Ativo',
+    status,
+    position: field(row, 'position') || '',
+    role: field(row, 'position') || rawRole || '',
+    active: field(row, 'active') ?? status.toLowerCase() !== 'inativo',
+    commission_percent: commissionPercent,
+    commission: Number(field(row, 'commission') ?? commissionPercent ?? 0),
+    workStatus: field(row, 'workStatus', 'work_status') ?? status,
     employeeType,
     workStart: field(row, 'workStart', 'work_start') ?? (professional ? '09:00' : ''),
     workEnd: field(row, 'workEnd', 'work_end') ?? (professional ? '18:00' : ''),
@@ -351,8 +367,8 @@ function normalizeEmployeeRecord(row) {
     breakEnd: field(row, 'breakEnd', 'break_end') ?? '',
     defaultDuration: field(row, 'defaultDuration', 'default_duration') ?? 60,
     scheduleInterval: field(row, 'scheduleInterval', 'schedule_interval') ?? field(row, 'defaultDuration', 'default_duration') ?? 60,
-    serviceCommissions: professional ? field(row, 'serviceCommissions', 'service_commissions') ?? [] : [],
-    services: professional ? field(row, 'services') ?? [] : [],
+    serviceCommissions: professional ? toObjectList(field(row, 'serviceCommissions', 'service_commissions')) : [],
+    services: professional ? toList(field(row, 'services') || '') : [],
     accessEmail: field(row, 'accessEmail', 'access_email') ?? field(row, 'login_email') ?? '',
     temporaryPassword: field(row, 'temporaryPassword', 'temporary_password') ?? '',
     loginActive: Boolean(field(row, 'loginActive', 'login_active') ?? false)
@@ -443,7 +459,7 @@ function normalizeSalonSettings(row) {
 }
 
 function handleDataActionError(error, notify) {
-  console.error(error)
+  console.error('Erro Supabase:', error)
   const message = error?.message || 'Não foi possível salvar no banco de dados.'
   if (isMissingTableError(error?.original ?? error)) {
     notify?.(error?.message || databaseNotConfiguredMessage, 'error')
@@ -451,6 +467,42 @@ function handleDataActionError(error, notify) {
   }
   notify?.(message, 'error')
   return true
+}
+
+function ErrorCard({ message }) {
+  return (
+    <Panel title="Erro ao carregar esta tela">
+      <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">{message || 'Erro inesperado.'}</p>
+    </Panel>
+  )
+}
+
+class PageErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error) {
+    console.error('Erro ao carregar esta tela:', error)
+  }
+
+  componentDidUpdate(previousProps) {
+    if (previousProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null })
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return <ErrorCard message={this.state.error.message} />
+    }
+    return this.props.children
+  }
 }
 
 const adminMenu = [
@@ -865,37 +917,39 @@ function App() {
                 {databaseStatus.message}
               </div>
             )}
-            <PageRouter
-              page={safePage}
-              user={currentUser}
-              salonId={currentSalonId}
-              databaseStatus={databaseStatus}
-              dataLoading={dataLoading}
-              appointments={appointments}
-              setAppointments={setAppointments}
-              clients={clients}
-              setClients={setClients}
-              cashEntries={cashEntries}
-              setCashEntries={setCashEntries}
-              cashClosures={cashClosures}
-              setCashClosures={setCashClosures}
-              advances={advances}
-              setAdvances={setAdvances}
-              blockedSlots={blockedSlots}
-              setBlockedSlots={setBlockedSlots}
-              inventoryItems={inventoryItems}
-              setInventoryItems={setInventoryItems}
-              employees={employees}
-              setEmployees={setEmployees}
-              services={serviceItems}
-              setServices={setServiceItems}
-              salonSettings={salonSettings}
-              setSalonSettings={setSalonSettings}
-              agendaProfessional={agendaProfessional}
-              setAgendaProfessional={setAgendaProfessional}
-              onOpenAgendaForProfessional={openAgendaForProfessional}
-              notify={notify}
-            />
+            <PageErrorBoundary resetKey={safePage}>
+              <PageRouter
+                page={safePage}
+                user={currentUser}
+                salonId={currentSalonId}
+                databaseStatus={databaseStatus}
+                dataLoading={dataLoading}
+                appointments={appointments}
+                setAppointments={setAppointments}
+                clients={clients}
+                setClients={setClients}
+                cashEntries={cashEntries}
+                setCashEntries={setCashEntries}
+                cashClosures={cashClosures}
+                setCashClosures={setCashClosures}
+                advances={advances}
+                setAdvances={setAdvances}
+                blockedSlots={blockedSlots}
+                setBlockedSlots={setBlockedSlots}
+                inventoryItems={inventoryItems}
+                setInventoryItems={setInventoryItems}
+                employees={employees}
+                setEmployees={setEmployees}
+                services={serviceItems}
+                setServices={setServiceItems}
+                salonSettings={salonSettings}
+                setSalonSettings={setSalonSettings}
+                agendaProfessional={agendaProfessional}
+                setAgendaProfessional={setAgendaProfessional}
+                onOpenAgendaForProfessional={openAgendaForProfessional}
+                notify={notify}
+              />
+            </PageErrorBoundary>
           </section>
         </main>
       </div>
@@ -2001,12 +2055,13 @@ function Services({ salonId, user, services, setServices, notify }) {
     }
     try {
       if (editing) {
-        const saved = normalizeServiceRecord(await updateServiceRecord(salonId, editing.id, payload))
-        setServices((current) => current.map((item) => item.id === editing.id ? saved : item))
+        await updateServiceRecord(salonId, editing.id, payload)
       } else {
-        const saved = normalizeServiceRecord(await createServiceRecord(salonId, payload))
-        setServices((current) => [...current, saved])
+        await createServiceRecord(salonId, payload)
       }
+
+      const serviceRows = await fetchServicesFromSupabase(salonId)
+      setServices((serviceRows ?? []).map(normalizeServiceRecord))
       setModalOpen(false)
       notify?.('Serviço salvo com sucesso.')
     } catch (error) {
@@ -2083,7 +2138,7 @@ function ServiceModal({ service, onClose, onSave }) {
   )
 }
 
-function Employees({ salonId, user, employees, setEmployees, appointments, salonSettings, onOpenAgendaForProfessional, notify }) {
+function Employees({ salonId, user, employees = [], setEmployees, appointments, salonSettings, onOpenAgendaForProfessional, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const canManage = user.role === 'admin'
@@ -2129,12 +2184,12 @@ function Employees({ salonId, user, employees, setEmployees, appointments, salon
       accessEmail: data.accessEmail,
       temporaryPassword: data.temporaryPassword,
       loginActive: wantsLogin,
-      serviceCommissions: professional ? (data.serviceCommissions ?? []).map((item, index) => ({
+      serviceCommissions: professional ? toObjectList(data.serviceCommissions).map((item, index) => ({
         ...item,
         id: item.id ?? Date.now() + index,
         value: Number(item.value) || 0
       })) : [],
-      services: professional ? data.servicesText.split(',').map((item) => item.trim()).filter(Boolean) : []
+      services: professional ? (data.servicesText || '').split(',').map((item) => item.trim()).filter(Boolean) : []
     }
     delete payload.servicesText
     try {
@@ -2228,7 +2283,7 @@ function Employees({ salonId, user, employees, setEmployees, appointments, salon
         </div>
         {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3 sm:shrink-0`}>Novo Funcionário</button>}
       </div>
-      <CardsGrid items={employees} render={(item) => (
+      <CardsGrid items={employees || []} render={(item) => (
         <div className="min-w-0 space-y-3 break-words">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <button onClick={() => isProfessional(item) && onOpenAgendaForProfessional?.(item.name)} className={`min-w-0 whitespace-normal break-words text-left text-lg font-bold leading-snug text-graphite ${isProfessional(item) ? 'hover:text-goldSoft' : 'cursor-default'}`}>
@@ -2240,7 +2295,7 @@ function Employees({ salonId, user, employees, setEmployees, appointments, salon
           <p className="min-w-0 text-sm font-semibold text-gray-600">Tipo: {isProfessional(item) ? 'Profissional' : 'Caixa/Recepção'}</p>
           <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong>{item.accessEmail ? ` · ${item.accessEmail}` : ''}</p>
           <div>
-            <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-3 py-1 text-xs font-bold ${employeeStatusStyles[item.workStatus]}`}>
+            <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-3 py-1 text-xs font-bold ${employeeStatusStyles[item.workStatus] ?? employeeStatusStyles.Ativo}`}>
               {item.workStatus}
             </span>
           </div>
@@ -2267,7 +2322,7 @@ function Employees({ salonId, user, employees, setEmployees, appointments, salon
               )) : <p className="min-w-0 text-sm text-gray-500">Sem comissão específica. Usa a comissão padrão.</p>}
             </div>
           </div>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Serviços: {(item.services ?? []).join(', ')}</p>}
+          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Serviços: {toList(item.services || '').join(', ')}</p>}
           {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">
             Expediente: <strong>{item.workStart} às {item.workEnd}</strong>
             {item.breakStart && item.breakEnd ? ` · intervalo ${item.breakStart} às ${item.breakEnd}` : ''}
@@ -2298,8 +2353,8 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     loginActive: employee.loginActive ?? false,
     defaultDuration: employee.defaultDuration ?? 60,
     scheduleInterval: employee.scheduleInterval ?? employee.defaultDuration ?? 60,
-    serviceCommissions: employee.serviceCommissions ?? [],
-    servicesText: (employee.services ?? []).join(', ')
+    serviceCommissions: toObjectList(employee.serviceCommissions),
+    servicesText: toList(employee.services || '').join(', ')
   } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: getSuggestedAccessEmail({ employeeType: 'professional', salonSettings }), temporaryPassword: '', loginActive: false, commission: 30, serviceCommissions: [], servicesText: '', active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
   const professional = form.employeeType === 'professional'
   const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
@@ -3143,7 +3198,7 @@ function Select({ label, value, onChange, options, values, disabled = false }) {
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">{label}</span>
       <select disabled={disabled} className={inputBase} value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option, index) => <option key={values?.[index] ?? option} value={values?.[index] ?? option}>{option}</option>)}
+        {(options || []).map((option, index) => <option key={values?.[index] ?? option} value={values?.[index] ?? option}>{option}</option>)}
       </select>
     </label>
   )
@@ -3152,7 +3207,7 @@ function Select({ label, value, onChange, options, values, disabled = false }) {
 function CardsGrid({ items, render }) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {items.map((item) => (
+      {(items || []).map((item) => (
         <article key={item.id} className={`${cardBase} min-h-[180px]`}>
           {render(item)}
         </article>
@@ -3164,7 +3219,7 @@ function CardsGrid({ items, render }) {
 function CompactList({ items }) {
   return (
     <div className="space-y-3">
-      {items.map((item) => (
+      {(items || []).map((item) => (
         <div key={item} className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
           {item}
         </div>
@@ -3204,7 +3259,3 @@ function Table({ rows, columns, labels, formatValue }) {
 }
 
 export default App
-
-
-
-

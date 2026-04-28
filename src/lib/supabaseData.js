@@ -35,7 +35,7 @@ function requireSalonId(salonId) {
 async function runQuery(query) {
   const { data, error } = await query
   if (error) {
-    console.error(error)
+    console.error('Erro Supabase:', error)
     if (isMissingTableError(error)) {
       const friendlyError = new Error(databaseNotConfiguredMessage)
       friendlyError.notConfigured = true
@@ -316,7 +316,14 @@ export async function deleteClient(salonId, id) {
 }
 
 export async function fetchEmployees(salonId) {
-  return runQuery(bySalon(TABLES.employees, salonId).order('name', { ascending: true }))
+  try {
+    const data = await runQuery(bySalon(TABLES.employees, salonId).order('name', { ascending: true }))
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error('Erro Supabase:', error)
+    if (isMissingTableError(error?.original ?? error)) throw error
+    return []
+  }
 }
 
 export async function createEmployee(salonId, payload) {
@@ -472,11 +479,26 @@ export async function seedInitialSalonData(salonId) {
 }
 
 export async function fetchServices(salonId) {
-  return runQuery(bySalon(TABLES.services, salonId).order('name', { ascending: true }))
+  requireSalonId(salonId)
+  return runQuery(
+    supabase
+      .from('services')
+      .select('*')
+      .eq('salon_id', salonId)
+      .order('name', { ascending: true })
+  )
 }
 
 export async function createService(salonId, payload) {
-  return insertRow(TABLES.services, salonId, payload, servicePayload)
+  requireSalonId(salonId)
+  const data = await runQuery(
+    supabase
+      .from('services')
+      .insert(servicePayload(payload, salonId, true))
+      .select('*')
+      .single()
+  )
+  return { ...payload, ...data }
 }
 
 export async function updateService(salonId, id, payload) {
