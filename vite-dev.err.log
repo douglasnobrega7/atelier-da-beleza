@@ -1,4 +1,0 @@
-[2m22:25:58[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to load url /src/lib/supabase.js (resolved id: C:/projetos/atelier-da-beleza/src/lib/supabase.js) in C:/projetos/atelier-da-beleza/src/App.jsx. Does the file exist?
-[2m22:25:58[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/App.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
-[2m22:26:02[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mSyntaxError[22m: The requested module '/src/lib/supabase.js?t=1777339561538' does not provide an export named 'setSupabaseSessionPersistence'
-[39m
