@@ -324,6 +324,7 @@ function normalizeClientRecord(row) {
     ...row,
     name: field(row, 'name') ?? '',
     phone: field(row, 'phone') ?? '',
+    email: field(row, 'email') ?? '',
     birthday: field(row, 'birthday') ?? '',
     notes: field(row, 'notes') ?? '',
     history: field(row, 'history') ?? [],
@@ -333,16 +334,16 @@ function normalizeClientRecord(row) {
 }
 
 function normalizeEmployeeRecord(row) {
-  const employeeType = field(row, 'employeeType', 'employee_type') ?? 'professional'
+  const employeeType = field(row, 'employeeType', 'employee_type') ?? (['cashier', 'caixa'].includes(field(row, 'role')) ? 'cashier' : 'professional')
   const professional = employeeType === 'professional'
   return {
     ...row,
     name: field(row, 'name') ?? '',
     phone: field(row, 'phone') ?? '',
-    role: field(row, 'role') ?? '',
+    role: field(row, 'position') ?? field(row, 'role') ?? '',
     active: field(row, 'active') ?? true,
-    commission: Number(field(row, 'commission') ?? 0),
-    workStatus: field(row, 'workStatus', 'work_status') ?? 'Ativo',
+    commission: Number(field(row, 'commission') ?? field(row, 'commission_percent') ?? 0),
+    workStatus: field(row, 'workStatus', 'work_status') ?? field(row, 'status') ?? 'Ativo',
     employeeType,
     workStart: field(row, 'workStart', 'work_start') ?? (professional ? '09:00' : ''),
     workEnd: field(row, 'workEnd', 'work_end') ?? (professional ? '18:00' : ''),
@@ -352,7 +353,7 @@ function normalizeEmployeeRecord(row) {
     scheduleInterval: field(row, 'scheduleInterval', 'schedule_interval') ?? field(row, 'defaultDuration', 'default_duration') ?? 60,
     serviceCommissions: professional ? field(row, 'serviceCommissions', 'service_commissions') ?? [] : [],
     services: professional ? field(row, 'services') ?? [] : [],
-    accessEmail: field(row, 'accessEmail', 'access_email') ?? '',
+    accessEmail: field(row, 'accessEmail', 'access_email') ?? field(row, 'login_email') ?? '',
     temporaryPassword: field(row, 'temporaryPassword', 'temporary_password') ?? '',
     loginActive: Boolean(field(row, 'loginActive', 'login_active') ?? false)
   }
@@ -364,21 +365,22 @@ function normalizeServiceRecord(row) {
     name: field(row, 'name') ?? '',
     price: Number(field(row, 'price') ?? 0),
     duration: field(row, 'duration') ?? '1h',
-    professional: field(row, 'professional') ?? '',
+    durationMinutes: field(row, 'durationMinutes', 'duration_minutes'),
+    professional: field(row, 'professional') ?? field(row, 'responsible') ?? '',
     category: field(row, 'category') ?? ''
   }
 }
 
 function normalizeAppointmentRecord(row, employees = []) {
-  const time = field(row, 'time') ?? field(row, 'horario') ?? ''
-  const value = Number(field(row, 'value') ?? field(row, 'valor') ?? 0)
+  const time = field(row, 'time') ?? field(row, 'horario') ?? field(row, 'appointmentTime', 'appointment_time') ?? ''
+  const value = Number(field(row, 'value') ?? field(row, 'valor') ?? field(row, 'price') ?? 0)
   const duration = field(row, 'duration') ?? field(row, 'duracao')
   return withCommission({
     ...row,
-    client: field(row, 'client') ?? '',
-    service: field(row, 'service') ?? '',
+    client: field(row, 'client') ?? field(row, 'clientName', 'client_name') ?? '',
+    service: field(row, 'service') ?? field(row, 'serviceName', 'service_name') ?? '',
     professional: field(row, 'professional') ?? '',
-    date: field(row, 'date') ?? todayIso,
+    date: field(row, 'date') ?? field(row, 'appointmentDate', 'appointment_date') ?? todayIso,
     time,
     horario: time,
     value,
@@ -441,12 +443,13 @@ function normalizeSalonSettings(row) {
 }
 
 function handleDataActionError(error, notify) {
+  console.error(error)
+  const message = error?.message || 'Não foi possível salvar no banco de dados.'
   if (isMissingTableError(error?.original ?? error)) {
-    notify?.(databaseNotConfiguredMessage, 'error')
+    notify?.(error?.message || databaseNotConfiguredMessage, 'error')
     return true
   }
-  console.error('Erro Supabase:', error)
-  notify?.('Não foi possível salvar no banco de dados.', 'error')
+  notify?.(message, 'error')
   return true
 }
 
@@ -1342,7 +1345,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     if (!appointment) return
     if (user.role !== 'admin' && user.role !== 'cashier' && appointment.professional !== user.name) return
     try {
-      const saved = normalizeAppointmentRecord(await updateAppointmentRecord(salonId, id, { status }), allEmployees)
+      const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, { status })) }, allEmployees)
       setAppointments((current) => current.map((item) => item.id === id ? saved : item))
       if (status === 'Concluído') notify?.('Comissão calculada automaticamente.')
     } catch (error) {
@@ -1356,7 +1359,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     if (appointment.status === 'Concluído') {
       if (!window.confirm('Este agendamento já foi concluído. Deseja cancelar em vez de excluir?')) return false
       try {
-        const saved = normalizeAppointmentRecord(await updateAppointmentRecord(salonId, appointment.id, { status: 'Cancelado' }), allEmployees)
+        const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, appointment.id, { status: 'Cancelado' })) }, allEmployees)
         setAppointments((current) => current.map((item) => item.id === appointment.id ? saved : item))
         notify?.('Agendamento cancelado com sucesso')
         return true

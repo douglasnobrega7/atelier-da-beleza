@@ -13,6 +13,7 @@ export const TABLES = {
 }
 
 export const databaseNotConfiguredMessage = 'Banco ainda não configurado para esta tela.'
+export const missingSalonIdMessage = 'salon_id ausente'
 
 export function isMissingTableError(error) {
   if (!error) return false
@@ -25,7 +26,7 @@ export function isMissingTableError(error) {
 
 function requireSalonId(salonId) {
   if (!salonId) {
-    const error = new Error(databaseNotConfiguredMessage)
+    const error = new Error(missingSalonIdMessage)
     error.notConfigured = true
     throw error
   }
@@ -34,6 +35,7 @@ function requireSalonId(salonId) {
 async function runQuery(query) {
   const { data, error } = await query
   if (error) {
+    console.error(error)
     if (isMissingTableError(error)) {
       const friendlyError = new Error(databaseNotConfiguredMessage)
       friendlyError.notConfigured = true
@@ -53,6 +55,108 @@ function bySalon(table, salonId) {
 function withSalon(payload, salonId) {
   requireSalonId(salonId)
   return { ...toSnakePayload(payload), salon_id: salonId }
+}
+
+function parseDurationMinutes(duration, fallback = 60) {
+  if (typeof duration === 'number') return duration
+  const text = String(duration ?? '').trim()
+  if (!text) return fallback
+  const hoursMatch = text.match(/(\d+)\s*h/i)
+  const minutesMatch = text.match(/(\d+)\s*min/i)
+  const plainNumber = text.match(/^\d+$/)
+  const hours = hoursMatch ? Number(hoursMatch[1]) * 60 : 0
+  const minutes = minutesMatch ? Number(minutesMatch[1]) : 0
+  return hours + minutes || (plainNumber ? Number(text) : fallback)
+}
+
+function pickDefined(payload) {
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined))
+}
+
+function hasField(payload, key) {
+  return Object.prototype.hasOwnProperty.call(payload, key)
+}
+
+function clientPayload(payload = {}, salonId, includeSalon = false) {
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    name: includeSalon || hasField(payload, 'name') ? payload.name : undefined,
+    phone: includeSalon || hasField(payload, 'phone') ? payload.phone : undefined,
+    email: includeSalon || hasField(payload, 'email') ? payload.email ?? '' : undefined,
+    notes: includeSalon || hasField(payload, 'notes') ? payload.notes ?? '' : undefined
+  })
+}
+
+function employeePayload(payload = {}, salonId, includeSalon = false) {
+  const employeeType = payload.employeeType ?? payload.role ?? 'professional'
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    name: includeSalon || hasField(payload, 'name') ? payload.name : undefined,
+    phone: includeSalon || hasField(payload, 'phone') ? payload.phone : undefined,
+    role: includeSalon || hasField(payload, 'employeeType') ? employeeType : undefined,
+    status: includeSalon || hasField(payload, 'status') || hasField(payload, 'workStatus') || hasField(payload, 'active')
+      ? payload.status ?? payload.workStatus ?? (payload.active === false ? 'Inativo' : 'Ativo')
+      : undefined,
+    commission_percent: includeSalon || hasField(payload, 'commissionPercent') || hasField(payload, 'commission')
+      ? Number(payload.commissionPercent ?? payload.commission ?? 0)
+      : undefined,
+    position: includeSalon || hasField(payload, 'position') || hasField(payload, 'role') ? payload.position ?? payload.role ?? '' : undefined,
+    services: includeSalon || hasField(payload, 'services') ? payload.services ?? [] : undefined,
+    login_email: includeSalon || hasField(payload, 'loginEmail') || hasField(payload, 'accessEmail') ? payload.loginEmail ?? payload.accessEmail ?? '' : undefined
+  })
+}
+
+function servicePayload(payload = {}, salonId, includeSalon = false) {
+  const duration = payload.duration ?? ''
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    name: includeSalon || hasField(payload, 'name') ? payload.name : undefined,
+    category: includeSalon || hasField(payload, 'category') ? payload.category ?? '' : undefined,
+    price: includeSalon || hasField(payload, 'price') ? Number(payload.price ?? 0) : undefined,
+    duration_minutes: includeSalon || hasField(payload, 'durationMinutes') || hasField(payload, 'duration_minutes') || hasField(payload, 'duration')
+      ? Number(payload.durationMinutes ?? payload.duration_minutes ?? parseDurationMinutes(duration))
+      : undefined,
+    duration: includeSalon || hasField(payload, 'duration') ? duration : undefined,
+    responsible: includeSalon || hasField(payload, 'responsible') || hasField(payload, 'professional') ? payload.responsible ?? payload.professional ?? '' : undefined
+  })
+}
+
+function appointmentPayload(payload = {}, salonId, includeSalon = false) {
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client') ? payload.clientName ?? payload.client ?? '' : undefined,
+    service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service') ? payload.serviceName ?? payload.service ?? '' : undefined,
+    appointment_date: includeSalon || hasField(payload, 'appointmentDate') || hasField(payload, 'date') ? payload.appointmentDate ?? payload.date : undefined,
+    appointment_time: includeSalon || hasField(payload, 'appointmentTime') || hasField(payload, 'time') || hasField(payload, 'horario') ? payload.appointmentTime ?? payload.time ?? payload.horario : undefined,
+    status: includeSalon || hasField(payload, 'status') ? payload.status ?? 'Aguardando' : undefined,
+    price: includeSalon || hasField(payload, 'price') || hasField(payload, 'value') || hasField(payload, 'valor') ? Number(payload.price ?? payload.value ?? payload.valor ?? 0) : undefined
+  })
+}
+
+async function insertRow(table, salonId, payload, mapPayload) {
+  requireSalonId(salonId)
+  const data = await runQuery(
+    supabase
+      .from(table)
+      .insert(mapPayload(payload, salonId, true))
+      .select('*')
+      .single()
+  )
+  return { ...payload, ...data }
+}
+
+async function updateRow(table, salonId, id, payload, mapPayload) {
+  requireSalonId(salonId)
+  const data = await runQuery(
+    supabase
+      .from(table)
+      .update(mapPayload(payload, salonId, false))
+      .eq('id', id)
+      .eq('salon_id', salonId)
+      .select('*')
+      .single()
+  )
+  return { ...payload, ...data }
 }
 
 function toSnakeKey(key) {
@@ -200,11 +304,11 @@ export async function fetchClients(salonId) {
 }
 
 export async function createClient(salonId, payload) {
-  return runQuery(supabase.from(TABLES.clients).insert(withSalon(payload, salonId)).select('*').single())
+  return insertRow(TABLES.clients, salonId, payload, clientPayload)
 }
 
 export async function updateClient(salonId, id, payload) {
-  return runQuery(supabase.from(TABLES.clients).update(toSnakePayload(payload)).eq('id', id).eq('salon_id', salonId).select('*').single())
+  return updateRow(TABLES.clients, salonId, id, payload, clientPayload)
 }
 
 export async function deleteClient(salonId, id) {
@@ -216,11 +320,11 @@ export async function fetchEmployees(salonId) {
 }
 
 export async function createEmployee(salonId, payload) {
-  return runQuery(supabase.from(TABLES.employees).insert(withSalon(payload, salonId)).select('*').single())
+  return insertRow(TABLES.employees, salonId, payload, employeePayload)
 }
 
 export async function updateEmployee(salonId, id, payload) {
-  return runQuery(supabase.from(TABLES.employees).update(toSnakePayload(payload)).eq('id', id).eq('salon_id', salonId).select('*').single())
+  return updateRow(TABLES.employees, salonId, id, payload, employeePayload)
 }
 
 export async function deleteEmployee(salonId, id) {
@@ -263,62 +367,46 @@ export async function seedSalonData(salonId) {
   await runQuery(
     supabase
       .from(TABLES.services)
-      .insert({
-        salon_id: salonId,
+      .insert(servicePayload({
         name: 'Corte exemplo',
         price: 50,
         duration: '30 min',
-        professional: 'Profissional Inicial',
+        responsible: 'Profissional Inicial',
         category: 'Exemplo'
-      })
+      }, salonId, true))
   )
 
   await runQuery(
     supabase
       .from(TABLES.clients)
-      .insert({ salon_id: salonId, name: 'Cliente Exemplo', phone: '', active: true })
+      .insert(clientPayload({ name: 'Cliente Exemplo', phone: '' }, salonId, true))
   )
 
   await runQuery(
     supabase
       .from(TABLES.appointments)
-      .insert({
-        salon_id: salonId,
+      .insert(appointmentPayload({
         client: 'Cliente Exemplo',
         service: 'Corte exemplo',
-        professional: 'Profissional Inicial',
         date: today,
         time,
-        horario: time,
-        value: 50,
-        valor: 50,
-        duration: 30,
-        duracao: 30,
+        price: 50,
         status: 'Confirmado'
-      })
+      }, salonId, true))
   )
 
   await runQuery(
     supabase
       .from(TABLES.employees)
-      .insert({
-        salon_id: salonId,
+      .insert(employeePayload({
         name: 'Profissional Inicial',
         phone: '',
-        role: 'profissional',
-        employee_type: 'professional',
-        active: true,
-        work_status: 'Ativo',
-        work_start: '09:00',
-        work_end: '18:00',
-        break_start: '',
-        break_end: '',
-        default_duration: 30,
-        schedule_interval: 30,
+        role: 'professional',
+        position: 'profissional',
+        status: 'Ativo',
         commission: 40,
-        service_commissions: [],
         services: ['Corte exemplo']
-      })
+      }, salonId, true))
   )
 
   return { created: true }
@@ -342,52 +430,40 @@ export async function seedInitialSalonData(salonId) {
       supabase
         .from(TABLES.services)
         .insert([
-          { salon_id: salonId, name: 'Corte feminino', price: 90, duration: '50 min', professional: 'Profissional Exemplo', category: 'Cabelo' },
-          { salon_id: salonId, name: 'Escova modelada', price: 75, duration: '45 min', professional: 'Profissional Exemplo', category: 'Cabelo' },
-          { salon_id: salonId, name: 'Manicure gel', price: 70, duration: '60 min', professional: 'Profissional Exemplo', category: 'Unhas' }
+          servicePayload({ name: 'Corte feminino', price: 90, duration: '50 min', responsible: 'Profissional Exemplo', category: 'Cabelo' }, salonId, true),
+          servicePayload({ name: 'Escova modelada', price: 75, duration: '45 min', responsible: 'Profissional Exemplo', category: 'Cabelo' }, salonId, true),
+          servicePayload({ name: 'Manicure gel', price: 70, duration: '60 min', responsible: 'Profissional Exemplo', category: 'Unhas' }, salonId, true)
         ])
     ),
     runQuery(
       supabase
         .from(TABLES.employees)
         .insert([
-          {
-            salon_id: salonId,
+          employeePayload({
             name: 'Caixa/Recepção',
             phone: '',
-            role: 'caixa',
-            employee_type: 'cashier',
-            active: true,
-            work_status: 'Ativo',
+            role: 'cashier',
+            position: 'caixa',
+            status: 'Ativo',
             commission: 0,
-            service_commissions: [],
             services: []
-          },
-          {
-            salon_id: salonId,
+          }, salonId, true),
+          employeePayload({
             name: 'Profissional Exemplo',
             phone: '',
-            role: 'profissional',
-            employee_type: 'professional',
-            active: true,
-            work_status: 'Ativo',
-            work_start: '09:00',
-            work_end: '18:00',
-            break_start: '',
-            break_end: '',
-            default_duration: 60,
-            schedule_interval: 60,
+            role: 'professional',
+            position: 'profissional',
+            status: 'Ativo',
             commission: 30,
-            service_commissions: [],
             services: ['Corte feminino', 'Escova modelada', 'Manicure gel']
-          }
+          }, salonId, true)
         ])
     ),
     (existingClients?.length ?? 0) === 0
       ? runQuery(
         supabase
           .from(TABLES.clients)
-          .insert({ salon_id: salonId, name: 'Cliente Exemplo', phone: '', active: true })
+          .insert(clientPayload({ name: 'Cliente Exemplo', phone: '' }, salonId, true))
       )
       : Promise.resolve(null)
   ])
@@ -400,11 +476,11 @@ export async function fetchServices(salonId) {
 }
 
 export async function createService(salonId, payload) {
-  return runQuery(supabase.from(TABLES.services).insert(withSalon(payload, salonId)).select('*').single())
+  return insertRow(TABLES.services, salonId, payload, servicePayload)
 }
 
 export async function updateService(salonId, id, payload) {
-  return runQuery(supabase.from(TABLES.services).update(toSnakePayload(payload)).eq('id', id).eq('salon_id', salonId).select('*').single())
+  return updateRow(TABLES.services, salonId, id, payload, servicePayload)
 }
 
 export async function deleteService(salonId, id) {
@@ -412,15 +488,15 @@ export async function deleteService(salonId, id) {
 }
 
 export async function fetchAppointments(salonId) {
-  return runQuery(bySalon(TABLES.appointments, salonId).order('date', { ascending: true }).order('time', { ascending: true }))
+  return runQuery(bySalon(TABLES.appointments, salonId).order('appointment_date', { ascending: true }).order('appointment_time', { ascending: true }))
 }
 
 export async function createAppointment(salonId, payload) {
-  return runQuery(supabase.from(TABLES.appointments).insert(withSalon(payload, salonId)).select('*').single())
+  return insertRow(TABLES.appointments, salonId, payload, appointmentPayload)
 }
 
 export async function updateAppointment(salonId, id, payload) {
-  return runQuery(supabase.from(TABLES.appointments).update(toSnakePayload(payload)).eq('id', id).eq('salon_id', salonId).select('*').single())
+  return updateRow(TABLES.appointments, salonId, id, payload, appointmentPayload)
 }
 
 export async function deleteAppointment(salonId, id) {
