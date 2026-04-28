@@ -1,18 +1,42 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import {
-  advances as initialAdvances,
-  appointments as initialAppointments,
-  cashFlow as initialCashFlow,
-  clients as initialClients,
-  employees as initialEmployees,
-  inventory as initialInventory,
-  services as initialServices,
-  weeklyRevenue
-} from './data/mockData'
 import { supabase } from './lib/supabase'
+import {
+  createAppointment as createAppointmentRecord,
+  createClient as createClientRecord,
+  createEmployee as createEmployeeRecord,
+  createEmployeeUserProfile,
+  createService as createServiceRecord,
+  databaseNotConfiguredMessage,
+  deleteAppointment as deleteAppointmentRecord,
+  deleteEmployee as deleteEmployeeRecord,
+  deleteService as deleteServiceRecord,
+  ensureAdminSalon,
+  fetchAdvances as fetchAdvancesFromSupabase,
+  fetchAppointments as fetchAppointmentsFromSupabase,
+  fetchCashMovements as fetchCashMovementsFromSupabase,
+  fetchClients as fetchClientsFromSupabase,
+  fetchEmployees as fetchEmployeesFromSupabase,
+  fetchSalon,
+  fetchServices as fetchServicesFromSupabase,
+  fetchStockItems as fetchStockItemsFromSupabase,
+  isMissingTableError,
+  seedSalonData,
+  updateAppointment as updateAppointmentRecord,
+  updateClient as updateClientRecord,
+  updateEmployee as updateEmployeeRecord,
+  updateService as updateServiceRecord
+} from './lib/supabaseData'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-let services = initialServices
+let services = []
+
+const cardBase = 'min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]'
+const panelBase = 'min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]'
+const inputBase = 'focus-ring w-full min-w-0 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm placeholder:text-gray-400 disabled:bg-gray-100 disabled:text-gray-500 dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100 dark:placeholder:text-white/40 dark:disabled:bg-white/5 dark:disabled:text-white/40'
+const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl bg-graphite px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#343039] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-lilacSoft dark:text-graphite dark:hover:bg-[#cfc1ef]'
+const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-pearl dark:border-white/10 dark:bg-[#24202c] dark:text-gray-100 dark:hover:bg-white/10'
+const buttonDanger = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25'
+const badgeBase = 'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-bold'
 
 function getTodayIso() {
   const now = new Date()
@@ -199,7 +223,7 @@ function normalizeLoginPart(value, fallback) {
 }
 
 function getSalonDomain(settings) {
-  return `${normalizeLoginPart(settings?.salonName ?? 'Atelier da Beleza', 'salao')}.com`
+  return `${normalizeLoginPart(settings?.salonName ?? '', 'salao')}.com`
 }
 
 function getSidebarSalonName(salonName) {
@@ -211,8 +235,7 @@ function getSidebarSalonName(salonName) {
 function getSuggestedAccessEmail({ name, employeeType = 'professional', salonSettings }) {
   const domain = getSalonDomain(salonSettings)
   if (employeeType === 'admin') return `admin@${domain}`
-  if (employeeType === 'cashier') return `caixa@${domain}`
-  return `${normalizeLoginPart(name, 'profissional')}@${domain}`
+  return `${normalizeLoginPart(name, employeeType === 'cashier' ? 'caixa' : 'profissional')}@${domain}`
 }
 
 function getProfessionals(employees) {
@@ -292,6 +315,141 @@ function createAdvanceCashEntry(advance) {
   }
 }
 
+function field(row, camelKey, snakeKey = camelKey) {
+  return row?.[camelKey] ?? row?.[snakeKey]
+}
+
+function normalizeClientRecord(row) {
+  return {
+    ...row,
+    name: field(row, 'name') ?? '',
+    phone: field(row, 'phone') ?? '',
+    birthday: field(row, 'birthday') ?? '',
+    notes: field(row, 'notes') ?? '',
+    history: field(row, 'history') ?? [],
+    lastVisit: field(row, 'lastVisit', 'last_visit') ?? 'Sem visita concluída',
+    active: field(row, 'active') ?? true
+  }
+}
+
+function normalizeEmployeeRecord(row) {
+  const employeeType = field(row, 'employeeType', 'employee_type') ?? 'professional'
+  const professional = employeeType === 'professional'
+  return {
+    ...row,
+    name: field(row, 'name') ?? '',
+    phone: field(row, 'phone') ?? '',
+    role: field(row, 'role') ?? '',
+    active: field(row, 'active') ?? true,
+    commission: Number(field(row, 'commission') ?? 0),
+    workStatus: field(row, 'workStatus', 'work_status') ?? 'Ativo',
+    employeeType,
+    workStart: field(row, 'workStart', 'work_start') ?? (professional ? '09:00' : ''),
+    workEnd: field(row, 'workEnd', 'work_end') ?? (professional ? '18:00' : ''),
+    breakStart: field(row, 'breakStart', 'break_start') ?? '',
+    breakEnd: field(row, 'breakEnd', 'break_end') ?? '',
+    defaultDuration: field(row, 'defaultDuration', 'default_duration') ?? 60,
+    scheduleInterval: field(row, 'scheduleInterval', 'schedule_interval') ?? field(row, 'defaultDuration', 'default_duration') ?? 60,
+    serviceCommissions: professional ? field(row, 'serviceCommissions', 'service_commissions') ?? [] : [],
+    services: professional ? field(row, 'services') ?? [] : [],
+    accessEmail: field(row, 'accessEmail', 'access_email') ?? '',
+    temporaryPassword: field(row, 'temporaryPassword', 'temporary_password') ?? '',
+    loginActive: Boolean(field(row, 'loginActive', 'login_active') ?? false)
+  }
+}
+
+function normalizeServiceRecord(row) {
+  return {
+    ...row,
+    name: field(row, 'name') ?? '',
+    price: Number(field(row, 'price') ?? 0),
+    duration: field(row, 'duration') ?? '1h',
+    professional: field(row, 'professional') ?? '',
+    category: field(row, 'category') ?? ''
+  }
+}
+
+function normalizeAppointmentRecord(row, employees = []) {
+  const time = field(row, 'time') ?? field(row, 'horario') ?? ''
+  const value = Number(field(row, 'value') ?? field(row, 'valor') ?? 0)
+  const duration = field(row, 'duration') ?? field(row, 'duracao')
+  return withCommission({
+    ...row,
+    client: field(row, 'client') ?? '',
+    service: field(row, 'service') ?? '',
+    professional: field(row, 'professional') ?? '',
+    date: field(row, 'date') ?? todayIso,
+    time,
+    horario: time,
+    value,
+    valor: value,
+    duration,
+    duracao: duration,
+    status: field(row, 'status') ?? 'Aguardando',
+    paymentMethod: field(row, 'paymentMethod', 'payment_method')
+  }, employees)
+}
+
+function normalizeCashMovementRecord(row) {
+  return {
+    ...row,
+    type: field(row, 'type') ?? field(row, 'tipo') ?? 'Entrada',
+    tipo: field(row, 'tipo') ?? String(field(row, 'type') ?? 'Entrada').toLowerCase(),
+    description: field(row, 'description') ?? field(row, 'descricao') ?? '',
+    descricao: field(row, 'descricao') ?? field(row, 'description') ?? '',
+    category: field(row, 'category') ?? field(row, 'categoria') ?? '',
+    categoria: field(row, 'categoria') ?? field(row, 'category') ?? '',
+    method: field(row, 'method') ?? field(row, 'forma_pagamento') ?? '',
+    forma_pagamento: field(row, 'forma_pagamento') ?? field(row, 'method') ?? '',
+    value: Number(field(row, 'value') ?? field(row, 'valor') ?? 0),
+    valor: Number(field(row, 'valor') ?? field(row, 'value') ?? 0),
+    date: field(row, 'date') ?? field(row, 'data') ?? todayIso,
+    data: field(row, 'data') ?? field(row, 'date') ?? todayIso
+  }
+}
+
+function normalizeAdvanceRecord(row) {
+  return {
+    ...row,
+    employee: field(row, 'employee') ?? '',
+    value: Number(field(row, 'value') ?? 0),
+    date: field(row, 'date') ?? todayIso,
+    status: field(row, 'status') ?? 'Aberto',
+    reason: field(row, 'reason') ?? ''
+  }
+}
+
+function normalizeStockItemRecord(row) {
+  return {
+    ...row,
+    name: field(row, 'name') ?? field(row, 'product') ?? '',
+    product: field(row, 'product') ?? field(row, 'name') ?? '',
+    category: field(row, 'category') ?? 'Uso geral',
+    unit: field(row, 'unit') ?? 'unidade',
+    notes: field(row, 'notes') ?? '',
+    quantity: Number(field(row, 'quantity') ?? 0),
+    cost: Number(field(row, 'cost') ?? 0),
+    min: Number(field(row, 'min') ?? 0)
+  }
+}
+
+function normalizeSalonSettings(row) {
+  return {
+    salonName: field(row, 'name') ?? field(row, 'salonName', 'salon_name') ?? '',
+    receptionWhatsapp: field(row, 'receptionWhatsapp', 'reception_whatsapp') ?? ''
+  }
+}
+
+function handleDataActionError(error, notify) {
+  if (isMissingTableError(error?.original ?? error)) {
+    notify?.(databaseNotConfiguredMessage, 'error')
+    return true
+  }
+  console.error('Erro Supabase:', error)
+  notify?.('Não foi possível salvar no banco de dados.', 'error')
+  return true
+}
+
 const adminMenu = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'agenda', label: 'Agenda' },
@@ -316,17 +474,17 @@ const professionalMenu = [
 ]
 
 const statusStyles = {
-  Aguardando: 'bg-amber-50 text-amber-700 border-amber-200',
-  Confirmado: 'bg-lilacSoft/40 text-violet-700 border-violet-100',
-  'Concluído': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Cancelado: 'bg-rose-50 text-rose-700 border-rose-200'
+  Aguardando: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200',
+  Confirmado: 'border-violet-100 bg-lilacSoft/40 text-violet-800 dark:border-violet-300/30 dark:bg-violet-500/20 dark:text-violet-100',
+  'Concluído': 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200',
+  Cancelado: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200'
 }
 
 const employeeStatuses = ['Ativo', 'De folga', 'Horário de almoço']
 const employeeStatusStyles = {
-  Ativo: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  'De folga': 'bg-rose-50 text-rose-700 border-rose-200',
-  'Horário de almoço': 'bg-amber-50 text-amber-700 border-amber-200'
+  Ativo: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200',
+  'De folga': 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200',
+  'Horário de almoço': 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200'
 }
 
 function getStoredTheme() {
@@ -385,17 +543,6 @@ function createAdminFallbackUser(authUser) {
   }
 }
 
-async function loadUserProfileByEmail(email, employees = []) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, name, email, role, salon_id')
-    .eq('email', email)
-    .single()
-
-  if (error || !data) return null
-  return normalizeUserProfile(data, employees)
-}
-
 function getInitialPageForRole(role) {
   if (role === 'admin') return 'dashboard'
   if (role === 'professional') return 'minha-agenda'
@@ -409,41 +556,171 @@ function App() {
   const [agendaProfessional, setAgendaProfessional] = useState('all')
   const [theme, setTheme] = useState(getStoredTheme)
   const [toast, setToast] = useState(null)
-  const [cashEntries, setCashEntries] = useState(() => {
-    const advanceEntries = initialAdvances.map((advance) => createAdvanceCashEntry(advance))
-    return [...initialCashFlow, ...advanceEntries]
-  })
+  const [currentSalonId, setCurrentSalonId] = useState(null)
+  const [databaseStatus, setDatabaseStatus] = useState({ notConfigured: false, message: '' })
+  const [dataLoading, setDataLoading] = useState(false)
+  const [cashEntries, setCashEntries] = useState([])
   const [cashClosures, setCashClosures] = useState([])
-  const [advances, setAdvances] = useState(initialAdvances)
+  const [advances, setAdvances] = useState([])
   const [blockedSlots, setBlockedSlots] = useState([])
-  const [salonSettings, setSalonSettings] = useState({ salonName: '', receptionWhatsapp: '5511988889090' })
-  const [serviceItems, setServiceItems] = useState(initialServices)
+  const [salonSettings, setSalonSettings] = useState({ salonName: '', receptionWhatsapp: '' })
+  const [serviceItems, setServiceItems] = useState([])
   services = serviceItems
-  const [appointments, setAppointments] = useState(initialAppointments.map((appointment) => withCommission({ ...appointment, date: appointment.date ?? todayIso }, initialEmployees)))
-  const [clients, setClients] = useState(initialClients.map((client) => ({ ...client, active: client.active ?? true })))
-  const [inventoryItems, setInventoryItems] = useState(initialInventory.map((item) => ({
-    ...item,
-    name: item.name ?? item.product,
-    category: item.category ?? 'Uso geral',
-    unit: item.unit ?? 'unidade',
-    notes: item.notes ?? ''
-  })))
-  const [employees, setEmployees] = useState(initialEmployees.map((employee) => ({
-    ...employee,
-    workStatus: employee.workStatus ?? 'Ativo',
-    employeeType: employee.employeeType ?? 'professional',
-    workStart: employee.workStart ?? (employee.employeeType === 'cashier' ? '' : '09:00'),
-    workEnd: employee.workEnd ?? (employee.employeeType === 'cashier' ? '' : '18:00'),
-    breakStart: employee.breakStart ?? '',
-    breakEnd: employee.breakEnd ?? '',
-    defaultDuration: employee.defaultDuration ?? 60,
-    scheduleInterval: employee.scheduleInterval ?? employee.defaultDuration ?? 60,
-    serviceCommissions: isProfessional(employee) ? employee.serviceCommissions ?? [] : [],
-    services: isProfessional(employee) ? employee.services ?? [] : [],
-    accessEmail: employee.accessEmail ?? '',
-    temporaryPassword: employee.temporaryPassword ?? '',
-    loginActive: employee.loginActive ?? false
-  })))
+  const [appointments, setAppointments] = useState([])
+  const [clients, setClients] = useState([])
+  const [inventoryItems, setInventoryItems] = useState([])
+  const [employees, setEmployees] = useState([])
+
+  function clearSalonData() {
+    setCashEntries([])
+    setCashClosures([])
+    setAdvances([])
+    setBlockedSlots([])
+    setSalonSettings({ salonName: '', receptionWhatsapp: '' })
+    setServiceItems([])
+    services = []
+    setAppointments([])
+    setClients([])
+    setInventoryItems([])
+    setEmployees([])
+  }
+
+  async function loadSalonData(salonId) {
+    if (!salonId) {
+      clearSalonData()
+      setDatabaseStatus({ notConfigured: false, message: 'Salão ainda não vinculado.' })
+      return
+    }
+
+    setDataLoading(true)
+    try {
+      let [
+        salonRow,
+        clientRows,
+        employeeRows,
+        serviceRows,
+        appointmentRows,
+        cashMovementRows,
+        advanceRows,
+        stockRows
+      ] = await Promise.all([
+        fetchSalon(salonId),
+        fetchClientsFromSupabase(salonId),
+        fetchEmployeesFromSupabase(salonId),
+        fetchServicesFromSupabase(salonId),
+        fetchAppointmentsFromSupabase(salonId),
+        fetchCashMovementsFromSupabase(salonId),
+        fetchAdvancesFromSupabase(salonId),
+        fetchStockItemsFromSupabase(salonId)
+      ])
+
+      if ((employeeRows?.length ?? 0) === 0) {
+        try {
+          const seedResult = await seedSalonData(salonId)
+
+          if (seedResult.created) {
+            const [seededClientRows, seededEmployeeRows, seededServiceRows, seededAppointmentRows] = await Promise.all([
+              fetchClientsFromSupabase(salonId),
+              fetchEmployeesFromSupabase(salonId),
+              fetchServicesFromSupabase(salonId),
+              fetchAppointmentsFromSupabase(salonId)
+            ])
+
+            clientRows = seededClientRows
+            employeeRows = seededEmployeeRows
+            serviceRows = seededServiceRows
+            appointmentRows = seededAppointmentRows
+            notify('Sistema preparado para este salão')
+          }
+        } catch (seedError) {
+          console.error('Seed inicial não criado:', seedError)
+        }
+      }
+
+      const normalizedEmployees = (employeeRows ?? []).map(normalizeEmployeeRecord)
+      const normalizedAppointments = (appointmentRows ?? []).map((appointment) => normalizeAppointmentRecord(appointment, normalizedEmployees))
+      const normalizedAdvances = (advanceRows ?? []).map(normalizeAdvanceRecord)
+      const advanceCashEntries = normalizedAdvances.map((advance) => createAdvanceCashEntry(advance))
+
+      setSalonSettings(normalizeSalonSettings(salonRow ?? {}))
+      setClients((clientRows ?? []).map(normalizeClientRecord))
+      setEmployees(normalizedEmployees)
+      setServiceItems((serviceRows ?? []).map(normalizeServiceRecord))
+      setAppointments(normalizedAppointments)
+      setCashEntries([...(cashMovementRows ?? []).map(normalizeCashMovementRecord), ...advanceCashEntries])
+      setAdvances(normalizedAdvances)
+      setInventoryItems((stockRows ?? []).map(normalizeStockItemRecord))
+      setDatabaseStatus({ notConfigured: false, message: '' })
+    } catch (error) {
+      if (isMissingTableError(error?.original ?? error)) {
+        setDatabaseStatus({ notConfigured: true, message: databaseNotConfiguredMessage })
+        return
+      }
+      throw error
+    } finally {
+      setDataLoading(false)
+    }
+  }
+
+  async function loadProfileForAuthUser(authUser, { createMissingProfile = false } = {}) {
+    if (!authUser?.id) return null
+
+    const { data: profileById, error: profileByIdError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authUser.id)
+      .maybeSingle()
+
+    console.log('Perfil:', profileById)
+    console.error('Erro perfil:', profileByIdError)
+
+    if (profileByIdError) {
+      throw new Error(`Erro ao buscar perfil: ${profileByIdError.message}`)
+    }
+
+    if (profileById || !createMissingProfile) return profileById
+
+    const { data: newProfile, error: createProfileError } = await supabase
+      .from('users')
+      .insert({
+        id: authUser.id,
+        email: authUser.email,
+        name: 'Admin',
+        role: 'admin',
+        salon_id: null
+      })
+      .select()
+      .single()
+
+    console.log('Novo perfil:', newProfile)
+    console.error('Erro criando perfil:', createProfileError)
+
+    if (createProfileError) {
+      throw new Error(`Erro ao criar perfil: ${createProfileError.message}`)
+    }
+
+    return newProfile
+  }
+
+  async function startAuthenticatedSession(authUser, options = {}) {
+    const loadedProfile = options.profile ?? await loadProfileForAuthUser(authUser, options)
+    let profile = loadedProfile
+
+    try {
+      profile = await ensureAdminSalon(loadedProfile, authUser)
+    } catch (error) {
+      console.error('Erro ao criar salão no primeiro login:', error)
+    }
+
+    const user = normalizeUserProfile(profile) ?? createAdminFallbackUser(authUser)
+    const salonId = user.salonId ?? null
+
+    setCurrentUser(user)
+    setCurrentSalonId(salonId)
+    setActivePage(getInitialPageForRole(user.role))
+    await loadSalonData(salonId)
+    return user
+  }
 
   useEffect(() => {
     let active = true
@@ -469,12 +746,8 @@ function App() {
           return
         }
 
-        const profile = await loadUserProfileByEmail(email, employees)
+        await startAuthenticatedSession(authUser)
         if (!active) return
-
-        const user = profile ?? createAdminFallbackUser(authUser)
-        setCurrentUser(user)
-        setActivePage(getInitialPageForRole(user.role))
       } catch {
         setCurrentUser(null)
       } finally {
@@ -499,19 +772,22 @@ function App() {
   }
 
   async function handleLogin(email, password, keepConnected) {
-    const normalizedEmail = email.trim().toLowerCase()
     console.log('Tentando login:', email)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password: password.trim()
       })
 
-      if (error) {
-        console.error('Erro Supabase:', error)
-        return false
+      if (loginError) {
+        console.error('Erro no Auth:', loginError)
+        return { success: false, error: `Erro no login: ${loginError.message}` }
       }
+
+      const authUser = loginData.user
+
+      const activeProfile = await loadProfileForAuthUser(authUser, { createMissingProfile: true })
 
       if (keepConnected) {
         window.localStorage.setItem(sessionPersistenceKey, 'local')
@@ -521,15 +797,12 @@ function App() {
         window.sessionStorage.setItem(browserSessionKey, 'true')
       }
 
-      const profile = await loadUserProfileByEmail(normalizedEmail, employees)
-      const user = profile ?? createAdminFallbackUser(data.user)
-
-      setCurrentUser(user)
-      setActivePage(getInitialPageForRole(user.role))
-      return true
+      const user = await startAuthenticatedSession(authUser, { profile: activeProfile })
+      if (!user?.salonId) notify('Salão ainda não vinculado.', 'info')
+      return { success: true }
     } catch (error) {
-      console.error('Erro Supabase:', error)
-      return false
+      console.error('Erro no fluxo de login:', error)
+      return { success: false, error: error.message ?? 'Erro inesperado no login.' }
     }
   }
 
@@ -538,6 +811,9 @@ function App() {
     window.localStorage.removeItem(sessionPersistenceKey)
     window.sessionStorage.removeItem(browserSessionKey)
     setCurrentUser(null)
+    setCurrentSalonId(null)
+    setDatabaseStatus({ notConfigured: false, message: '' })
+    clearSalonData()
     setActivePage('dashboard')
     setAgendaProfessional('all')
   }
@@ -576,9 +852,22 @@ function App() {
             onNavigate={setActivePage}
           />
           <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+            {databaseStatus.message === 'Salão ainda não vinculado.' && (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
+                Salão ainda não vinculado.
+              </div>
+            )}
+            {databaseStatus.notConfigured && (
+              <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200">
+                {databaseStatus.message}
+              </div>
+            )}
             <PageRouter
               page={safePage}
               user={currentUser}
+              salonId={currentSalonId}
+              databaseStatus={databaseStatus}
+              dataLoading={dataLoading}
               appointments={appointments}
               setAppointments={setAppointments}
               clients={clients}
@@ -624,9 +913,9 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
     setError('')
     setLoading(true)
     try {
-      const loggedIn = await onLogin(email, password, keepConnected)
-      if (!loggedIn) {
-        setError('E-mail ou senha inválidos')
+      const result = await onLogin(email, password, keepConnected)
+      if (!result?.success) {
+        setError(result?.error ?? 'Erro no login.')
       }
     } finally {
       setLoading(false)
@@ -667,7 +956,7 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-gray-600">E-mail</span>
                 <input
-                  className="focus-ring w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100"
+                  className={inputBase}
                   type="email"
                   placeholder="E-mail"
                   value={email}
@@ -678,7 +967,7 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-gray-600">Senha</span>
                 <input
-                  className="focus-ring w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100"
+                  className={inputBase}
                   type="password"
                   placeholder="Senha"
                   value={password}
@@ -697,7 +986,7 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
               Manter conectado
             </label>
             {error && <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-            <button type="button" onClick={handleLogin} disabled={loading} className="focus-ring mt-6 rounded-2xl bg-graphite px-5 py-3 font-semibold text-white shadow-soft transition hover:bg-[#343039] disabled:cursor-not-allowed disabled:opacity-70">
+            <button type="button" onClick={handleLogin} disabled={loading} className={`${buttonPrimary} mt-6 w-full rounded-2xl px-5 py-3`}>
               {loading ? 'Entrando...' : 'Entrar no sistema'}
             </button>
           </form>
@@ -728,7 +1017,7 @@ function Field({ label, value, onChange, type = 'text', placeholder = '', requir
     <label className="block">
       <span className="mb-2 block text-sm font-semibold text-gray-600">{label}</span>
       <input
-        className="focus-ring w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100"
+        className={inputBase}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         type={type}
@@ -751,7 +1040,7 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃO</p>
           {displaySalonName && <h1 className="text-xl font-bold text-graphite">{displaySalonName}</h1>}
         </div>
-          <button onClick={onLogout} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/10 lg:hidden">
+          <button onClick={onLogout} className={`${buttonSecondary} px-3 py-2 lg:hidden`}>
           Sair
         </button>
       </div>
@@ -771,7 +1060,7 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
       <div className="mt-6 hidden rounded-2xl border border-blush bg-pearl p-4 dark:border-white/10 dark:bg-white/5 lg:block">
         <p className="font-semibold">{user.name}</p>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{user.title}</p>
-        <button onClick={onLogout} className="mt-4 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-gray-50 dark:border-white/10 dark:bg-[#24202c] dark:hover:bg-white/10">
+        <button onClick={onLogout} className={`${buttonSecondary} mt-4 w-full`}>
           Sair
         </button>
       </div>
@@ -804,7 +1093,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
         </div>
         {canSearchGlobal && <div className="relative w-full sm:max-w-xs">
           <input
-            className="focus-ring w-full rounded-2xl border border-blush bg-white px-4 py-2 text-sm font-semibold dark:border-white/10 dark:bg-[#24202c]"
+            className={inputBase}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar clientes, serviços, agenda..."
@@ -844,28 +1133,30 @@ function ThemeToggle({ theme, onChange }) {
   )
 }
 
-function PageRouter({ page, user, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
+function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
   const employeeAppointments = appointments.filter((item) => item.professional === user.name)
   const visibleAppointments = appointments
   const activeClients = clients.filter((client) => client.active)
   const professionals = getProfessionals(employees)
 
+  if (dataLoading) return <DataLoading />
+
   const pages = {
     dashboard: <AdminDashboard appointments={appointments} employees={employees} clients={clients} cashEntries={cashEntries} advances={advances} />,
-    agenda: <Agenda appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
-    clientes: <Clients user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
-    servicos: <Services user={user} services={services} setServices={setServices} notify={notify} />,
-    funcionarios: <Employees user={user} employees={employees} setEmployees={setEmployees} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
+    agenda: <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
+    clientes: <Clients salonId={salonId} user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
+    servicos: <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} />,
+    funcionarios: <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
     caixa: <CashRegister entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} notify={notify} />,
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
     relatorios: user.role === 'admin' ? <Reports appointments={appointments} employees={employees} user={user} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
-    configuracoes: user.role === 'admin' ? <Settings settings={salonSettings} setSettings={setSalonSettings} /> : <AccessDenied />
+    configuracoes: user.role === 'admin' ? <Settings settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
   }
 
-  return pages[page] ?? <Agenda appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
+  return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
 }
 
 function AdminDashboard({ appointments, employees, clients, cashEntries, advances }) {
@@ -958,11 +1249,10 @@ function WeeklyRevenueChart({ appointments }) {
   const weekDates = getWeekDates(todayIso).slice(1).concat(getWeekDates(todayIso).slice(0, 1))
   const chartData = weekDates.map((date) => {
     const completed = appointments.filter((item) => item.date === date && item.status === 'Concluído')
-    const fallback = weeklyRevenue.find((item) => item.day === getWeekdayLabel(date).replace('.', '').slice(0, 3))
     return {
       date,
       day: getWeekdayLabel(date).replace('.', ''),
-      value: completed.length ? completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0) : Number(fallback?.value ?? 0),
+      value: completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0),
       appointments: completed.length
     }
   })
@@ -1002,7 +1292,7 @@ function WeeklyRevenueChart({ appointments }) {
   )
 }
 
-function Agenda({ appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, setCashEntries, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
+function Agenda({ salonId, appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, setCashEntries, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
   const defaultProfessional = employees.find((item) => item.active && item.name === user.name)?.name ?? employees.find((item) => item.active)?.name ?? ''
   const firstService = services[0] ?? { name: '', price: 0 }
   const createInitialAppointmentForm = () => ({ client: clients[0]?.name ?? '', service: firstService.name, professional: defaultProfessional, date: todayIso, time: '', value: firstService.price })
@@ -1047,13 +1337,45 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
     }
   }
 
-  function updateStatus(id, status) {
-    setAppointments((current) => current.map((item) => {
-      if (item.id !== id) return item
-      if (user.role !== 'admin' && user.role !== 'cashier' && item.professional !== user.name) return item
-      return withCommission({ ...item, status }, allEmployees)
-    }))
-    if (status === 'Concluído') notify?.('Comissão calculada automaticamente.')
+  async function updateStatus(id, status) {
+    const appointment = appointments.find((item) => item.id === id)
+    if (!appointment) return
+    if (user.role !== 'admin' && user.role !== 'cashier' && appointment.professional !== user.name) return
+    try {
+      const saved = normalizeAppointmentRecord(await updateAppointmentRecord(salonId, id, { status }), allEmployees)
+      setAppointments((current) => current.map((item) => item.id === id ? saved : item))
+      if (status === 'Concluído') notify?.('Comissão calculada automaticamente.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
+  }
+
+  async function deleteAppointment(appointment) {
+    if (user.role !== 'admin' && user.role !== 'cashier') return false
+
+    if (appointment.status === 'Concluído') {
+      if (!window.confirm('Este agendamento já foi concluído. Deseja cancelar em vez de excluir?')) return false
+      try {
+        const saved = normalizeAppointmentRecord(await updateAppointmentRecord(salonId, appointment.id, { status: 'Cancelado' }), allEmployees)
+        setAppointments((current) => current.map((item) => item.id === appointment.id ? saved : item))
+        notify?.('Agendamento cancelado com sucesso')
+        return true
+      } catch (error) {
+        handleDataActionError(error, notify)
+        return false
+      }
+    }
+
+    if (!window.confirm('Tem certeza que deseja excluir este agendamento?')) return false
+    try {
+      await deleteAppointmentRecord(salonId, appointment.id)
+      setAppointments((current) => current.filter((item) => item.id !== appointment.id))
+      notify?.('Agendamento excluído com sucesso')
+      return true
+    } catch (error) {
+      handleDataActionError(error, notify)
+      return false
+    }
   }
 
   function sendConfirmation(appointment) {
@@ -1077,7 +1399,7 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
     notify?.('Horário bloqueado com sucesso.')
   }
 
-  function saveQuickService(data) {
+  async function saveQuickService(data) {
     if (!data.client.trim() || !data.service || !data.professional || Number(data.value) <= 0) {
       notify?.('Erro ao salvar: confira cliente, serviço, profissional e valor.', 'error')
       return
@@ -1086,8 +1408,7 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
     const now = new Date()
     const date = getTodayIso()
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    const appointment = withCommission({
-      id: Date.now(),
+    const appointmentPayload = {
       client: data.client,
       service: data.service,
       professional: data.professional,
@@ -1100,14 +1421,19 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
       duracao: serviceDurationToMinutes(services.find((item) => item.name === data.service)?.duration, professional?.defaultDuration ?? 60),
       status: 'Concluído',
       paymentMethod: data.paymentMethod
-    }, allEmployees)
-    setAppointments((current) => [...current, appointment])
-    setCashEntries((current) => [...current, { id: Date.now() + 1, type: 'Entrada', description: `Atendimento rápido - ${data.client}`, method: data.paymentMethod, value: Number(data.value) || 0, date }])
-    setQuickModalOpen(false)
-    notify?.('Atendimento rápido concluído.')
+    }
+    try {
+      const appointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, appointmentPayload), allEmployees)
+      setAppointments((current) => [...current, appointment])
+      setCashEntries((current) => [...current, { id: Date.now() + 1, type: 'Entrada', description: `Atendimento rápido - ${data.client}`, method: data.paymentMethod, value: Number(data.value) || 0, date }])
+      setQuickModalOpen(false)
+      notify?.('Atendimento rápido concluído.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
-  function addAppointment(event) {
+  async function addAppointment(event) {
     event.preventDefault()
     const requiredFields = [
       ['client', 'cliente'],
@@ -1138,8 +1464,7 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
 
     const duration = serviceDurationToMinutes(selectedService?.duration, Number(selectedProfessional.defaultDuration) || 60)
     const value = Number(selectedService?.price ?? form.value)
-    const newAppointment = withCommission({
-      id: Date.now(),
+    const newAppointmentPayload = {
       client: form.client,
       service: form.service,
       professional: form.professional,
@@ -1151,12 +1476,17 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
       duration,
       duracao: duration,
       status: 'Aguardando'
-    }, allEmployees)
+    }
 
-    setAppointments((current) => [...current, newAppointment])
-    setForm({ ...createInitialAppointmentForm(), date: form.date, professional: form.professional, time: '' })
-    setFormMessage({ type: 'success', text: 'Agendamento criado com sucesso!' })
-    notify?.('Agendamento criado.')
+    try {
+      const newAppointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, newAppointmentPayload), allEmployees)
+      setAppointments((current) => [...current, newAppointment])
+      setForm({ ...createInitialAppointmentForm(), date: form.date, professional: form.professional, time: '' })
+      setFormMessage({ type: 'success', text: 'Agendamento criado com sucesso!' })
+      notify?.('Agendamento criado.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
   return (
@@ -1195,10 +1525,10 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
               {formMessage.text}
             </div>
           )}
-          <button className="focus-ring w-full rounded-2xl bg-graphite px-4 py-3 font-semibold text-white hover:bg-[#343039]">Agendar</button>
+          <button className={`${buttonPrimary} w-full rounded-2xl px-4 py-3`}>Agendar</button>
           <div className="grid gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => setBlockModalOpen(true)} className="focus-ring rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Bloquear horário</button>
-            <button type="button" onClick={() => setQuickModalOpen(true)} className="focus-ring rounded-2xl border border-lilacSoft px-4 py-3 text-sm font-bold hover:bg-lilacSoft/20">Atender agora</button>
+            <button type="button" onClick={() => setBlockModalOpen(true)} className={`${buttonSecondary} rounded-2xl px-4 py-3`}>Bloquear horário</button>
+            <button type="button" onClick={() => setQuickModalOpen(true)} className={`${buttonSecondary} rounded-2xl border-lilacSoft px-4 py-3 hover:bg-lilacSoft/20 dark:border-lilacSoft/40`}>Atender agora</button>
           </div>
         </form>
       </Panel>
@@ -1209,7 +1539,7 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
             <button type="button" onClick={() => setAgendaView('day')} className={`rounded-xl px-5 py-2 transition ${agendaView === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Dia</button>
             <button type="button" onClick={() => setAgendaView('week')} className={`rounded-xl px-5 py-2 transition ${agendaView === 'week' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Semana</button>
           </div>
-          {agendaView === 'week' && <WeeklyAgenda weekDates={weekDates} appointments={visibleAppointments} blocks={visibleBlocks} employees={employees} user={user} onStatusChange={updateStatus} onSendConfirmation={sendConfirmation} />}
+          {agendaView === 'week' && <WeeklyAgenda weekDates={weekDates} appointments={visibleAppointments} blocks={visibleBlocks} employees={employees} user={user} onStatusChange={updateStatus} onSendConfirmation={sendConfirmation} onDeleteAppointment={deleteAppointment} />}
           {agendaView === 'day' && (
           <div className="simple-scrollbar max-h-[720px] space-y-3 overflow-auto pr-1">
             {visibleBlocks.map((block) => (
@@ -1219,7 +1549,7 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
               </div>
             ))}
             {[...visibleAppointments].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)).map((item) => (
-              <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <div key={item.id} className={`${cardBase} p-4`}>
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-lg font-bold">{formatDate(item.date)} · {item.time} · {item.client}</p>
@@ -1229,10 +1559,11 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
                     {item.status === 'Concluído' && <p className="mt-1 text-sm font-semibold text-emerald-700">Comissão: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
                   </div>
                   <div className="flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
-                    <button type="button" onClick={() => sendConfirmation(item)} className="whitespace-nowrap rounded-full border border-blush px-3 py-2 text-sm font-bold hover:bg-pearl">Enviar confirmação</button>
-                    <select className={`min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[item.status]}`} value={item.status} onChange={(event) => updateStatus(item.id, event.target.value)}>
+                    <button type="button" onClick={() => sendConfirmation(item)} className={`${buttonSecondary} rounded-full px-3 py-2`}>Enviar confirmação</button>
+                    <select className={`focus-ring min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[item.status]}`} value={item.status} onChange={(event) => updateStatus(item.id, event.target.value)}>
                       {Object.keys(statusStyles).map((status) => <option key={status}>{status}</option>)}
                     </select>
+                    {(user.role === 'admin' || user.role === 'cashier') && <button type="button" onClick={() => deleteAppointment(item)} className={`${buttonDanger} rounded-full px-3 py-2`}>Excluir</button>}
                   </div>
                 </div>
               </div>
@@ -1252,7 +1583,7 @@ function Agenda({ appointments, setAppointments, user, clients, employees, allEm
   )
 }
 
-function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStatusChange, onSendConfirmation }) {
+function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStatusChange, onSendConfirmation, onDeleteAppointment }) {
   const [selectedItem, setSelectedItem] = useState(null)
   const weeklyStatusStyles = {
     Aguardando: 'border-amber-200 bg-amber-50 text-amber-900',
@@ -1315,11 +1646,14 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
             <p><strong>Profissional:</strong> {selectedItem.professional}</p>
             <p><strong>Duração:</strong> {getAppointmentDuration(selectedItem, employees.find((employee) => employee.name === selectedItem.professional))} min</p>
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-              <button type="button" onClick={() => onSendConfirmation(selectedItem)} className="whitespace-nowrap rounded-xl border border-blush px-4 py-2 text-sm font-bold hover:bg-pearl">Enviar confirmação</button>
+              <button type="button" onClick={() => onSendConfirmation(selectedItem)} className={buttonSecondary}>Enviar confirmação</button>
               {(user.role === 'admin' || user.role === 'cashier' || selectedItem.professional === user.name) && (
-                <select className={`min-w-[130px] rounded-xl border px-3 py-2 text-sm font-semibold ${statusStyles[selectedItem.status]}`} value={selectedItem.status} onChange={(event) => { onStatusChange(selectedItem.id, event.target.value); setSelectedItem({ ...selectedItem, status: event.target.value }) }}>
+                <select className={`focus-ring min-w-[130px] rounded-xl border px-3 py-2 text-sm font-semibold ${statusStyles[selectedItem.status]}`} value={selectedItem.status} onChange={(event) => { onStatusChange(selectedItem.id, event.target.value); setSelectedItem({ ...selectedItem, status: event.target.value }) }}>
                   {Object.keys(statusStyles).map((status) => <option key={status}>{status}</option>)}
                 </select>
+              )}
+              {(user.role === 'admin' || user.role === 'cashier') && (
+                <button type="button" onClick={() => { if (onDeleteAppointment(selectedItem)) setSelectedItem(null) }} className={buttonDanger}>Excluir</button>
               )}
             </div>
           </div>
@@ -1344,8 +1678,8 @@ function BlockTimeModal({ user, employees, date, onClose, onSave }) {
         </div>
         <Select label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} options={['Funcionário vai sair mais cedo', 'Cliente VIP reservado', 'Manutenção', 'Horário bloqueado']} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
-          <button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Bloquear</button>
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={buttonPrimary}>Bloquear</button>
         </div>
       </form>
     </Modal>
@@ -1368,8 +1702,8 @@ function QuickServiceModal({ clients, employees, onClose, onSave }) {
         <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'Cartão', 'Pendente']} />
         <Field label="Valor" type="number" value={form.value} onChange={(value) => setForm({ ...form, value })} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
-          <button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar atendimento</button>
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={buttonPrimary}>Salvar atendimento</button>
         </div>
       </form>
     </Modal>
@@ -1381,21 +1715,21 @@ function DatePickerBar({ value, onChange }) {
     <div>
       <span className="mb-2 block text-sm font-semibold text-gray-600">Data</span>
       <div className="grid grid-cols-[44px_1fr_44px_auto] gap-2">
-        <button type="button" onClick={() => onChange(shiftDate(value, -1))} className="focus-ring rounded-xl border border-blush bg-white px-3 py-2 text-lg font-bold hover:bg-pearl" aria-label="Dia anterior">
+        <button type="button" onClick={() => onChange(shiftDate(value, -1))} className={`${buttonSecondary} px-3 py-2 text-lg`} aria-label="Dia anterior">
           &lt;
         </button>
         <label className="relative block">
           <input
-            className="focus-ring h-full w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-center text-sm font-bold text-graphite shadow-sm"
+            className={`${inputBase} h-full rounded-xl px-3 py-2 text-center text-sm font-bold`}
             value={value}
             onChange={(event) => onChange(event.target.value)}
             type="date"
           />
         </label>
-        <button type="button" onClick={() => onChange(shiftDate(value, 1))} className="focus-ring rounded-xl border border-blush bg-white px-3 py-2 text-lg font-bold hover:bg-pearl" aria-label="Próximo dia">
+        <button type="button" onClick={() => onChange(shiftDate(value, 1))} className={`${buttonSecondary} px-3 py-2 text-lg`} aria-label="Próximo dia">
           &gt;
         </button>
-        <button type="button" onClick={() => onChange(getTodayIso())} className="focus-ring rounded-xl border border-blush bg-pearl px-3 py-2 text-sm font-bold text-graphite hover:bg-blush/40">
+        <button type="button" onClick={() => onChange(getTodayIso())} className={buttonSecondary}>
           Hoje
         </button>
       </div>
@@ -1516,12 +1850,12 @@ function ClientSearchInput({ label, value, onChange, clients }) {
     <div className="relative">
       <label className="block">
         <span className="mb-1 block text-sm font-semibold text-gray-600">{label}</span>
-        <input className="focus-ring w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} placeholder="Digite o nome da cliente" />
+        <input className={inputBase} value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} placeholder="Digite o nome da cliente" />
       </label>
       {focused && suggestions.length > 0 && (
-        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-blush bg-white shadow-soft">
+        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#24202c]">
           {suggestions.map((client) => (
-            <button key={client.id} type="button" onMouseDown={() => { onChange(client.name); setFocused(false) }} className="block w-full px-4 py-3 text-left text-sm font-semibold hover:bg-pearl">
+            <button key={client.id} type="button" onMouseDown={() => { onChange(client.name); setFocused(false) }} className="block w-full px-4 py-3 text-left text-sm font-semibold text-graphite hover:bg-pearl dark:text-gray-100 dark:hover:bg-white/10">
               <span className="block text-graphite">{client.name}</span>
               <span className="text-xs font-medium text-gray-500">{client.phone}</span>
             </button>
@@ -1532,7 +1866,7 @@ function ClientSearchInput({ label, value, onChange, clients }) {
   )
 }
 
-function Clients({ user, clients, setClients, appointments, notify }) {
+function Clients({ salonId, user, clients, setClients, appointments, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const canEdit = user.role === 'admin' || user.role === 'cashier'
@@ -1548,22 +1882,33 @@ function Clients({ user, clients, setClients, appointments, notify }) {
     setModalOpen(true)
   }
 
-  function saveClient(data) {
+  async function saveClient(data) {
     if (!data.name.trim() || !data.phone.trim()) {
       notify?.('Erro ao salvar: informe nome e telefone do cliente.', 'error')
       return
     }
-    if (editing) {
-      setClients((current) => current.map((client) => client.id === editing.id ? { ...client, ...data } : client))
-    } else {
-      setClients((current) => [...current, { ...data, id: Date.now(), history: [], lastVisit: 'Novo cadastro', active: true }])
+    try {
+      if (editing) {
+        const saved = normalizeClientRecord(await updateClientRecord(salonId, editing.id, data))
+        setClients((current) => current.map((client) => client.id === editing.id ? saved : client))
+      } else {
+        const saved = normalizeClientRecord(await createClientRecord(salonId, { ...data, history: [], lastVisit: 'Novo cadastro', active: true }))
+        setClients((current) => [...current, saved])
+      }
+      setModalOpen(false)
+      notify?.('Cliente salvo.')
+    } catch (error) {
+      handleDataActionError(error, notify)
     }
-    setModalOpen(false)
-    notify?.('Cliente salvo.')
   }
 
-  function toggleClient(client) {
-    setClients((current) => current.map((item) => item.id === client.id ? { ...item, active: !item.active } : item))
+  async function toggleClient(client) {
+    try {
+      const saved = normalizeClientRecord(await updateClientRecord(salonId, client.id, { active: !client.active }))
+      setClients((current) => current.map((item) => item.id === client.id ? saved : item))
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
   return (
@@ -1573,7 +1918,7 @@ function Clients({ user, clients, setClients, appointments, notify }) {
           <h3 className="text-xl font-bold">Clientes cadastrados</h3>
           <p className="text-sm text-gray-500">Admin e Funcionários podem cadastrar e editar clientes.</p>
         </div>
-        <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Cliente</button>
+        <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Cliente</button>
       </div>
       <CardsGrid items={clients} render={(item) => (
         <>
@@ -1597,8 +1942,8 @@ function Clients({ user, clients, setClients, appointments, notify }) {
           </div>
           {canEdit && (
             <div className="mt-4 flex gap-2">
-              <button onClick={() => openEdit(item)} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Editar Cliente</button>
-              {canDeactivate && <button onClick={() => toggleClient(item)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50">{item.active ? 'Desativar' : 'Ativar'}</button>}
+              <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar Cliente</button>
+              {canDeactivate && <button onClick={() => toggleClient(item)} className={buttonSecondary}>{item.active ? 'Desativar' : 'Ativar'}</button>}
             </div>
           )}
               </>
@@ -1619,14 +1964,14 @@ function ClientModal({ client, canChangeStatus, onClose, onSave }) {
         <Field label="Nome" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
         <Field label="Aniversário" value={form.birthday} onChange={(value) => setForm({ ...form, birthday: value })} placeholder="dd/mm" />
-        <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-600">Observações</span><textarea className="focus-ring min-h-24 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
+        <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-600 dark:text-gray-300">Observações</span><textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
         {client && canChangeStatus && <Toggle label="Status ativo" checked={form.active} onChange={(checked) => setForm({ ...form, active: checked })} />}
-        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button><button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button></div>
+        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button><button className={buttonPrimary}>Salvar</button></div>
       </form>
     </Modal>
   )
 }
-function Services({ user, services, setServices, notify }) {
+function Services({ salonId, user, services, setServices, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const canManage = user.role === 'admin'
@@ -1641,7 +1986,7 @@ function Services({ user, services, setServices, notify }) {
     setModalOpen(true)
   }
 
-  function saveService(data) {
+  async function saveService(data) {
     const payload = {
       ...data,
       name: data.name.trim(),
@@ -1651,19 +1996,30 @@ function Services({ user, services, setServices, notify }) {
       notify?.('Erro ao salvar: informe o nome do serviço.', 'error')
       return
     }
-    if (editing) {
-      setServices((current) => current.map((item) => item.id === editing.id ? { ...item, ...payload } : item))
-    } else {
-      setServices((current) => [...current, { ...payload, id: Date.now() }])
+    try {
+      if (editing) {
+        const saved = normalizeServiceRecord(await updateServiceRecord(salonId, editing.id, payload))
+        setServices((current) => current.map((item) => item.id === editing.id ? saved : item))
+      } else {
+        const saved = normalizeServiceRecord(await createServiceRecord(salonId, payload))
+        setServices((current) => [...current, saved])
+      }
+      setModalOpen(false)
+      notify?.('Serviço salvo com sucesso.')
+    } catch (error) {
+      handleDataActionError(error, notify)
     }
-    setModalOpen(false)
-    notify?.('Serviço salvo com sucesso.')
   }
 
-  function removeService(item) {
+  async function removeService(item) {
     if (!window.confirm(`Remover o serviço "${item.name}"?`)) return
-    setServices((current) => current.filter((service) => service.id !== item.id))
-    notify?.('Serviço removido.')
+    try {
+      await deleteServiceRecord(salonId, item.id)
+      setServices((current) => current.filter((service) => service.id !== item.id))
+      notify?.('Serviço removido.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
   return (
@@ -1673,20 +2029,20 @@ function Services({ user, services, setServices, notify }) {
           <h3 className="text-xl font-bold">Serviços</h3>
           <p className="text-sm text-gray-500">{canManage ? 'Cadastre e ajuste os serviços do Salão.' : 'Consulta dos serviços cadastrados.'}</p>
         </div>
-        {canManage && <button onClick={openNew} className="focus-ring whitespace-nowrap rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Serviço</button>}
+        {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Serviço</button>}
       </div>
       <CardsGrid items={services} render={(item) => (
         <>
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-lg font-bold">{item.name}</p>
-            <span className="whitespace-nowrap rounded-full bg-blush px-3 py-1 text-sm font-bold">{money.format(item.price)}</span>
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <p className="min-w-0 break-words text-lg font-bold">{item.name}</p>
+            <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-100 px-4 py-2 text-base font-bold text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300">{money.format(item.price)}</span>
           </div>
           <p className="mt-2 text-sm text-gray-600">{item.duration} · {item.category}</p>
           <p className="mt-3 text-sm">Responsável: <strong>{item.professional || 'A definir'}</strong></p>
           {canManage && (
             <div className="mt-4 flex flex-wrap gap-2">
-              <button onClick={() => openEdit(item)} className="whitespace-nowrap rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Editar</button>
-              <button onClick={() => removeService(item)} className="whitespace-nowrap rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">Remover</button>
+              <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
+              <button onClick={() => removeService(item)} className={buttonDanger}>Remover</button>
             </div>
           )}
         </>
@@ -1716,15 +2072,15 @@ function ServiceModal({ service, onClose, onSave }) {
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} required />
         <Field label="Responsável padrão" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="whitespace-nowrap rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
-          <button className="whitespace-nowrap rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button>
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={buttonPrimary}>Salvar</button>
         </div>
       </form>
     </Modal>
   )
 }
 
-function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaForProfessional, notify }) {
+function Employees({ salonId, user, employees, setEmployees, appointments, salonSettings, onOpenAgendaForProfessional, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const canManage = user.role === 'admin'
@@ -1741,15 +2097,20 @@ function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaF
     setModalOpen(true)
   }
 
-  function saveEmployee(data) {
+  async function saveEmployee(data) {
     const employeeType = data.employeeType ?? 'professional'
     const professional = employeeType === 'professional'
+    const wantsLogin = Boolean(data.loginActive)
     if (!data.name.trim() || !data.phone.trim() || !data.role.trim()) {
       notify?.('Erro ao salvar: informe nome, telefone e cargo.', 'error')
       return
     }
-    if (data.loginActive && (!data.accessEmail.trim() || !data.temporaryPassword.trim())) {
-      notify?.('Erro ao salvar: login ativo precisa de e-mail e senha.', 'error')
+    if (wantsLogin && (!data.accessEmail.trim() || !data.temporaryPassword.trim())) {
+      notify?.('Erro ao salvar: informe e-mail e senha temporária do login.', 'error')
+      return
+    }
+    if (wantsLogin && !salonId) {
+      notify?.('Erro ao salvar: admin sem salão vinculado.', 'error')
       return
     }
     const payload = {
@@ -1764,7 +2125,7 @@ function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaF
       breakEnd: professional ? data.breakEnd : '',
       accessEmail: data.accessEmail,
       temporaryPassword: data.temporaryPassword,
-      loginActive: Boolean(data.loginActive),
+      loginActive: wantsLogin,
       serviceCommissions: professional ? (data.serviceCommissions ?? []).map((item, index) => ({
         ...item,
         id: item.id ?? Date.now() + index,
@@ -1773,17 +2134,86 @@ function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaF
       services: professional ? data.servicesText.split(',').map((item) => item.trim()).filter(Boolean) : []
     }
     delete payload.servicesText
-    if (editing) {
-      setEmployees((current) => current.map((employee) => employee.id === editing.id ? { ...employee, ...payload } : employee))
-    } else {
-      setEmployees((current) => [...current, { ...payload, id: Date.now() }])
+    try {
+      let saved
+      if (editing) {
+        saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, editing.id, payload))
+        setEmployees((current) => current.map((employee) => employee.id === editing.id ? saved : employee))
+      } else {
+        saved = normalizeEmployeeRecord(await createEmployeeRecord(salonId, payload))
+        setEmployees((current) => [...current, saved])
+      }
+
+      if (wantsLogin) {
+        try {
+          await createEmployeeUserProfile(salonId, {
+            email: data.accessEmail,
+            name: data.name.trim(),
+            role: employeeType
+          })
+        } catch (profileError) {
+          console.error('Erro ao criar perfil de login do funcionário:', profileError)
+          notify?.('Funcionário salvo. Login pendente/manual: crie também o usuário no Supabase Auth e confira o perfil em users.', 'error')
+          setModalOpen(false)
+          return
+        }
+      }
+
+      setModalOpen(false)
+      notify?.(wantsLogin ? 'Funcionário salvo. Crie este usuário também no Supabase Auth com o mesmo e-mail e senha temporária.' : 'Funcionário salvo com sucesso')
+    } catch (error) {
+      handleDataActionError(error, notify)
     }
-    setModalOpen(false)
   }
 
-  function toggleEmployee(employee) {
+  async function toggleEmployee(employee) {
     if (!canManage) return
-    setEmployees((current) => current.map((item) => item.id === employee.id ? { ...item, active: !item.active } : item))
+    try {
+      const saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, employee.id, { active: !employee.active }))
+      setEmployees((current) => current.map((item) => item.id === employee.id ? saved : item))
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
+  }
+
+  async function removeEmployee(employee) {
+    if (!canManage) return
+    const isCurrentUser = employee.id === user.employeeId ||
+      employee.name === user.name ||
+      employee.accessEmail?.toLowerCase() === user.email?.toLowerCase()
+
+    if (isCurrentUser) {
+      notify?.('Você não pode remover seu próprio usuário', 'error')
+      return
+    }
+
+    if (!window.confirm('Tem certeza que deseja remover este funcionário?')) return
+
+    const hasLinkedFutureAppointments = appointments.some((appointment) => (
+      appointment.professional === employee.name &&
+      appointment.status !== 'Cancelado' &&
+      (appointment.date ?? '') >= todayIso
+    ))
+
+    if (hasLinkedFutureAppointments) {
+      if (!window.confirm('Este funcionário possui agendamentos vinculados. Deseja apenas desativá-lo?')) return
+      try {
+        const saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, employee.id, { active: false }))
+        setEmployees((current) => current.map((item) => item.id === employee.id ? saved : item))
+        notify?.('Funcionário desativado com sucesso')
+      } catch (error) {
+        handleDataActionError(error, notify)
+      }
+      return
+    }
+
+    try {
+      await deleteEmployeeRecord(salonId, employee.id)
+      setEmployees((current) => current.filter((item) => item.id !== employee.id))
+      notify?.('Funcionário removido com sucesso')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
   return (
@@ -1793,7 +2223,7 @@ function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaF
           <h3 className="text-xl font-bold">Equipe do Salão</h3>
           <p className="text-sm text-gray-500">{canManage ? 'Cadastro e edição disponíveis para Admin/Dono.' : 'Funcionário Caixa pode visualizar comissões, sem alterar.'}</p>
         </div>
-        {canManage && <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039] sm:shrink-0">Novo Funcionário</button>}
+        {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3 sm:shrink-0`}>Novo Funcionário</button>}
       </div>
       <CardsGrid items={employees} render={(item) => (
         <div className="min-w-0 space-y-3 break-words">
@@ -1812,20 +2242,22 @@ function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaF
             </span>
           </div>
           {isProfessional(item) && <p className="min-w-0 text-sm">Comissão padrão: <strong>{item.commission}%</strong></p>}
-          {isProfessional(item) && <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-pearl p-3 dark:border-white/10 dark:bg-white/5">
+          {isProfessional(item) && <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-pearl p-5 dark:border-white/10 dark:bg-[#221c34]">
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="min-w-0 text-sm font-bold">Comissões por Serviço</p>
-              {canManage && <button onClick={() => openEdit(item)} className="w-fit max-w-full rounded-xl border border-blush px-3 py-2 text-left text-xs font-semibold whitespace-normal hover:bg-white">Adicionar comissão por serviço</button>}
+              <p className="min-w-0 text-sm font-bold dark:text-white">Comissões por Serviço</p>
+              {canManage && <button onClick={() => openEdit(item)} className="w-fit max-w-full rounded-xl border border-blush bg-white px-4 py-2 text-left text-xs font-semibold whitespace-normal hover:bg-pearl dark:border-white/10 dark:bg-black/40 dark:text-white/80 dark:hover:bg-black/60">Adicionar comissão por serviço</button>}
             </div>
-            <div className="mt-3 space-y-2">
+            <div className="mt-4 space-y-3">
               {(item.serviceCommissions ?? []).length ? item.serviceCommissions.map((rule) => (
-                <div key={rule.id} className="flex min-w-0 flex-col gap-2 overflow-hidden rounded-xl bg-white px-3 py-2 text-sm dark:bg-[#17141c] lg:flex-row lg:items-center lg:justify-between">
-                  <span className="min-w-0 font-semibold break-words">{rule.service}</span>
-                  <span className="min-w-0 text-gray-600 break-words dark:text-gray-300">{rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'} · {formatCommissionRule(rule)}</span>
+                <div key={rule.id} className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm dark:border-white/5 dark:bg-[#181424] lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <p className="min-w-0 break-words font-bold text-graphite dark:text-white">{rule.service}</p>
+                    <p className="min-w-0 break-words"><span className="text-gray-500 dark:text-white/60">{rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'}</span> <span className="font-bold text-emerald-700 dark:text-green-400">· {formatCommissionRule(rule)}</span></p>
+                  </div>
                   {canManage && (
-                    <div className="flex min-w-0 flex-wrap gap-2">
-                      <button onClick={() => openEdit(item)} className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold hover:bg-gray-50">Editar comissão</button>
-                      <button onClick={() => setEmployees((current) => current.map((employee) => employee.id === item.id ? { ...employee, serviceCommissions: (employee.serviceCommissions ?? []).filter((currentRule) => currentRule.id !== rule.id) } : employee))} className="rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50">Remover comissão</button>
+                    <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+                      <button onClick={() => openEdit(item)} className="rounded-xl bg-blue-500/20 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-500/30 dark:text-blue-300">Editar comissão</button>
+                      <button onClick={() => setEmployees((current) => current.map((employee) => employee.id === item.id ? { ...employee, serviceCommissions: (employee.serviceCommissions ?? []).filter((currentRule) => currentRule.id !== rule.id) } : employee))} className="rounded-xl bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/30 dark:text-red-400">Remover comissão</button>
                     </div>
                   )}
                 </div>
@@ -1839,7 +2271,7 @@ function Employees({ user, employees, setEmployees, salonSettings, onOpenAgendaF
           </p>}
           {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Duração padrão: {item.defaultDuration} min</p>}
           {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Intervalo da agenda: {item.scheduleInterval} min</p>}
-          {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Editar</button><button onClick={() => toggleEmployee(item)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50">{item.active ? 'Desativar' : 'Ativar'}</button></div>}
+          {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button><button onClick={() => toggleEmployee(item)} className={buttonSecondary}>{item.active ? 'Desativar' : 'Ativar'}</button><button onClick={() => removeEmployee(item)} className={buttonDanger}>Remover</button></div>}
         </div>
       )} />
       {modalOpen && <EmployeeModal employee={editing} salonSettings={salonSettings} onClose={() => setModalOpen(false)} onSave={saveEmployee} />}
@@ -1935,38 +2367,43 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
               <h4 className="font-bold">Login do Funcionário</h4>
               <p className="text-sm text-gray-500">Sugestão: {suggestedAccessEmail}</p>
             </div>
-            <button type="button" onClick={generateLogin} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Usar sugestão</button>
+            <button type="button" onClick={generateLogin} className={buttonSecondary}>Usar sugestão</button>
+          </div>
+          <div className="mt-4">
+            <Toggle label="Criar login para este funcionário" checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Field label="E-mail de acesso" value={form.accessEmail ?? ''} onChange={(value) => setForm({ ...form, accessEmail: value })} type="email" />
             <Field label="Senha temporária" value={form.temporaryPassword ?? ''} onChange={(value) => setForm({ ...form, temporaryPassword: value })} />
           </div>
-          <div className="mt-3">
-            <Toggle label={`Status do login: ${form.loginActive ? 'ativo' : 'inativo'}`} checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
-          </div>
+          {form.loginActive && (
+            <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              Crie este usuário também no Supabase Auth com o mesmo e-mail e senha temporária.
+            </p>
+          )}
         </section>
         {professional && <Field label="Comissão padrão (%)" type="number" value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} />}
         {professional && <Field label="Serviços que realiza" value={form.servicesText} onChange={(value) => setForm({ ...form, servicesText: value })} placeholder="Separar por vírgula" />}
-        {professional && <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+        {professional && <section className="rounded-2xl border border-gray-200 bg-pearl p-5 dark:border-white/10 dark:bg-[#221c34]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h4 className="font-bold">Comissões por Serviço</h4>
-              <p className="text-sm text-gray-500">Quando não houver regra específica, o sistema usa a comissão padrão.</p>
+              <h4 className="font-bold dark:text-white">Comissões por Serviço</h4>
+              <p className="text-sm text-gray-500 dark:text-white/60">Quando não houver regra específica, o sistema usa a comissão padrão.</p>
             </div>
-            <button type="button" onClick={addServiceCommission} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Adicionar comissão por serviço</button>
+            <button type="button" onClick={addServiceCommission} className="rounded-xl border border-blush bg-white px-4 py-2 text-sm font-semibold hover:bg-pearl dark:border-white/10 dark:bg-black/40 dark:text-white/80 dark:hover:bg-black/60">Adicionar comissão por serviço</button>
           </div>
-          <div className="mt-4 space-y-3">
+          <div className="mt-5 space-y-4">
             {(form.serviceCommissions ?? []).map((rule) => (
-              <div key={rule.id} className="grid gap-3 rounded-2xl bg-pearl p-3 dark:bg-white/5 md:grid-cols-[1.2fr_0.8fr_0.7fr_auto]">
+              <div key={rule.id} className="grid gap-4 rounded-2xl border border-gray-100 bg-white p-4 dark:border-white/5 dark:bg-[#181424] md:grid-cols-[1.2fr_0.8fr_0.7fr_auto]">
                 <Select label="Serviço" value={rule.service} onChange={(value) => updateServiceCommission(rule.id, { service: value })} options={services.map((item) => item.name)} />
                 <Select label="Tipo de comissão" value={rule.type} onChange={(value) => updateServiceCommission(rule.id, { type: value })} options={['Porcentagem', 'Valor fixo']} values={['percentage', 'fixed']} />
                 <Field label={rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'} type="number" value={rule.value} onChange={(value) => updateServiceCommission(rule.id, { value })} />
                 <div className="flex items-end">
-                  <button type="button" onClick={() => removeServiceCommission(rule.id)} className="w-full rounded-xl border border-rose-200 px-3 py-3 text-sm font-semibold text-rose-700 hover:bg-rose-50">Remover comissão</button>
+                  <button type="button" onClick={() => removeServiceCommission(rule.id)} className="w-full rounded-xl bg-red-500/20 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-500/30 dark:text-red-400">Remover comissão</button>
                 </div>
               </div>
             ))}
-            {(form.serviceCommissions ?? []).length === 0 && <p className="rounded-2xl bg-pearl px-4 py-3 text-sm font-semibold text-gray-500 dark:bg-white/5">Nenhuma comissão específica cadastrada.</p>}
+            {(form.serviceCommissions ?? []).length === 0 && <p className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm font-semibold text-gray-500 dark:border-white/5 dark:bg-[#181424] dark:text-white/60">Nenhuma comissão específica cadastrada.</p>}
           </div>
         </section>}
         {professional && <div className="grid gap-3 sm:grid-cols-2">
@@ -1979,7 +2416,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
         {professional && <Field label="Intervalo da agenda (min)" type="number" value={form.scheduleInterval} onChange={(value) => setForm({ ...form, scheduleInterval: value })} />}
         <Select label="Status atual" value={form.workStatus} onChange={(value) => setForm({ ...form, workStatus: value })} options={employeeStatuses} />
         <Toggle label="Status ativo" checked={form.active} onChange={(checked) => setForm({ ...form, active: checked })} />
-        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button><button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button></div>
+        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button><button className={buttonPrimary}>Salvar</button></div>
       </form>
     </Modal>
   )
@@ -2037,7 +2474,7 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
       </div>
       <div className="flex flex-wrap justify-end gap-2">
         <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Nova movimentação</button>
-        <button onClick={closeDay} className="focus-ring whitespace-nowrap rounded-2xl bg-graphite px-4 py-3 text-sm font-bold text-white">Fechar caixa do dia</button>
+        <button onClick={closeDay} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Fechar caixa do dia</button>
       </div>
       <Panel title="Movimentações do caixa">
         <Table
@@ -2076,8 +2513,8 @@ function CashEntryModal({ onClose, onSave }) {
         </div>
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="whitespace-nowrap rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
-          <button className="whitespace-nowrap rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button>
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={buttonPrimary}>Salvar</button>
         </div>
       </form>
     </Modal>
@@ -2156,7 +2593,7 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
           <h3 className="text-xl font-bold">Vales</h3>
           <p className="text-sm text-gray-500">Admin e Funcionário Caixa gerenciam todos os vales.</p>
         </div>
-        <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Vale</button>
+        <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Vale</button>
       </div>
 
       <Panel title="Filtros">
@@ -2179,9 +2616,9 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
           <p className="mt-4 text-2xl font-bold">{money.format(item.value)}</p>
           <p className="mt-2 text-sm text-gray-600">Motivo: {item.reason}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={() => openEdit(item)} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Editar</button>
+            <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
             {item.status !== 'Descontado' && <button onClick={() => markDiscounted(item)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">Marcar descontado</button>}
-            {canDelete && <button onClick={() => removeAdvance(item)} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">Excluir</button>}
+            {canDelete && <button onClick={() => removeAdvance(item)} className={buttonDanger}>Excluir</button>}
           </div>
         </>
       )} />
@@ -2215,8 +2652,8 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
         <Select label="Status" value={form.status} onChange={(value) => setForm({ ...form, status: value })} options={['Aberto', 'Descontado']} />
         <Field label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} required />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
-          <button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button>
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={buttonPrimary}>Salvar</button>
         </div>
       </form>
     </Modal>
@@ -2227,6 +2664,14 @@ function AccessDenied() {
   return (
     <Panel title="Acesso bloqueado">
       <p className="text-sm font-semibold text-gray-500">Esta área está disponível apenas para Admin e Funcionário Caixa.</p>
+    </Panel>
+  )
+}
+
+function DataLoading() {
+  return (
+    <Panel title="Carregando dados">
+      <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Buscando informações do salão...</p>
     </Panel>
   )
 }
@@ -2282,7 +2727,7 @@ function Inventory({ user, items, setItems, notify }) {
           <h3 className="text-xl font-bold">Estoque</h3>
           <p className="text-sm text-gray-500">{canManage ? 'Cadastre, edite e acompanhe produtos do Salão.' : 'Visualização dos produtos e alertas de estoque.'}</p>
         </div>
-        {canManage && <button onClick={openNew} className="focus-ring rounded-2xl bg-graphite px-4 py-3 text-sm font-semibold text-white hover:bg-[#343039]">Novo Produto</button>}
+        {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Produto</button>}
       </div>
 
       <CardsGrid items={items} render={(item) => (
@@ -2310,8 +2755,8 @@ function Inventory({ user, items, setItems, notify }) {
           {item.notes && <p className="mt-2 text-sm text-gray-600">Obs.: {item.notes}</p>}
           {canManage && (
             <div className="mt-4 flex gap-2">
-              <button onClick={() => openEdit(item)} className="rounded-xl border border-blush px-3 py-2 text-sm font-semibold hover:bg-pearl">Editar</button>
-              <button onClick={() => removeProduct(item)} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">Remover</button>
+              <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
+              <button onClick={() => removeProduct(item)} className={buttonDanger}>Remover</button>
             </div>
           )}
         </>
@@ -2358,16 +2803,16 @@ function InventoryModal({ product, onClose, onSave }) {
         <Field label="Fornecedor" value={form.supplier} onChange={(value) => setForm({ ...form, supplier: value })} />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-gray-600">Imagem do produto</span>
-          <input type="file" accept="image/*" onChange={handleImage} className="focus-ring w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" />
+          <input type="file" accept="image/*" onChange={handleImage} className={inputBase} />
         </label>
         {form.imageUrl && <img src={form.imageUrl} alt="Prévia do produto" className="h-28 w-28 rounded-2xl border border-gray-200 object-cover" />}
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-gray-600">Observações</span>
-          <textarea className="focus-ring min-h-24 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
+          <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
-          <button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Salvar</button>
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={buttonPrimary}>Salvar</button>
         </div>
       </form>
     </Modal>
@@ -2516,11 +2961,11 @@ function ScheduleRequestModal({ employee, slot, date, serviceName, onClose, onSu
         <Select label="Serviço desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employee.services?.length ? employee.services : services.map((item) => item.name)} />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-gray-600">Observação (opcional)</span>
-          <textarea className="focus-ring min-h-24 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
+          <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 font-semibold">Cancelar</button>
-          <button className="rounded-xl bg-graphite px-4 py-2 font-semibold text-white">Enviar pelo WhatsApp</button>
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={buttonPrimary}>Enviar pelo WhatsApp</button>
         </div>
       </form>
     </Modal>
@@ -2571,22 +3016,50 @@ function EmployeeProfile({ user, appointments, employees, setEmployees }) {
   )
 }
 
-function Settings({ settings, setSettings }) {
-  const adminEmail = getSuggestedAccessEmail({ employeeType: 'admin', salonSettings: settings })
-  const cashierEmail = getSuggestedAccessEmail({ employeeType: 'cashier', salonSettings: settings })
+function Settings({ settings, setSettings, notify }) {
+  const [form, setForm] = useState({
+    salonName: settings.salonName ?? '',
+    receptionWhatsapp: settings.receptionWhatsapp ?? ''
+  })
+
+  useEffect(() => {
+    setForm({
+      salonName: settings.salonName ?? '',
+      receptionWhatsapp: settings.receptionWhatsapp ?? ''
+    })
+  }, [settings.salonName, settings.receptionWhatsapp])
+
+  function saveSalonSettings(event) {
+    event.preventDefault()
+
+    const payload = {
+      salonName: form.salonName.trim(),
+      receptionWhatsapp: form.receptionWhatsapp.trim()
+    }
+
+    setSettings((current) => ({ ...current, ...payload }))
+    notify?.('Salvo com sucesso')
+  }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title="Dados do Salão">
-        <div className="space-y-3">
-          <Field label="Nome do Salão" value={settings.salonName ?? ''} onChange={(value) => setSettings((current) => ({ ...current, salonName: value }))} />
-          <CompactList items={[`Login Admin sugerido: ${adminEmail}`, `Login Caixa sugerido: ${cashierEmail}`, 'Horários definidos por Funcionário', 'Moeda: Real brasileiro']} />
-          <Field label="WhatsApp da recepção/caixa" value={settings.receptionWhatsapp} onChange={(value) => setSettings((current) => ({ ...current, receptionWhatsapp: value }))} placeholder="Ex.: 5511999999999" />
+    <div className="mx-auto max-w-2xl">
+      <form onSubmit={saveSalonSettings} className="space-y-6 rounded-2xl border border-blush bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#1c1922] sm:p-8">
+        <div>
+          <h3 className="text-xl font-bold">Dados do Salão</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Edite as informações básicas usadas na identificação do sistema.</p>
         </div>
-      </Panel>
-      <Panel title="Preferências">
-        <CompactList items={['Alertas de estoque baixo ativos', 'Agenda visível por perfil', 'Dados mockados nesta primeira versão']} />
-      </Panel>
+
+        <div className="space-y-4">
+          <Field label="Nome do salão" value={form.salonName} onChange={(value) => setForm((current) => ({ ...current, salonName: value }))} placeholder="Ex.: Salão Belas" />
+          <Field label="WhatsApp da recepção/caixa" value={form.receptionWhatsapp} onChange={(value) => setForm((current) => ({ ...current, receptionWhatsapp: value }))} placeholder="Ex.: 5511999999999" />
+        </div>
+
+        <div className="flex justify-end">
+          <button type="submit" className={`${buttonPrimary} rounded-2xl px-5 py-3`}>
+            Salvar alterações
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
@@ -2609,7 +3082,7 @@ function Modal({ title, children, onClose }) {
       <div ref={modalRef} className="simple-scrollbar max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-blush bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]">
         <div className="mb-4 flex items-center justify-between gap-4">
           <h3 className="text-xl font-bold">{title}</h3>
-          <button onClick={onClose} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/10">Fechar</button>
+          <button onClick={onClose} className={`${buttonSecondary} px-3 py-2`}>Fechar</button>
         </div>
         {children}
       </div>
@@ -2637,15 +3110,15 @@ function Toast({ toast, onClose }) {
 
 function Toggle({ label, checked, onChange }) {
   return (
-    <label className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold dark:border-white/10">
-      <span>{label}</span>
+    <label className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-graphite dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100">
+      <span className="min-w-0 break-words">{label}</span>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-5 w-5 accent-[#c9a85d]" />
     </label>
   )
 }
 function Metric({ title, value, detail }) {
   return (
-    <div className="rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]">
+    <div className={`${cardBase} min-h-[132px]`}>
       <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">{title}</p>
       <p className="mt-2 text-2xl font-bold text-graphite dark:text-gray-100">{value}</p>
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{detail}</p>
@@ -2655,7 +3128,7 @@ function Metric({ title, value, detail }) {
 
 function Panel({ title, children }) {
   return (
-    <section className="rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]">
+    <section className={panelBase}>
       <h3 className="mb-4 text-lg font-bold text-graphite dark:text-gray-100">{title}</h3>
       {children}
     </section>
@@ -2666,7 +3139,7 @@ function Select({ label, value, onChange, options, values, disabled = false }) {
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">{label}</span>
-      <select disabled={disabled} className="focus-ring w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 disabled:bg-gray-100 dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100 dark:disabled:bg-white/5" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select disabled={disabled} className={inputBase} value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option, index) => <option key={values?.[index] ?? option} value={values?.[index] ?? option}>{option}</option>)}
       </select>
     </label>
@@ -2677,7 +3150,7 @@ function CardsGrid({ items, render }) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {items.map((item) => (
-        <article key={item.id} className="min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]">
+        <article key={item.id} className={`${cardBase} min-h-[180px]`}>
           {render(item)}
         </article>
       ))}
