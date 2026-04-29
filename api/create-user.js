@@ -13,7 +13,7 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     )
 
-    // 🔥 CRIA USUÁRIO NO AUTH DIRETO
+    // 🔥 cria usuário no AUTH
     const { data: userData, error: authError } =
       await supabase.auth.admin.createUser({
         email,
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: authError.message })
     }
 
-    // 🔥 SALVA NO BANCO
+    // 🔥 salva no banco
     const { error: dbError } = await supabase.from('users').insert({
       id: userData.user.id,
       email,
