@@ -734,9 +734,9 @@ function App() {
       .maybeSingle()
 
     console.log('Perfil:', profileById)
-    console.error('Erro perfil:', profileByIdError)
 
     if (profileByIdError) {
+      console.error('Erro perfil:', profileByIdError)
       throw new Error(`Erro ao buscar perfil: ${profileByIdError.message}`)
     }
 
