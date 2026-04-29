@@ -755,9 +755,9 @@ function App() {
       .single()
 
     console.log('Novo perfil:', newProfile)
-    console.error('Erro criando perfil:', createProfileError)
 
     if (createProfileError) {
+      console.error('Erro criando perfil:', createProfileError)
       throw new Error(`Erro ao criar perfil: ${createProfileError.message}`)
     }
 
