@@ -2235,22 +2235,20 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
           }
 
         } catch (loginError) {
-          notify?.(`Funcionário salvo. Login não criado: ${loginError.message || 'Erro ao criar login'}`, 'error')
+          notify?.('Funcionário salvo, mas erro ao criar login', 'error')
           setModalOpen(false)
           return
         }
 
         const savedWithLogin = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, saved.id, {
           login_email: loginEmail,
-          login_status: 'ativo',
-          accessEmail: loginEmail,
-          loginActive: true
+          login_status: 'ativo'
         }))
         setEmployees((current) => current.map((employee) => employee.id === saved.id ? savedWithLogin : employee))
       }
 
       setModalOpen(false)
-      notify?.('Funcionário salvo com sucesso')
+      notify?.(shouldCreateLogin ? 'Funcionário e login criados com sucesso' : 'Funcionário salvo com sucesso')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -2466,11 +2464,6 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
             <Field label="E-mail de acesso" value={form.accessEmail ?? ''} onChange={(value) => setForm({ ...form, accessEmail: value })} type="email" />
             <Field label="Senha temporária" value={form.temporaryPassword ?? ''} onChange={(value) => setForm({ ...form, temporaryPassword: value })} />
           </div>
-          {form.loginActive && (
-            <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-              Crie este usuário também no Supabase Auth com o mesmo e-mail e senha temporária.
-            </p>
-          )}
         </section>
         {professional && <Field label="Comissão padrão (%)" type="number" value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} />}
         {professional && <Field label="Serviços que realiza" value={form.servicesText} onChange={(value) => setForm({ ...form, servicesText: value })} placeholder="Separar por vírgula" />}
