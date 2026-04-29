@@ -4,7 +4,6 @@ import {
   createAppointment as createAppointmentRecord,
   createClient as createClientRecord,
   createEmployee as createEmployeeRecord,
-  createEmployeeUserProfile,
   createService as createServiceRecord,
   databaseNotConfiguredMessage,
   deleteAppointment as deleteAppointmentRecord,
@@ -354,6 +353,7 @@ function normalizeEmployeeRecord(row) {
   const employeeType = field(row, 'employeeType', 'employee_type') ?? (['cashier', 'caixa'].includes(rawRole) ? 'cashier' : 'professional')
   const professional = employeeType === 'professional'
   const status = field(row, 'status') || 'ativo'
+  const loginStatus = field(row, 'loginStatus', 'login_status') ?? ''
   const commissionPercent = Number(field(row, 'commission_percent') ?? field(row, 'commission') ?? 0)
   return {
     ...row,
@@ -377,7 +377,8 @@ function normalizeEmployeeRecord(row) {
     services: professional ? toList(field(row, 'services') || '') : [],
     accessEmail: field(row, 'accessEmail', 'access_email') ?? field(row, 'login_email') ?? '',
     temporaryPassword: field(row, 'temporaryPassword', 'temporary_password') ?? '',
-    loginActive: Boolean(field(row, 'loginActive', 'login_active') ?? false)
+    loginStatus,
+    loginActive: Boolean(field(row, 'loginActive', 'login_active') ?? String(loginStatus).toLowerCase() === 'ativo')
   }
 }
 
@@ -2165,11 +2166,14 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     const employeeType = data.employeeType ?? 'professional'
     const professional = employeeType === 'professional'
     const wantsLogin = Boolean(data.loginActive)
+    const loginEmail = data.accessEmail?.trim().toLowerCase() ?? ''
+    const temporaryPassword = data.temporaryPassword?.trim() ?? ''
+    const employeeName = data.name.trim()
     if (!data.name.trim() || !data.phone.trim() || !data.role.trim()) {
       notify?.('Erro ao salvar: informe nome, telefone e cargo.', 'error')
       return
     }
-    if (wantsLogin && (!data.accessEmail.trim() || !data.temporaryPassword.trim())) {
+    if (wantsLogin && (!loginEmail || !temporaryPassword)) {
       notify?.('Erro ao salvar: informe e-mail e senha temporária do login.', 'error')
       return
     }
@@ -2177,6 +2181,8 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
       notify?.('Erro ao salvar: admin sem salão vinculado.', 'error')
       return
     }
+    const existingLoginEmail = editing?.accessEmail?.trim().toLowerCase() ?? ''
+    const shouldCreateLogin = wantsLogin && (!editing?.loginActive || existingLoginEmail !== loginEmail)
     const payload = {
       ...data,
       employeeType,
@@ -2187,9 +2193,9 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
       workEnd: professional ? data.workEnd : '',
       breakStart: professional ? data.breakStart : '',
       breakEnd: professional ? data.breakEnd : '',
-      accessEmail: data.accessEmail,
-      temporaryPassword: data.temporaryPassword,
-      loginActive: wantsLogin,
+      accessEmail: loginEmail,
+      temporaryPassword,
+      loginActive: wantsLogin && !shouldCreateLogin,
       serviceCommissions: professional ? toObjectList(data.serviceCommissions).map((item, index) => ({
         ...item,
         id: item.id ?? Date.now() + index,
@@ -2208,23 +2214,43 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
         setEmployees((current) => [...current, saved])
       }
 
-      if (wantsLogin) {
+      if (shouldCreateLogin) {
         try {
-          await createEmployeeUserProfile(salonId, {
-            email: data.accessEmail,
-            name: data.name.trim(),
-            role: employeeType
+          const response = await fetch('/api/create-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: loginEmail,
+              password: temporaryPassword,
+              name: employeeName,
+              salon_id: salonId
+            })
           })
-        } catch (profileError) {
-          console.error('Erro ao criar perfil de login do funcionário:', profileError)
-          notify?.('Funcionário salvo. Login pendente/manual: crie também o usuário no Supabase Auth e confira o perfil em users.', 'error')
+
+          const result = await response.json()
+
+          if (!response.ok) {
+            console.error("Erro API create-user:", result)
+            throw new Error(result.error || "Erro ao criar login")
+          }
+
+        } catch (loginError) {
+          notify?.(`Funcionário salvo. Login não criado: ${loginError.message || 'Erro ao criar login'}`, 'error')
           setModalOpen(false)
           return
         }
+
+        const savedWithLogin = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, saved.id, {
+          login_email: loginEmail,
+          login_status: 'ativo',
+          accessEmail: loginEmail,
+          loginActive: true
+        }))
+        setEmployees((current) => current.map((employee) => employee.id === saved.id ? savedWithLogin : employee))
       }
 
       setModalOpen(false)
-      notify?.(wantsLogin ? 'Funcionário salvo. Crie este usuário também no Supabase Auth com o mesmo e-mail e senha temporária.' : 'Funcionário salvo com sucesso')
+      notify?.('Funcionário salvo com sucesso')
     } catch (error) {
       handleDataActionError(error, notify)
     }

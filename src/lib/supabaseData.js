@@ -102,7 +102,8 @@ function employeePayload(payload = {}, salonId, includeSalon = false) {
       : undefined,
     position: includeSalon || hasField(payload, 'position') || hasField(payload, 'role') ? payload.position ?? payload.role ?? '' : undefined,
     services: includeSalon || hasField(payload, 'services') ? payload.services ?? [] : undefined,
-    login_email: includeSalon || hasField(payload, 'loginEmail') || hasField(payload, 'accessEmail') ? payload.loginEmail ?? payload.accessEmail ?? '' : undefined
+    login_email: includeSalon || hasField(payload, 'loginEmail') || hasField(payload, 'accessEmail') || hasField(payload, 'login_email') ? payload.loginEmail ?? payload.accessEmail ?? payload.login_email ?? '' : undefined,
+    login_status: hasField(payload, 'loginStatus') || hasField(payload, 'login_status') ? payload.loginStatus ?? payload.login_status : undefined
   })
 }
 
