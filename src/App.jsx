@@ -69,6 +69,24 @@ const weekDayOptions = [
 const defaultWorkingDays = weekDayOptions.map((day) => day.id)
 const defaultOpeningHours = Object.fromEntries(weekDayOptions.map((day) => [day.id, { open: '09:00', close: '18:00' }]))
 const appointmentSlotInterval = 15
+const appointmentPaymentOptions = ['Sem pagamento', 'Dinheiro', 'Pix', 'Cartao']
+const appointmentPaymentValues = ['', 'dinheiro', 'pix', 'cartao']
+
+function normalizeAppointmentPaymentMethod(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (normalized === 'dinheiro' || normalized === 'pix' || normalized === 'cartao') return normalized
+  return null
+}
+
+function cashPaymentMethodLabel(value) {
+  const labels = { dinheiro: 'Dinheiro', pix: 'Pix', cartao: 'Cartão' }
+  return labels[normalizeAppointmentPaymentMethod(value)] ?? 'Pendente'
+}
 
 function timeToMinutes(time) {
   const [hoursValue, minutesValue] = String(time ?? '').split(':').map(Number)
@@ -448,8 +466,8 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     categoria: 'Atendimento',
     description: `Atendimento - ${appointment.client}`,
     descricao: `Atendimento - ${appointment.client}`,
-    method: appointment.paymentMethod ?? appointment.method ?? 'Pendente',
-    forma_pagamento: appointment.paymentMethod ?? appointment.method ?? 'Pendente',
+    method: cashPaymentMethodLabel(appointment.paymentMethod ?? appointment.method),
+    forma_pagamento: cashPaymentMethodLabel(appointment.paymentMethod ?? appointment.method),
     value: serviceValue,
     valor: serviceValue,
     date: appointment.date ?? todayIso,
@@ -634,7 +652,7 @@ function normalizeAppointmentRecord(row, employees = []) {
     duration,
     duracao: duration,
     status: field(row, 'status') ?? 'Aguardando',
-    paymentMethod: field(row, 'paymentMethod', 'payment_method')
+    paymentMethod: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method'))
   }, employees)
 }
 
@@ -1613,7 +1631,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   const createInitialAppointmentForm = () => {
     const professional = employees.find((item) => item.name === defaultProfessional)
     const firstService = getCompatibleServicesForProfessional(professional)[0] ?? { name: '', price: 0 }
-    return { client: clients[0]?.name ?? '', service: firstService.name, professional: defaultProfessional, date: todayIso, time: '', value: firstService.price ?? 0 }
+    return { client: clients[0]?.name ?? '', service: firstService.name, professional: defaultProfessional, date: todayIso, time: '', paymentMethod: '', value: firstService.price ?? 0 }
   }
   const [form, setForm] = useState(createInitialAppointmentForm)
   const [formMessage, setFormMessage] = useState({ type: '', text: '' })
@@ -1695,8 +1713,10 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const appointment = appointments.find((item) => item.id === id)
     if (!appointment) return
     if (user.role !== 'admin' && user.role !== 'cashier' && appointment.professional !== user.name) return
+    const selectedPaymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod)
+    const updatePayload = isCompletedStatus(status) ? { status, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null } : { status }
     try {
-      const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, { status })) }, allEmployees)
+      const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, updatePayload)) }, allEmployees)
       if (!isCompletedStatus(appointment.status) && isCompletedStatus(status)) {
         await ensureCashMovementForCompletedAppointment(saved)
       }
@@ -1767,6 +1787,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     const selectedQuickService = services.find((item) => item.name === data.service)
     const duration = serviceDurationToMinutes(selectedQuickService, professional?.defaultDuration ?? 60)
+    const selectedPaymentMethod = normalizeAppointmentPaymentMethod(data.paymentMethod)
     const appointmentPayload = {
       client: data.client,
       service: data.service,
@@ -1785,7 +1806,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       duration,
       duracao: duration,
       status: 'Concluído',
-      paymentMethod: data.paymentMethod
+      paymentMethod: selectedPaymentMethod,
+      payment_method: selectedPaymentMethod || null
     }
     try {
       const appointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, appointmentPayload), allEmployees)
@@ -1835,6 +1857,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
 
     const duration = serviceDurationToMinutes(selectedService, Number(selectedProfessional.defaultDuration) || 60)
     const value = Number(selectedService?.price ?? form.value)
+    const selectedPaymentMethod = normalizeAppointmentPaymentMethod(form.paymentMethod)
     const newAppointmentPayload = {
       client: form.client,
       service: form.service,
@@ -1852,13 +1875,15 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       valor: value,
       duration,
       duracao: duration,
-      status: 'Aguardando'
+      status: 'Aguardando',
+      paymentMethod: selectedPaymentMethod,
+      payment_method: selectedPaymentMethod || null
     }
 
     try {
       const newAppointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, newAppointmentPayload), allEmployees)
       setAppointments((current) => [...current, newAppointment])
-      setForm({ ...createInitialAppointmentForm(), date: form.date, professional: form.professional, service: '', value: 0, time: '' })
+      setForm({ ...createInitialAppointmentForm(), date: form.date, professional: form.professional, service: '', value: 0, time: '', paymentMethod: '' })
       setFormMessage({ type: 'success', text: 'Agendamento criado com sucesso!' })
       notify?.('Agendamento criado.')
     } catch (error) {
@@ -1902,6 +1927,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
             </div>
           )}
           <TimeSlotPicker value={form.time} onChange={(value) => setForm({ ...form, time: value })} slots={availableSlots} />
+          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={appointmentPaymentOptions} values={appointmentPaymentValues} />
           {formMessage.text && (
             <div className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${formMessage.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
               {formMessage.text}
@@ -2070,7 +2096,7 @@ function BlockTimeModal({ user, employees, date, onClose, onSave }) {
 
 function QuickServiceModal({ clients, employees, onClose, onSave }) {
   const firstService = services[0] ?? { name: '', price: 0 }
-  const [form, setForm] = useState({ client: clients[0]?.name ?? '', service: firstService.name, professional: employees.find((item) => item.active)?.name ?? '', paymentMethod: 'Pix', value: firstService.price })
+  const [form, setForm] = useState({ client: clients[0]?.name ?? '', service: firstService.name, professional: employees.find((item) => item.active)?.name ?? '', paymentMethod: 'pix', value: firstService.price })
 
   return (
     <Modal title="Atender agora" onClose={onClose}>
@@ -2081,7 +2107,7 @@ function QuickServiceModal({ clients, employees, onClose, onSave }) {
           setForm({ ...form, service: value, value: selected?.price ?? form.value })
         }} options={services.map((item) => item.name)} />
         <Select label="Profissional" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} options={employees.filter((item) => item.active).map((item) => item.name)} />
-        <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'Cartão', 'Pendente']} />
+        <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={appointmentPaymentOptions} values={appointmentPaymentValues} />
         <Field label="Valor" type="number" value={form.value} onChange={(value) => setForm({ ...form, value })} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>

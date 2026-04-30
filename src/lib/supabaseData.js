@@ -126,6 +126,7 @@ function servicePayload(payload = {}, salonId, includeSalon = false) {
 }
 
 function appointmentPayload(payload = {}, salonId, includeSalon = false) {
+  const selectedPaymentMethod = normalizeAppointmentPaymentMethod(payload.paymentMethod ?? payload.payment_method)
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client') ? payload.clientName ?? payload.client ?? '' : undefined,
@@ -136,10 +137,21 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
     appointment_date: includeSalon || hasField(payload, 'appointmentDate') || hasField(payload, 'date') ? payload.appointmentDate ?? payload.date : undefined,
     appointment_time: includeSalon || hasField(payload, 'appointmentTime') || hasField(payload, 'time') || hasField(payload, 'horario') ? payload.appointmentTime ?? payload.time ?? payload.horario : undefined,
     status: includeSalon || hasField(payload, 'status') ? payload.status ?? 'Aguardando' : undefined,
-    payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? payload.paymentMethod ?? payload.payment_method ?? '' : undefined,
+    payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? selectedPaymentMethod || null : undefined,
     duration: includeSalon || hasField(payload, 'duration') || hasField(payload, 'duracao') ? Number(payload.duration ?? payload.duracao ?? 0) : undefined,
     price: includeSalon || hasField(payload, 'price') || hasField(payload, 'value') || hasField(payload, 'valor') ? Number(payload.price ?? payload.value ?? payload.valor ?? 0) : undefined
   })
+}
+
+function normalizeAppointmentPaymentMethod(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (normalized === 'dinheiro' || normalized === 'pix' || normalized === 'cartao') return normalized
+  return null
 }
 
 function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
