@@ -39,6 +39,7 @@ const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center j
 const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-pearl dark:border-white/10 dark:bg-[#24202c] dark:text-gray-100 dark:hover:bg-white/10'
 const buttonDanger = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25'
 const badgeBase = 'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-bold'
+const appointmentCardBase = 'min-w-0 overflow-hidden rounded-2xl border p-4 shadow-soft transition'
 const employeeFunctionOptions = [
   'Cabeleireiro/Cabeleireira',
   'Colorista',
@@ -876,10 +877,32 @@ const professionalMenu = [
 ]
 
 const statusStyles = {
-  agendado: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200',
+  agendado: 'border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-400/30 dark:bg-orange-500/15 dark:text-orange-200',
   confirmado: 'border-violet-100 bg-lilacSoft/40 text-violet-800 dark:border-violet-300/30 dark:bg-violet-500/20 dark:text-violet-100',
   concluido: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200',
-  cancelado: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200'
+  cancelado: 'border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-500/15 dark:text-red-200'
+}
+
+const appointmentStatusCardStyles = {
+  agendado: 'border-orange-300 bg-orange-50/85 text-orange-950 dark:border-orange-400/45 dark:bg-orange-500/15 dark:text-orange-50',
+  confirmado: 'border-violet-300 bg-violet-50/85 text-violet-950 dark:border-violet-300/45 dark:bg-violet-500/15 dark:text-violet-50',
+  concluido: 'border-emerald-300 bg-emerald-50/85 text-emerald-950 dark:border-emerald-400/45 dark:bg-emerald-500/15 dark:text-emerald-50',
+  cancelado: 'border-red-300 bg-red-50/85 text-red-950 dark:border-red-400/45 dark:bg-red-500/15 dark:text-red-50'
+}
+
+const appointmentStatusDetailStyles = {
+  agendado: 'text-orange-700 dark:text-orange-200',
+  confirmado: 'text-violet-700 dark:text-violet-200',
+  concluido: 'text-emerald-700 dark:text-emerald-200',
+  cancelado: 'text-red-700 dark:text-red-200'
+}
+
+function getAppointmentStatusClass(status) {
+  return appointmentStatusCardStyles[normalizeAppointmentStatus(status)] ?? appointmentStatusCardStyles.agendado
+}
+
+function getAppointmentStatusDetailClass(status) {
+  return appointmentStatusDetailStyles[normalizeAppointmentStatus(status)] ?? appointmentStatusDetailStyles.agendado
 }
 
 const employeeStatuses = ['Ativo', 'De folga', 'Horário de almoço']
@@ -2046,26 +2069,29 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
                 <p className="mt-1">{getBlockEmployeeName(block)} · {block.reason}</p>
               </div>
             ))}
-            {[...visibleAppointments].sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b))).map((item) => (
-              <div key={item.id} className={`${cardBase} p-4`}>
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-lg font-bold">{formatDate(item.date)} · {item.time} · {item.client}</p>
-                    <p className="mt-1 text-sm text-gray-600">{item.service} com {getAppointmentEmployeeName(item, allEmployees)}</p>
-                    <p className="mt-2 text-sm text-gray-500">Duração: {getAppointmentDuration(item, allEmployees.find((employee) => isAppointmentForEmployee(item, employee)))} min</p>
-                    {user.role === 'admin' && <p className="mt-2 text-sm font-semibold text-goldSoft">{money.format(item.value)}</p>}
-                    {isCompletedStatus(item.status) && <p className="mt-1 text-sm font-semibold text-emerald-700">Comissão: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
-                  </div>
-                  <div className="flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
-                    <button type="button" onClick={() => sendConfirmation(item)} className={`${buttonSecondary} rounded-full px-3 py-2`}>Enviar confirmação</button>
-                    <select className={`focus-ring min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[normalizeAppointmentStatus(item.status)]}`} value={normalizeAppointmentStatus(item.status)} onChange={(event) => updateStatus(item.id, event.target.value)}>
-                      {appointmentStatusOptions.map((status) => <option key={status} value={status}>{formatAppointmentStatus(status)}</option>)}
-                    </select>
-                    {(user.role === 'admin' || user.role === 'cashier') && <button type="button" onClick={() => deleteAppointment(item)} className={`${buttonDanger} rounded-full px-3 py-2`}>Excluir</button>}
+            {[...visibleAppointments].sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b))).map((item) => {
+              const statusDetailClass = getAppointmentStatusDetailClass(item.status)
+              return (
+                <div key={item.id} className={`${appointmentCardBase} ${getAppointmentStatusClass(item.status)}`}>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-lg font-bold">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                      <p className={`mt-1 text-sm font-medium ${statusDetailClass}`}>{item.service} com {getAppointmentEmployeeName(item, allEmployees)}</p>
+                      <p className={`mt-2 text-sm ${statusDetailClass}`}>Duração: {getAppointmentDuration(item, allEmployees.find((employee) => isAppointmentForEmployee(item, employee)))} min</p>
+                      {user.role === 'admin' && <p className={`mt-2 text-sm font-semibold ${statusDetailClass}`}>{money.format(item.value)}</p>}
+                      {isCompletedStatus(item.status) && <p className={`mt-1 text-sm font-semibold ${statusDetailClass}`}>Comissão: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
+                    </div>
+                    <div className="flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+                      <button type="button" onClick={() => sendConfirmation(item)} className={`${buttonSecondary} rounded-full px-3 py-2`}>Enviar confirmação</button>
+                      <select className={`focus-ring min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[normalizeAppointmentStatus(item.status)]}`} value={normalizeAppointmentStatus(item.status)} onChange={(event) => updateStatus(item.id, event.target.value)}>
+                        {appointmentStatusOptions.map((status) => <option key={status} value={status}>{formatAppointmentStatus(status)}</option>)}
+                      </select>
+                      {(user.role === 'admin' || user.role === 'cashier') && <button type="button" onClick={() => deleteAppointment(item)} className={`${buttonDanger} rounded-full px-3 py-2`}>Excluir</button>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
             {visibleAppointments.length === 0 && (
               <div className="rounded-2xl border border-gray-100 bg-pearl px-4 py-5 text-sm font-semibold text-gray-600">
                 Nenhum agendamento para este filtro.
@@ -2083,12 +2109,6 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
 
 function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStatusChange, onSendConfirmation, onDeleteAppointment }) {
   const [selectedItem, setSelectedItem] = useState(null)
-  const weeklyStatusStyles = {
-    agendado: 'border-amber-200 bg-amber-50 text-amber-900',
-    confirmado: 'border-sky-200 bg-sky-50 text-sky-900',
-    concluido: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    cancelado: 'border-rose-200 bg-rose-50 text-rose-900'
-  }
 
   return (
     <>
@@ -2117,7 +2137,7 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
                       key={item.id}
                       type="button"
                       onClick={() => setSelectedItem(item)}
-                      className={`block w-full rounded-xl border px-3 py-2 text-left text-xs shadow-sm transition hover:-translate-y-0.5 hover:shadow-soft ${weeklyStatusStyles[normalizeAppointmentStatus(item.status)] ?? weeklyStatusStyles.agendado}`}
+                      className={`block w-full rounded-xl border px-3 py-2 text-left text-xs shadow-sm transition hover:-translate-y-0.5 hover:shadow-soft ${getAppointmentStatusClass(item.status)}`}
                     >
                       <p className="font-extrabold">{item.time}</p>
                       <p className="mt-1 truncate font-bold">{item.client}</p>
