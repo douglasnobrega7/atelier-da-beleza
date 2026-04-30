@@ -137,6 +137,29 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
   })
 }
 
+function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
+  const type = String(payload.type ?? payload.tipo ?? 'entrada').toLowerCase()
+  const value = Number(payload.value ?? payload.valor ?? payload.serviceValue ?? payload.service_value ?? 0)
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    type,
+    description: includeSalon || hasField(payload, 'description') || hasField(payload, 'descricao') ? payload.description ?? payload.descricao ?? '' : undefined,
+    category: includeSalon || hasField(payload, 'category') || hasField(payload, 'categoria') ? payload.category ?? payload.categoria ?? '' : undefined,
+    method: includeSalon || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') || hasField(payload, 'paymentMethod') ? payload.method ?? payload.forma_pagamento ?? payload.paymentMethod ?? '' : undefined,
+    value: includeSalon || hasField(payload, 'value') || hasField(payload, 'valor') || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? value : undefined,
+    date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
+    service_value: includeSalon || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? Number(payload.serviceValue ?? payload.service_value ?? value) : undefined,
+    commission_percent: includeSalon || hasField(payload, 'commissionPercent') || hasField(payload, 'commission_percent') ? Number(payload.commissionPercent ?? payload.commission_percent ?? 0) : undefined,
+    commission_value: includeSalon || hasField(payload, 'commissionValue') || hasField(payload, 'commission_value') ? Number(payload.commissionValue ?? payload.commission_value ?? 0) : undefined,
+    salon_value: includeSalon || hasField(payload, 'salonValue') || hasField(payload, 'salon_value') ? Number(payload.salonValue ?? payload.salon_value ?? 0) : undefined,
+    employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
+    service_id: includeSalon || hasField(payload, 'serviceId') || hasField(payload, 'service_id') ? payload.serviceId ?? payload.service_id ?? null : undefined,
+    appointment_id: includeSalon || hasField(payload, 'appointmentId') || hasField(payload, 'appointment_id') ? payload.appointmentId ?? payload.appointment_id ?? null : undefined,
+    referencia_id: includeSalon || hasField(payload, 'referenciaId') || hasField(payload, 'referencia_id') ? payload.referenciaId ?? payload.referencia_id ?? null : undefined,
+    referencia_tipo: includeSalon || hasField(payload, 'referenciaTipo') || hasField(payload, 'referencia_tipo') ? payload.referenciaTipo ?? payload.referencia_tipo ?? '' : undefined
+  })
+}
+
 function salonPayload(payload = {}) {
   return pickDefined({
     name: hasField(payload, 'name') || hasField(payload, 'salonName') ? payload.name ?? payload.salonName : undefined,
@@ -550,6 +573,23 @@ export async function deleteAppointment(salonId, id) {
 
 export async function fetchCashMovements(salonId) {
   return runQuery(bySalon(TABLES.cashMovements, salonId).order('date', { ascending: false }))
+}
+
+export async function fetchCashMovementByAppointment(salonId, appointmentId) {
+  requireSalonId(salonId)
+  if (!appointmentId) return null
+  return runQuery(
+    supabase
+      .from(TABLES.cashMovements)
+      .select('*')
+      .eq('salon_id', salonId)
+      .eq('appointment_id', appointmentId)
+      .maybeSingle()
+  )
+}
+
+export async function createCashMovement(salonId, payload) {
+  return insertRow(TABLES.cashMovements, salonId, payload, cashMovementPayload)
 }
 
 export async function fetchAdvances(salonId) {

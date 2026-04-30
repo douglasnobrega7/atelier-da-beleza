@@ -2,6 +2,7 @@ import { Component, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import {
   createAppointment as createAppointmentRecord,
+  createCashMovement as createCashMovementRecord,
   createClient as createClientRecord,
   createEmployee as createEmployeeRecord,
   createService as createServiceRecord,
@@ -13,6 +14,7 @@ import {
   fetchAdvances as fetchAdvancesFromSupabase,
   fetchAppointments as fetchAppointmentsFromSupabase,
   fetchCashMovements as fetchCashMovementsFromSupabase,
+  fetchCashMovementByAppointment as fetchCashMovementByAppointmentFromSupabase,
   fetchClients as fetchClientsFromSupabase,
   fetchEmployees as fetchEmployeesFromSupabase,
   fetchSalon,
@@ -282,7 +284,7 @@ function calculateCommissionDetails(appointment, employee) {
 }
 
 function getAppointmentCommission(appointment, employees) {
-  if (appointment.status !== 'Concluído') return 0
+  if (!isCompletedStatus(appointment.status)) return 0
   return Number(appointment.comissaoCalculada ?? appointment.commission ?? calculateCommission(appointment, employees) ?? 0)
 }
 
@@ -327,7 +329,7 @@ function getProfessionals(employees) {
 }
 
 function withCommission(appointment, employees) {
-  if (appointment.status !== 'Concluído') return { ...appointment, commission: 0, comissaoCalculada: 0 }
+  if (!isCompletedStatus(appointment.status)) return { ...appointment, commission: 0, comissaoCalculada: 0 }
   const employee = employees.find((item) => item.name === appointment.professional)
   return { ...appointment, ...calculateCommissionDetails(appointment, employee) }
 }
@@ -377,6 +379,63 @@ function cashDescription(entry) {
 
 function cashCategory(entry) {
   return entry.categoria ?? entry.category ?? ''
+}
+
+function isCompletedStatus(status) {
+  return String(status ?? '').toLowerCase().startsWith('conclu')
+}
+
+function cashAppointmentId(entry) {
+  return field(entry, 'appointmentId', 'appointment_id') ?? field(entry, 'referenciaId', 'referencia_id')
+}
+
+function cashCommissionValue(entry) {
+  return Number(field(entry, 'commissionValue', 'commission_value') ?? 0)
+}
+
+function cashSalonValue(entry) {
+  return Number(field(entry, 'salonValue', 'salon_value') ?? cashValue(entry))
+}
+
+function createCompletedAppointmentCashEntry(appointment, employees = [], serviceItems = services) {
+  const service = serviceItems.find((item) => item.name === appointment.service)
+  const employee = employees.find((item) => item.name === appointment.professional)
+  const serviceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
+  const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? 0) || 0
+  const commissionValue = (serviceValue * commissionPercent) / 100
+  const salonValue = serviceValue - commissionValue
+  return {
+    type: 'entrada',
+    tipo: 'entrada',
+    category: 'Atendimento',
+    categoria: 'Atendimento',
+    description: `Atendimento - ${appointment.client}`,
+    descricao: `Atendimento - ${appointment.client}`,
+    method: appointment.paymentMethod ?? appointment.method ?? 'Pendente',
+    forma_pagamento: appointment.paymentMethod ?? appointment.method ?? 'Pendente',
+    value: serviceValue,
+    valor: serviceValue,
+    date: appointment.date ?? todayIso,
+    data: appointment.date ?? todayIso,
+    serviceValue,
+    service_value: serviceValue,
+    commissionPercent,
+    commission_percent: commissionPercent,
+    commissionValue,
+    commission_value: commissionValue,
+    salonValue,
+    salon_value: salonValue,
+    employeeId: employee?.id ?? null,
+    employee_id: employee?.id ?? null,
+    serviceId: service?.id ?? null,
+    service_id: service?.id ?? null,
+    appointmentId: appointment.id,
+    appointment_id: appointment.id,
+    referenciaId: appointment.id,
+    referencia_id: appointment.id,
+    referenciaTipo: 'appointment',
+    referencia_tipo: 'appointment'
+  }
 }
 
 function createAdvanceCashEntry(advance) {
@@ -528,6 +587,8 @@ function normalizeAppointmentRecord(row, employees = []) {
 }
 
 function normalizeCashMovementRecord(row) {
+  const serviceValue = Number(field(row, 'serviceValue', 'service_value') ?? field(row, 'value') ?? field(row, 'valor') ?? 0)
+  const commissionValue = Number(field(row, 'commissionValue', 'commission_value') ?? 0)
   return {
     ...row,
     type: field(row, 'type') ?? field(row, 'tipo') ?? 'Entrada',
@@ -541,7 +602,25 @@ function normalizeCashMovementRecord(row) {
     value: Number(field(row, 'value') ?? field(row, 'valor') ?? 0),
     valor: Number(field(row, 'valor') ?? field(row, 'value') ?? 0),
     date: field(row, 'date') ?? field(row, 'data') ?? todayIso,
-    data: field(row, 'data') ?? field(row, 'date') ?? todayIso
+    data: field(row, 'data') ?? field(row, 'date') ?? todayIso,
+    serviceValue,
+    service_value: serviceValue,
+    commissionPercent: Number(field(row, 'commissionPercent', 'commission_percent') ?? 0),
+    commission_percent: Number(field(row, 'commission_percent') ?? field(row, 'commissionPercent') ?? 0),
+    commissionValue,
+    commission_value: commissionValue,
+    salonValue: Number(field(row, 'salonValue', 'salon_value') ?? (serviceValue - commissionValue)),
+    salon_value: Number(field(row, 'salon_value') ?? field(row, 'salonValue') ?? (serviceValue - commissionValue)),
+    employeeId: field(row, 'employeeId', 'employee_id'),
+    employee_id: field(row, 'employee_id') ?? field(row, 'employeeId'),
+    serviceId: field(row, 'serviceId', 'service_id'),
+    service_id: field(row, 'service_id') ?? field(row, 'serviceId'),
+    appointmentId: field(row, 'appointmentId', 'appointment_id'),
+    appointment_id: field(row, 'appointment_id') ?? field(row, 'appointmentId'),
+    referenciaId: field(row, 'referenciaId', 'referencia_id'),
+    referencia_id: field(row, 'referencia_id') ?? field(row, 'referenciaId'),
+    referenciaTipo: field(row, 'referenciaTipo', 'referencia_tipo'),
+    referencia_tipo: field(row, 'referencia_tipo') ?? field(row, 'referenciaTipo')
   }
 }
 
@@ -1319,7 +1398,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
 
   const pages = {
     dashboard: <AdminDashboard appointments={appointments} employees={employees} clients={clients} cashEntries={cashEntries} advances={advances} />,
-    agenda: <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
+    agenda: <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} cashEntries={cashEntries} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
     clientes: <Clients salonId={salonId} user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
     servicos: <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} />,
     funcionarios: <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
@@ -1332,7 +1411,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
   }
 
-  return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
+  return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} cashEntries={cashEntries} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
 }
 
 function AdminDashboard({ appointments, employees, clients, cashEntries, advances }) {
@@ -1468,7 +1547,7 @@ function WeeklyRevenueChart({ appointments }) {
   )
 }
 
-function Agenda({ salonId, appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, setCashEntries, salonSettings, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
+function Agenda({ salonId, appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, cashEntries = [], setCashEntries, salonSettings, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
   const defaultProfessional = employees.find((item) => item.active && item.name === user.name)?.name ?? employees.find((item) => item.active)?.name ?? ''
   const createInitialAppointmentForm = () => {
     const professional = employees.find((item) => item.name === defaultProfessional)
@@ -1523,14 +1602,45 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     }
   }
 
+  function cashEntriesHasAppointment(appointmentId, entries = cashEntries) {
+    return entries.some((entry) => String(cashAppointmentId(entry) ?? '') === String(appointmentId))
+  }
+
+  async function ensureCashMovementForCompletedAppointment(appointment) {
+    if (!isCompletedStatus(appointment.status) || !appointment.id || cashEntriesHasAppointment(appointment.id)) return null
+
+    const existingMovement = await fetchCashMovementByAppointmentFromSupabase(salonId, appointment.id)
+    if (existingMovement) {
+      const normalized = normalizeCashMovementRecord(existingMovement)
+      setCashEntries((current) => cashEntriesHasAppointment(appointment.id, current) ? current : [...current, normalized])
+      return normalized
+    }
+
+    const cashPayload = createCompletedAppointmentCashEntry(appointment, allEmployees)
+    let savedMovement
+    try {
+      savedMovement = normalizeCashMovementRecord(await createCashMovementRecord(salonId, cashPayload))
+    } catch (error) {
+      if (error?.code !== '23505') throw error
+      const duplicateMovement = await fetchCashMovementByAppointmentFromSupabase(salonId, appointment.id)
+      if (!duplicateMovement) throw error
+      savedMovement = normalizeCashMovementRecord(duplicateMovement)
+    }
+    setCashEntries((current) => cashEntriesHasAppointment(appointment.id, current) ? current : [...current, savedMovement])
+    return savedMovement
+  }
+
   async function updateStatus(id, status) {
     const appointment = appointments.find((item) => item.id === id)
     if (!appointment) return
     if (user.role !== 'admin' && user.role !== 'cashier' && appointment.professional !== user.name) return
     try {
       const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, { status })) }, allEmployees)
+      if (!isCompletedStatus(appointment.status) && isCompletedStatus(status)) {
+        await ensureCashMovementForCompletedAppointment(saved)
+      }
       setAppointments((current) => current.map((item) => item.id === id ? saved : item))
-      if (status === 'Concluído') notify?.('Comissão calculada automaticamente.')
+      if (isCompletedStatus(status)) notify?.('Comissão calculada e lançada no caixa.')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -1610,8 +1720,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     }
     try {
       const appointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, appointmentPayload), allEmployees)
+      await ensureCashMovementForCompletedAppointment(appointment)
       setAppointments((current) => [...current, appointment])
-      setCashEntries((current) => [...current, { id: Date.now() + 1, type: 'Entrada', description: `Atendimento rápido - ${data.client}`, method: data.paymentMethod, value: Number(data.value) || 0, date }])
       setQuickModalOpen(false)
       notify?.('Atendimento rápido concluído.')
     } catch (error) {
@@ -2626,6 +2736,8 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
   const outcomeEntries = todayEntries.filter((item) => cashType(item) === 'saída' || cashType(item) === 'saida')
   const income = incomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
   const outcome = outcomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const commissionPaid = incomeEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
+  const salonProfit = incomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
   const byMethod = (method) => incomeEntries.filter((item) => cashMethod(item) === method).reduce((sum, item) => sum + cashValue(item), 0)
   const alreadyClosed = closures.some((item) => item.date === todayIso)
 
@@ -2663,6 +2775,8 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric title="Total do dia" value={money.format(income)} detail="Entradas" />
+        <Metric title="Comissão paga" value={money.format(commissionPaid)} detail="Atendimentos" />
+        <Metric title="Lucro do salão" value={money.format(salonProfit)} detail="Entradas - comissões" />
         <Metric title="Pix" value={money.format(byMethod('Pix'))} detail="Recebido hoje" />
         <Metric title="Dinheiro" value={money.format(byMethod('Dinheiro'))} detail="Recebido hoje" />
         <Metric title="Cartão" value={money.format(byMethod('Cartão'))} detail="Recebido hoje" />
@@ -2677,14 +2791,16 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
       <Panel title="Movimentações do caixa">
         <Table
           rows={todayEntries}
-          columns={['date', 'description', 'type', 'category', 'value']}
-          labels={['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor']}
+          columns={['date', 'description', 'type', 'category', 'value', 'commission', 'salon']}
+          labels={['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor', 'Comissão paga', 'Salão']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
             if (key === 'description') return cashDescription(row)
             if (key === 'type') return cashType(row) === 'entrada' ? 'Entrada' : 'Saída'
             if (key === 'category') return cashCategory(row) || '-'
             if (key === 'value') return money.format(cashValue(row))
+            if (key === 'commission') return cashCommissionValue(row) ? money.format(cashCommissionValue(row)) : '-'
+            if (key === 'salon') return cashCommissionValue(row) ? money.format(cashSalonValue(row)) : '-'
             return value
           }}
         />
