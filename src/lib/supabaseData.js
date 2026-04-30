@@ -186,6 +186,7 @@ function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
   const type = String(payload.type ?? payload.tipo ?? 'entrada').toLowerCase()
   const value = Number(payload.value ?? payload.valor ?? payload.serviceValue ?? payload.service_value ?? 0)
   const paymentMethod = payload.paymentMethod ?? payload.payment_method ?? payload.method ?? payload.forma_pagamento ?? ''
+  const paymentStatus = normalizePaymentStatus(payload.paymentStatus ?? payload.payment_status ?? payload.status)
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     type,
@@ -195,7 +196,8 @@ function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
     payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') ? paymentMethod : undefined,
     value: includeSalon || hasField(payload, 'value') || hasField(payload, 'valor') || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? value : undefined,
     date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
-    status: includeSalon || hasField(payload, 'status') ? payload.status ?? '' : undefined,
+    status: includeSalon || hasField(payload, 'status') || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') ? paymentStatus : undefined,
+    payment_status: includeSalon || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') || hasField(payload, 'status') ? paymentStatus : undefined,
     client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client_name') ? payload.clientName ?? payload.client_name ?? '' : undefined,
     service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service_name') ? payload.serviceName ?? payload.service_name ?? '' : undefined,
     employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? payload.employeeName ?? payload.employee_name ?? '' : undefined,

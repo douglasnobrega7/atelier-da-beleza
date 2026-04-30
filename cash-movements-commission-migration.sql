@@ -10,6 +10,7 @@ alter table public.cash_movements
   add column if not exists service_name text,
   add column if not exists employee_name text,
   add column if not exists status text not null default 'pago',
+  add column if not exists payment_status text not null default 'pago',
   add column if not exists payment_method text,
   add column if not exists referencia_id bigint,
   add column if not exists referencia_tipo text;
