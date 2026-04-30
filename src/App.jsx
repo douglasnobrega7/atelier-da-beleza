@@ -39,7 +39,7 @@ const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center j
 const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-pearl dark:border-white/10 dark:bg-[#24202c] dark:text-gray-100 dark:hover:bg-white/10'
 const buttonDanger = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25'
 const badgeBase = 'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-bold'
-const appointmentCardBase = 'min-w-0 overflow-hidden rounded-2xl border p-4 shadow-soft transition'
+const appointmentCardBase = 'min-w-0 overflow-visible rounded-2xl border p-4 shadow-soft transition'
 const employeeFunctionOptions = [
   'Cabeleireiro/Cabeleireira',
   'Colorista',
@@ -462,7 +462,12 @@ function normalizeAppointmentStatus(status) {
   return 'agendado'
 }
 
-const appointmentStatusOptions = ['agendado', 'confirmado', 'concluido', 'cancelado']
+const appointmentStatusOptions = [
+  { value: 'agendado', label: 'Agendado' },
+  { value: 'confirmado', label: 'Confirmado' },
+  { value: 'concluido', label: 'Concluído' },
+  { value: 'cancelado', label: 'Cancelado' }
+]
 
 const appointmentStatusLabels = {
   agendado: 'Agendado',
@@ -3834,7 +3839,7 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
           aria-label="Status do agendamento"
           className="absolute right-0 z-30 mt-2 w-full min-w-[180px] overflow-hidden rounded-xl border border-white/10 bg-[#1e1e2f] p-1 text-white shadow-2xl"
         >
-          {appointmentStatusOptions.map((status) => {
+          {appointmentStatusOptions.map(({ value: status, label }) => {
             const selected = status === normalizedValue
             return (
               <button
@@ -3845,7 +3850,7 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
                 className={`focus-ring flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold transition hover:bg-[#2a2a3d] ${selected ? 'bg-[#2a2a3d] ring-1 ring-white/15' : 'bg-transparent'} ${getAppointmentStatusTextClass(status)}`}
                 onClick={() => selectStatus(status)}
               >
-                <span>{formatAppointmentStatus(status)}</span>
+                <span>{label}</span>
                 {selected && <span className="text-xs font-black text-white" aria-hidden="true">✓</span>}
               </button>
             )
