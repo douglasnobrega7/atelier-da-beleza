@@ -24,6 +24,7 @@ import {
   isMissingTableError,
   seedSalonData,
   updateAppointment as updateAppointmentRecord,
+  updateCashMovement as updateCashMovementRecord,
   updateClient as updateClientRecord,
   updateEmployee as updateEmployeeRecord,
   updateSalon as updateSalonRecord,
@@ -71,8 +72,10 @@ const weekDayOptions = [
 const defaultWorkingDays = weekDayOptions.map((day) => day.id)
 const defaultOpeningHours = Object.fromEntries(weekDayOptions.map((day) => [day.id, { open: '09:00', close: '18:00' }]))
 const appointmentSlotInterval = 15
-const appointmentPaymentOptions = ['Sem pagamento', 'Dinheiro', 'Pix', 'Cartao']
-const appointmentPaymentValues = ['', 'dinheiro', 'pix', 'cartao']
+const paymentMethodOptions = ['PIX', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']
+const paymentMethodValues = ['pix', 'dinheiro', 'debito', 'credito', 'pendente']
+const appointmentPaymentOptions = ['Sem pagamento', 'PIX', 'Dinheiro', 'Débito', 'Crédito']
+const appointmentPaymentValues = ['', 'pix', 'dinheiro', 'debito', 'credito']
 
 function normalizeAppointmentPaymentMethod(value) {
   const normalized = String(value ?? '')
@@ -81,13 +84,33 @@ function normalizeAppointmentPaymentMethod(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 
-  if (normalized === 'dinheiro' || normalized === 'pix' || normalized === 'cartao') return normalized
+  if (normalized === 'dinheiro' || normalized === 'pix' || normalized === 'debito' || normalized === 'credito' || normalized === 'pendente') return normalized
+  if (normalized === 'cartao') return 'credito'
   return null
 }
 
 function cashPaymentMethodLabel(value) {
   const labels = { dinheiro: 'Dinheiro', pix: 'Pix', cartao: 'Cartão' }
   return labels[normalizeAppointmentPaymentMethod(value)] ?? 'Pendente'
+}
+
+function paymentMethodLabel(value) {
+  const labels = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Débito', credito: 'Crédito', pendente: 'Pendente' }
+  return labels[normalizeAppointmentPaymentMethod(value)] ?? 'Pendente'
+}
+
+function normalizePaymentStatus(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  return normalized === 'pago' || normalized === 'concluido' ? 'pago' : 'pendente'
+}
+
+function isPaymentPaid(value) {
+  return normalizePaymentStatus(value) === 'pago'
 }
 
 function timeToMinutes(time) {
@@ -430,7 +453,7 @@ function cashValue(entry) {
 }
 
 function cashMethod(entry) {
-  return entry.forma_pagamento ?? entry.method ?? ''
+  return field(entry, 'paymentMethod', 'payment_method') ?? entry.forma_pagamento ?? entry.method ?? ''
 }
 
 function cashDescription(entry) {
@@ -439,6 +462,10 @@ function cashDescription(entry) {
 
 function cashCategory(entry) {
   return entry.categoria ?? entry.category ?? ''
+}
+
+function cashStatus(entry) {
+  return normalizePaymentStatus(field(entry, 'status') ?? '')
 }
 
 function isCompletedStatus(status) {
@@ -519,6 +546,9 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
   const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? 0) || 0
   const commissionValue = (serviceValue * commissionPercent) / 100
   const salonValue = serviceValue - commissionValue
+  const paymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod ?? appointment.payment_method ?? appointment.method) ?? 'pendente'
+  const paymentStatus = paymentMethod === 'pendente' ? 'pendente' : normalizePaymentStatus(appointment.paymentStatus ?? appointment.payment_status ?? 'pago')
+  const methodLabel = paymentMethodLabel(paymentMethod)
   const createdAt = new Date().toISOString()
   return {
     type: 'entrada',
@@ -527,13 +557,15 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     categoria: 'Atendimento',
     description: `Atendimento - ${appointment.client}`,
     descricao: `Atendimento - ${appointment.client}`,
-    method: cashPaymentMethodLabel(appointment.paymentMethod ?? appointment.method),
-    forma_pagamento: cashPaymentMethodLabel(appointment.paymentMethod ?? appointment.method),
+    method: methodLabel,
+    forma_pagamento: methodLabel,
+    paymentMethod,
+    payment_method: paymentMethod,
     value: serviceValue,
     valor: serviceValue,
     date: appointment.date ?? todayIso,
     data: appointment.date ?? todayIso,
-    status: 'concluido',
+    status: paymentStatus,
     clientName: appointment.client ?? '',
     client_name: appointment.client ?? '',
     serviceName: service?.name ?? appointment.service ?? '',
@@ -717,7 +749,9 @@ function normalizeAppointmentRecord(row, employees = []) {
     duration,
     duracao: duration,
     status: normalizeAppointmentStatus(field(row, 'status')),
-    paymentMethod: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method'))
+    paymentMethod: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method')),
+    paymentStatus: normalizePaymentStatus(field(row, 'paymentStatus', 'payment_status')),
+    payment_status: normalizePaymentStatus(field(row, 'paymentStatus', 'payment_status'))
   }, employees)
 }
 
@@ -732,13 +766,15 @@ function normalizeCashMovementRecord(row) {
     descricao: field(row, 'descricao') ?? field(row, 'description') ?? '',
     category: field(row, 'category') ?? field(row, 'categoria') ?? '',
     categoria: field(row, 'categoria') ?? field(row, 'category') ?? '',
-    method: field(row, 'method') ?? field(row, 'forma_pagamento') ?? '',
-    forma_pagamento: field(row, 'forma_pagamento') ?? field(row, 'method') ?? '',
+    method: field(row, 'method') ?? field(row, 'forma_pagamento') ?? paymentMethodLabel(field(row, 'paymentMethod', 'payment_method')) ?? '',
+    forma_pagamento: field(row, 'forma_pagamento') ?? field(row, 'method') ?? paymentMethodLabel(field(row, 'paymentMethod', 'payment_method')) ?? '',
+    paymentMethod: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method') ?? field(row, 'method') ?? field(row, 'forma_pagamento')),
+    payment_method: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method') ?? field(row, 'method') ?? field(row, 'forma_pagamento')),
     value: Number(field(row, 'value') ?? field(row, 'valor') ?? 0),
     valor: Number(field(row, 'valor') ?? field(row, 'value') ?? 0),
     date: field(row, 'date') ?? field(row, 'data') ?? todayIso,
     data: field(row, 'data') ?? field(row, 'date') ?? todayIso,
-    status: field(row, 'status') ?? '',
+    status: normalizePaymentStatus(field(row, 'status') ?? ''),
     clientName: field(row, 'clientName', 'client_name') ?? '',
     client_name: field(row, 'client_name') ?? field(row, 'clientName') ?? '',
     serviceName: field(row, 'serviceName', 'service_name') ?? '',
@@ -1589,7 +1625,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     clientes: <Clients salonId={salonId} user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
     servicos: <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} />,
     funcionarios: <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
-    caixa: <CashRegister entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} notify={notify} />,
+    caixa: <CashRegister salonId={salonId} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} serviceItems={services} notify={notify} />,
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
     relatorios: user.role === 'admin' ? <Reports appointments={appointments} employees={employees} cashEntries={cashEntries} user={user} /> : <AccessDenied />,
@@ -1620,7 +1656,11 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const monthAdvances = advances.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
   const pendingAdvances = advances.filter((item) => item.status !== 'Descontado').reduce((sum, item) => sum + Number(item.value ?? 0), 0)
   const dayCashEntries = cashEntries.filter((item) => (item.date ?? item.data) === todayIso || (!item.date && !item.data))
-  const cashIncome = dayCashEntries.filter((item) => cashType(item) === 'entrada').reduce((sum, item) => sum + cashValue(item), 0)
+  const paidDayIncomeEntries = dayCashEntries.filter((item) => cashType(item) === 'entrada' && cashStatus(item) === 'pago')
+  const pendingDayIncomeEntries = dayCashEntries.filter((item) => cashType(item) === 'entrada' && cashStatus(item) === 'pendente')
+  const cashIncome = paidDayIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const dashboardByMethod = (methods) => paidDayIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashValue(item), 0)
+  const pendingPaymentsTotal = pendingDayIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
   const cashOutcome = dayCashEntries.filter((item) => cashType(item) === 'saída' || cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
 
   return (
@@ -1636,6 +1676,10 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
         <Metric title="Vales do mês" value={money.format(monthAdvances)} detail="Total registrado" />
         <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Ainda não descontados" />
         <Metric title="Saldo líquido do dia" value={money.format(cashIncome - cashOutcome)} detail="Caixa com saídas" />
+        <Metric title="PIX" value={money.format(dashboardByMethod(['PIX', 'Pix', 'pix']))} detail="Pagamentos pagos" />
+        <Metric title="Dinheiro" value={money.format(dashboardByMethod(['Dinheiro', 'dinheiro']))} detail="Pagamentos pagos" />
+        <Metric title="Cartão" value={money.format(dashboardByMethod(['Débito', 'Crédito', 'Cartão', 'Cartao', 'debito', 'credito']))} detail="Débito + crédito" />
+        <Metric title="Pendentes" value={money.format(pendingPaymentsTotal)} detail="Não pagos" />
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Faturamento semanal">
@@ -1822,10 +1866,15 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     if (!appointment) return false
     if (user.role !== 'admin' && user.role !== 'cashier' && getAppointmentEmployeeName(appointment, allEmployees) !== user.name) return false
     const normalizedStatus = normalizeAppointmentStatus(status)
+    const paidCashEntry = cashEntries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id) && cashStatus(entry) === 'pago')
+    if (isCompletedStatus(normalizedStatus) && !isPaymentPaid(appointment.paymentStatus ?? appointment.payment_status) && !paidCashEntry) {
+      notify?.('Receba o pagamento no caixa antes de concluir o atendimento.', 'error')
+      return false
+    }
     const optimistic = normalizeAppointmentRecord({ ...appointment, status: normalizedStatus }, allEmployees)
     setAppointments((current) => current.map((item) => item.id === id ? optimistic : item))
-    const selectedPaymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod)
-    const updatePayload = isCompletedStatus(normalizedStatus) ? { status: normalizedStatus, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null } : { status: normalizedStatus }
+    const selectedPaymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod ?? cashMethod(paidCashEntry))
+    const updatePayload = isCompletedStatus(normalizedStatus) ? { status: normalizedStatus, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null, paymentStatus: 'pago', payment_status: 'pago' } : { status: normalizedStatus }
     let saved = optimistic
     try {
       saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, updatePayload)) }, allEmployees)
@@ -1916,6 +1965,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const selectedQuickService = services.find((item) => item.name === data.service)
     const duration = serviceDurationToMinutes(selectedQuickService, professional?.defaultDuration ?? 60)
     const selectedPaymentMethod = normalizeAppointmentPaymentMethod(data.paymentMethod)
+    const paymentStatus = selectedPaymentMethod === 'pendente' ? 'pendente' : 'pago'
     const appointmentPayload = {
       client: data.client,
       service: data.service,
@@ -1936,7 +1986,9 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       duracao: duration,
       status: 'concluido',
       paymentMethod: selectedPaymentMethod,
-      payment_method: selectedPaymentMethod || null
+      payment_method: selectedPaymentMethod || null,
+      paymentStatus,
+      payment_status: paymentStatus
     }
     try {
       const appointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, appointmentPayload), allEmployees)
@@ -2007,7 +2059,9 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       duracao: duration,
       status: 'agendado',
       paymentMethod: selectedPaymentMethod,
-      payment_method: selectedPaymentMethod || null
+      payment_method: selectedPaymentMethod || null,
+      paymentStatus: 'pendente',
+      payment_status: 'pendente'
     }
 
     try {
@@ -2960,17 +3014,72 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     </Modal>
   )
 }
-function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
+function CashRegister({ salonId, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], serviceItems = services, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
+  const [paymentAppointment, setPaymentAppointment] = useState(null)
   const todayEntries = entries.filter((item) => !(item.date ?? item.data) || (item.date ?? item.data) === todayIso)
   const incomeEntries = todayEntries.filter((item) => cashType(item) === 'entrada')
+  const paidIncomeEntries = incomeEntries.filter((item) => cashStatus(item) === 'pago')
+  const pendingIncomeEntries = incomeEntries.filter((item) => cashStatus(item) === 'pendente')
   const outcomeEntries = todayEntries.filter((item) => cashType(item) === 'saída' || cashType(item) === 'saida')
-  const income = incomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const income = paidIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
   const outcome = outcomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
-  const commissionPaid = incomeEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
-  const salonProfit = incomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
-  const byMethod = (method) => incomeEntries.filter((item) => cashMethod(item) === method).reduce((sum, item) => sum + cashValue(item), 0)
+  const commissionPaid = paidIncomeEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
+  const salonProfit = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
+  const byMethod = (methods) => {
+    const methodList = Array.isArray(methods) ? methods : [methods]
+    const aliases = methodList.some((method) => String(method).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === 'cartao')
+      ? [...methodList, 'Débito', 'Crédito', 'debito', 'credito']
+      : methodList
+    return paidIncomeEntries.filter((item) => aliases.includes(cashMethod(item))).reduce((sum, item) => sum + cashValue(item), 0)
+  }
+  const pendingTotal = pendingIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const unpaidConfirmedAppointments = appointments.filter((item) => {
+    const entry = entries.find((cashEntry) => String(cashAppointmentId(cashEntry) ?? '') === String(item.id))
+    return normalizeAppointmentStatus(item.status) === 'confirmado' && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && cashStatus(entry) !== 'pago'
+  })
+  const pendingPayments = entries.filter((item) => cashType(item) === 'entrada' && cashStatus(item) === 'pendente')
   const alreadyClosed = closures.some((item) => item.date === todayIso)
+
+  async function receiveAppointmentPayment(appointment, paymentMethod) {
+    const normalizedMethod = normalizeAppointmentPaymentMethod(paymentMethod) ?? 'pendente'
+    const paymentStatus = normalizedMethod === 'pendente' ? 'pendente' : 'pago'
+    const payload = createCompletedAppointmentCashEntry({
+      ...appointment,
+      paymentMethod: normalizedMethod,
+      payment_method: normalizedMethod,
+      paymentStatus,
+      payment_status: paymentStatus
+    }, employees, serviceItems)
+    const existingEntry = entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
+
+    try {
+      const savedEntry = normalizeCashMovementRecord(existingEntry?.id
+        ? await updateCashMovementRecord(salonId, existingEntry.id, payload)
+        : await createCashMovementRecord(salonId, payload))
+      const updatedAppointment = normalizeAppointmentRecord({
+        ...appointment,
+        ...(await updateAppointmentRecord(salonId, appointment.id, {
+          paymentMethod: normalizedMethod,
+          payment_method: normalizedMethod,
+          paymentStatus,
+          payment_status: paymentStatus
+        }))
+      }, employees)
+
+      setEntries((current) => {
+        const exists = current.some((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
+        return exists
+          ? current.map((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id) ? savedEntry : entry)
+          : [...current, savedEntry]
+      })
+      setAppointments?.((current) => current.map((item) => String(item.id) === String(appointment.id) ? updatedAppointment : item))
+      setPaymentAppointment(null)
+      notify?.(paymentStatus === 'pago' ? 'Pagamento recebido.' : 'Pagamento marcado como pendente.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
+  }
 
   function closeDay() {
     if (alreadyClosed && !window.confirm('O caixa de hoje já foi fechado. Registrar novo fechamento mesmo assim?')) return
@@ -2984,6 +3093,8 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
       notify?.('Erro ao salvar: informe descrição e valor maior que zero.', 'error')
       return
     }
+    const selectedMethod = normalizeAppointmentPaymentMethod(data.method) ?? 'pendente'
+    const paymentStatus = selectedMethod === 'pendente' ? 'pendente' : 'pago'
     setEntries((current) => [...current, {
       id: Date.now(),
       type: data.type,
@@ -2994,6 +3105,9 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
       categoria: data.category.trim() || 'Operacional',
       method: data.method,
       forma_pagamento: data.method,
+      paymentMethod: selectedMethod,
+      payment_method: selectedMethod,
+      status: paymentStatus,
       value,
       valor: value,
       date: data.date
@@ -3008,10 +3122,10 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
         <Metric title="Total do dia" value={money.format(income)} detail="Entradas" />
         <Metric title="Comissão paga" value={money.format(commissionPaid)} detail="Atendimentos" />
         <Metric title="Lucro do salão" value={money.format(salonProfit)} detail="Entradas - comissões" />
-        <Metric title="Pix" value={money.format(byMethod('Pix'))} detail="Recebido hoje" />
-        <Metric title="Dinheiro" value={money.format(byMethod('Dinheiro'))} detail="Recebido hoje" />
+        <Metric title="PIX" value={money.format(byMethod(['PIX', 'Pix', 'pix']))} detail="Recebido hoje" />
+        <Metric title="Dinheiro" value={money.format(byMethod(['Dinheiro', 'dinheiro']))} detail="Recebido hoje" />
         <Metric title="Cartão" value={money.format(byMethod('Cartão'))} detail="Recebido hoje" />
-        <Metric title="Pendente" value={money.format(byMethod('Pendente'))} detail="A receber" />
+        <Metric title="Pendentes" value={money.format(pendingTotal)} detail="A receber" />
         <Metric title="Saídas" value={money.format(outcome)} detail="Hoje" />
         <Metric title="Saldo final" value={money.format(income - outcome)} detail="Entradas - saídas" />
       </div>
@@ -3019,6 +3133,36 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
         <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Nova movimentação</button>
         <button onClick={closeDay} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Fechar caixa do dia</button>
       </div>
+      <Panel title="Receber pagamentos">
+        <div className="space-y-3">
+          {unpaidConfirmedAppointments.map((item) => {
+            const existingEntry = entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(item.id))
+            const pending = cashStatus(existingEntry) === 'pendente' || normalizePaymentStatus(item.paymentStatus ?? item.payment_status) === 'pendente'
+            return (
+              <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{item.service} com {getAppointmentEmployeeName(item, employees)} · {money.format(Number(item.value ?? item.valor ?? 0))}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-3 py-1 text-xs font-black ${pending ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{pending ? 'Pendente' : 'Pago'}</span>
+                  <button type="button" onClick={() => setPaymentAppointment(item)} className={`${pending ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'} focus-ring rounded-2xl px-4 py-2 text-sm font-bold text-white shadow-sm transition`}>
+                    Receber pagamento
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+          {unpaidConfirmedAppointments.length === 0 && (
+            <div className="rounded-2xl border border-gray-100 bg-pearl px-4 py-5 text-sm font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+              Nenhum agendamento confirmado aguardando pagamento.
+            </div>
+          )}
+        </div>
+      </Panel>
+      <Panel title="Pagamentos pendentes">
+        <CompactList items={pendingPayments.length ? pendingPayments.map((item) => `${formatDate(item.date ?? item.data)} · ${cashClientName(item) || cashDescription(item)} · ${cashServiceName(item) || cashCategory(item)} · ${money.format(cashValue(item))}`) : ['Nenhum pagamento pendente']} />
+      </Panel>
       <Panel title="Movimentações do caixa">
         <Table
           rows={todayEntries}
@@ -3040,7 +3184,57 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
         <CompactList items={closures.length ? closures.map((item) => `${formatDate(item.date)} · saldo ${money.format(item.balance)}`) : ['Nenhum fechamento registrado']} />
       </Panel>
       {modalOpen && <CashEntryModal onClose={() => setModalOpen(false)} onSave={saveCashEntry} />}
+      {paymentAppointment && <ReceivePaymentModal appointment={paymentAppointment} employees={employees} serviceItems={serviceItems} existingEntry={entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(paymentAppointment.id))} onClose={() => setPaymentAppointment(null)} onConfirm={receiveAppointmentPayment} />}
     </div>
+  )
+}
+
+function ReceivePaymentModal({ appointment, employees, serviceItems, existingEntry, onClose, onConfirm }) {
+  const existingMethod = normalizeAppointmentPaymentMethod(cashMethod(existingEntry) || appointment.paymentMethod || appointment.payment_method) ?? 'pix'
+  const [paymentMethod, setPaymentMethod] = useState(existingMethod)
+  const service = serviceItems.find((item) => String(item.id) === String(appointment.serviceId ?? appointment.service_id) || item.name === appointment.service)
+  const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
+  const serviceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
+  const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? 0) || 0
+  const commissionValue = serviceValue * (commissionPercent / 100)
+  const salonValue = serviceValue - commissionValue
+  const paymentStatus = paymentMethod === 'pendente' ? 'pendente' : 'pago'
+
+  return (
+    <Modal title="Receber pagamento" onClose={onClose}>
+      <form onSubmit={(event) => { event.preventDefault(); onConfirm(appointment, paymentMethod) }} className="space-y-4">
+        <div className="rounded-2xl border border-blush bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
+          <p>{appointment.client} · {appointment.service}</p>
+          <p className="mt-1">{employee?.name ?? getAppointmentEmployeeName(appointment, employees)}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Metric title="Valor do serviço" value={money.format(serviceValue)} detail={service?.name ?? appointment.service} />
+          <Metric title="Comissão" value={money.format(commissionValue)} detail={`${commissionPercent}%`} />
+          <Metric title="Salão" value={money.format(salonValue)} detail="Valor líquido" />
+        </div>
+        <fieldset className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+          <legend className="px-1 text-sm font-semibold text-gray-600 dark:text-gray-300">Forma de pagamento</legend>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {paymentMethodOptions.map((option, index) => {
+              const value = paymentMethodValues[index]
+              const selected = paymentMethod === value
+              return (
+                <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm font-bold transition ${selected ? 'border-graphite bg-graphite text-white dark:border-lilacSoft dark:bg-lilacSoft dark:text-graphite' : 'border-gray-100 bg-white text-graphite hover:bg-pearl dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100 dark:hover:bg-white/10'}`}>
+                  <input type="radio" name="paymentMethod" checked={selected} onChange={() => setPaymentMethod(value)} className="h-4 w-4 accent-[#c9a85d]" />
+                  <span>{option}</span>
+                </label>
+              )
+            })}
+          </div>
+        </fieldset>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button className={`${paymentStatus === 'pago' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-500 hover:bg-amber-600'} focus-ring inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition`}>
+            {paymentStatus === 'pago' ? 'Pago' : 'Pendente'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

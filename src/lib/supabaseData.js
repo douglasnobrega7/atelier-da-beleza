@@ -127,6 +127,7 @@ function servicePayload(payload = {}, salonId, includeSalon = false) {
 
 function appointmentPayload(payload = {}, salonId, includeSalon = false) {
   const selectedPaymentMethod = normalizeAppointmentPaymentMethod(payload.paymentMethod ?? payload.payment_method)
+  const paymentStatus = normalizePaymentStatus(payload.paymentStatus ?? payload.payment_status)
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client') ? payload.clientName ?? payload.client ?? '' : undefined,
@@ -137,6 +138,7 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
     appointment_time: includeSalon || hasField(payload, 'appointmentTime') || hasField(payload, 'time') || hasField(payload, 'horario') ? payload.appointmentTime ?? payload.time ?? payload.horario : undefined,
     status: includeSalon || hasField(payload, 'status') ? normalizeAppointmentStatus(payload.status) : undefined,
     payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? selectedPaymentMethod || null : undefined,
+    payment_status: includeSalon || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') ? paymentStatus : undefined,
     duration: includeSalon || hasField(payload, 'duration') || hasField(payload, 'duracao') ? Number(payload.duration ?? payload.duracao ?? 0) : undefined,
     price: includeSalon || hasField(payload, 'price') || hasField(payload, 'value') || hasField(payload, 'valor') ? Number(payload.price ?? payload.value ?? payload.valor ?? 0) : undefined
   })
@@ -163,19 +165,32 @@ function normalizeAppointmentPaymentMethod(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 
-  if (normalized === 'dinheiro' || normalized === 'pix' || normalized === 'cartao') return normalized
+  if (normalized === 'dinheiro' || normalized === 'pix' || normalized === 'debito' || normalized === 'credito' || normalized === 'pendente') return normalized
+  if (normalized === 'cartao') return 'credito'
   return null
+}
+
+function normalizePaymentStatus(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  return normalized === 'pago' || normalized === 'concluido' ? 'pago' : 'pendente'
 }
 
 function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
   const type = String(payload.type ?? payload.tipo ?? 'entrada').toLowerCase()
   const value = Number(payload.value ?? payload.valor ?? payload.serviceValue ?? payload.service_value ?? 0)
+  const paymentMethod = payload.paymentMethod ?? payload.payment_method ?? payload.method ?? payload.forma_pagamento ?? ''
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     type,
     description: includeSalon || hasField(payload, 'description') || hasField(payload, 'descricao') ? payload.description ?? payload.descricao ?? '' : undefined,
     category: includeSalon || hasField(payload, 'category') || hasField(payload, 'categoria') ? payload.category ?? payload.categoria ?? '' : undefined,
-    method: includeSalon || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') || hasField(payload, 'paymentMethod') ? payload.method ?? payload.forma_pagamento ?? payload.paymentMethod ?? '' : undefined,
+    method: includeSalon || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? paymentMethod : undefined,
+    payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') ? paymentMethod : undefined,
     value: includeSalon || hasField(payload, 'value') || hasField(payload, 'valor') || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? value : undefined,
     date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
     status: includeSalon || hasField(payload, 'status') ? payload.status ?? '' : undefined,
@@ -642,6 +657,10 @@ export async function fetchCashMovementByAppointment(salonId, appointmentId) {
 
 export async function createCashMovement(salonId, payload) {
   return insertRow(TABLES.cashMovements, salonId, payload, cashMovementPayload)
+}
+
+export async function updateCashMovement(salonId, id, payload) {
+  return updateRow(TABLES.cashMovements, salonId, id, payload, cashMovementPayload)
 }
 
 export async function fetchAdvances(salonId) {
