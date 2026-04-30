@@ -135,11 +135,25 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
     employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
     appointment_date: includeSalon || hasField(payload, 'appointmentDate') || hasField(payload, 'date') ? payload.appointmentDate ?? payload.date : undefined,
     appointment_time: includeSalon || hasField(payload, 'appointmentTime') || hasField(payload, 'time') || hasField(payload, 'horario') ? payload.appointmentTime ?? payload.time ?? payload.horario : undefined,
-    status: includeSalon || hasField(payload, 'status') ? payload.status ?? 'Aguardando' : undefined,
+    status: includeSalon || hasField(payload, 'status') ? normalizeAppointmentStatus(payload.status) : undefined,
     payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? selectedPaymentMethod || null : undefined,
     duration: includeSalon || hasField(payload, 'duration') || hasField(payload, 'duracao') ? Number(payload.duration ?? payload.duracao ?? 0) : undefined,
     price: includeSalon || hasField(payload, 'price') || hasField(payload, 'value') || hasField(payload, 'valor') ? Number(payload.price ?? payload.value ?? payload.valor ?? 0) : undefined
   })
+}
+
+function normalizeAppointmentStatus(status) {
+  const normalized = String(status ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (normalized === 'agendado' || normalized === 'aguardando') return 'agendado'
+  if (normalized === 'confirmado') return 'confirmado'
+  if (normalized === 'concluido') return 'concluido'
+  if (normalized === 'cancelado') return 'cancelado'
+  return 'agendado'
 }
 
 function normalizeAppointmentPaymentMethod(value) {
@@ -482,7 +496,7 @@ export async function seedSalonData(salonId) {
         date: today,
         time,
         price: 50,
-        status: 'Confirmado'
+        status: 'confirmado'
       }, salonId, true))
   )
 
@@ -620,7 +634,8 @@ export async function fetchCashMovementByAppointment(salonId, appointmentId) {
       .from(TABLES.cashMovements)
       .select('*')
       .eq('salon_id', salonId)
-      .eq('appointment_id', appointmentId)
+      .or(`appointment_id.eq.${appointmentId},and(referencia_id.eq.${appointmentId},referencia_tipo.eq.appointment)`)
+      .limit(1)
       .maybeSingle()
   )
 }

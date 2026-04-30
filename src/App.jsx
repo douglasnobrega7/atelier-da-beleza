@@ -231,7 +231,7 @@ function getAvailableSlots({ employee, date, service, appointments, blockedSlots
   const booked = appointments.filter((appointment) => (
     isAppointmentForEmployee(appointment, employee) &&
     appointment.date === date &&
-    appointment.status !== 'Cancelado'
+    !isCancelledStatus(appointment.status)
   ))
   const blocked = blockedSlots.filter((block) => getBlockEmployeeName(block) === employee.name && block.date === date)
 
@@ -258,7 +258,7 @@ function getOccupiedSlots({ employee, date, appointments }) {
     .filter((appointment) => (
       isAppointmentForEmployee(appointment, employee) &&
       appointment.date === date &&
-      appointment.status !== 'Cancelado'
+      !isCancelledStatus(appointment.status)
     ))
     .sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b)))
 }
@@ -393,7 +393,7 @@ function withCommission(appointment, employees) {
 }
 
 function getClientInsights(clientName, appointments) {
-  const visits = appointments.filter((item) => item.client === clientName && item.status === 'Concluído')
+  const visits = appointments.filter((item) => item.client === clientName && isCompletedStatus(item.status))
   const serviceCounts = visits.reduce((acc, item) => ({ ...acc, [item.service]: (acc[item.service] || 0) + 1 }), {})
   const favoriteService = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Sem histórico'
   const total = visits.reduce((sum, item) => sum + Number(item.value ?? item.valor ?? 0), 0)
@@ -440,7 +440,38 @@ function cashCategory(entry) {
 }
 
 function isCompletedStatus(status) {
-  return String(status ?? '').toLowerCase().startsWith('conclu')
+  return normalizeAppointmentStatus(status) === 'concluido'
+}
+
+function isCancelledStatus(status) {
+  return normalizeAppointmentStatus(status) === 'cancelado'
+}
+
+function normalizeAppointmentStatus(status) {
+  const normalized = String(status ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (normalized === 'agendado' || normalized === 'aguardando') return 'agendado'
+  if (normalized === 'confirmado') return 'confirmado'
+  if (normalized === 'concluido') return 'concluido'
+  if (normalized === 'cancelado') return 'cancelado'
+  return 'agendado'
+}
+
+const appointmentStatusOptions = ['agendado', 'confirmado', 'concluido', 'cancelado']
+
+const appointmentStatusLabels = {
+  agendado: 'Agendado',
+  confirmado: 'Confirmado',
+  concluido: 'Concluído',
+  cancelado: 'Cancelado'
+}
+
+function formatAppointmentStatus(status) {
+  return appointmentStatusLabels[normalizeAppointmentStatus(status)] ?? 'Agendado'
 }
 
 function cashAppointmentId(entry) {
@@ -678,7 +709,7 @@ function normalizeAppointmentRecord(row, employees = []) {
     valor: value,
     duration,
     duracao: duration,
-    status: field(row, 'status') ?? 'Aguardando',
+    status: normalizeAppointmentStatus(field(row, 'status')),
     paymentMethod: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method'))
   }, employees)
 }
@@ -835,10 +866,10 @@ const professionalMenu = [
 ]
 
 const statusStyles = {
-  Aguardando: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200',
-  Confirmado: 'border-violet-100 bg-lilacSoft/40 text-violet-800 dark:border-violet-300/30 dark:bg-violet-500/20 dark:text-violet-100',
-  'Concluído': 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200',
-  Cancelado: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200'
+  agendado: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200',
+  confirmado: 'border-violet-100 bg-lilacSoft/40 text-violet-800 dark:border-violet-300/30 dark:bg-violet-500/20 dark:text-violet-100',
+  concluido: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200',
+  cancelado: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200'
 }
 
 const employeeStatuses = ['Ativo', 'De folga', 'Horário de almoço']
@@ -1522,7 +1553,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
 
 function AdminDashboard({ appointments, employees, clients, cashEntries, advances }) {
   const professionals = getProfessionals(employees)
-  const completed = appointments.filter((item) => item.status === 'Concluído')
+  const completed = appointments.filter((item) => isCompletedStatus(item.status))
   const dayRevenue = completed.reduce((sum, item) => sum + item.value, 0)
   const monthRevenue = completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
   const commissions = professionals.map((employee) => ({ name: employee.name, value: completed.filter((item) => isAppointmentForEmployee(item, employee)).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0) }))
@@ -1530,7 +1561,7 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const dayCommissions = todayCompleted.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
   const monthCommissions = completed.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
   const topClient = topEntries(countBy(completed, (item) => item.client), 1)[0]
-  const busyHours = topEntries(countBy(appointments.filter((item) => item.status !== 'Cancelado'), (item) => item.time?.slice(0, 2) + ':00'))
+  const busyHours = topEntries(countBy(appointments.filter((item) => !isCancelledStatus(item.status)), (item) => item.time?.slice(0, 2) + ':00'))
   const bestWeekday = topEntries(completed.reduce((acc, item) => ({ ...acc, [getWeekdayLabel(item.date)]: (acc[getWeekdayLabel(item.date)] || 0) + Number(item.value ?? 0) }), {}), 1)[0]
   const serviceRevenue = topEntries(completed.reduce((acc, item) => ({ ...acc, [item.service]: (acc[item.service] || 0) + Number(item.value ?? 0) }), {}))
   const serviceSales = topEntries(countBy(completed, (item) => item.service))
@@ -1592,7 +1623,7 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
         </Panel>
         <Panel title="Próximos agendamentos">
           <div className="space-y-3">
-            {appointments.filter((item) => item.status !== 'Cancelado').slice(0, 4).map((item) => (
+            {appointments.filter((item) => !isCancelledStatus(item.status)).slice(0, 4).map((item) => (
               <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-3 text-sm">
                 <p className="font-semibold">{formatDate(item.date)} · {item.time} · {item.client}</p>
                 <p className="text-gray-500">{item.service} com {getAppointmentEmployeeName(item, employees)}</p>
@@ -1609,7 +1640,7 @@ function WeeklyRevenueChart({ appointments }) {
   const [tooltip, setTooltip] = useState(null)
   const weekDates = getWeekDates(todayIso).slice(1).concat(getWeekDates(todayIso).slice(0, 1))
   const chartData = weekDates.map((date) => {
-    const completed = appointments.filter((item) => item.date === date && item.status === 'Concluído')
+    const completed = appointments.filter((item) => item.date === date && isCompletedStatus(item.status))
     return {
       date,
       day: getWeekdayLabel(date).replace('.', ''),
@@ -1740,16 +1771,22 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const appointment = appointments.find((item) => item.id === id)
     if (!appointment) return
     if (user.role !== 'admin' && user.role !== 'cashier' && getAppointmentEmployeeName(appointment, allEmployees) !== user.name) return
+    const normalizedStatus = normalizeAppointmentStatus(status)
+    const optimistic = normalizeAppointmentRecord({ ...appointment, status: normalizedStatus }, allEmployees)
+    setAppointments((current) => current.map((item) => item.id === id ? optimistic : item))
     const selectedPaymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod)
-    const updatePayload = isCompletedStatus(status) ? { status, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null } : { status }
+    const updatePayload = isCompletedStatus(normalizedStatus) ? { status: normalizedStatus, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null } : { status: normalizedStatus }
     try {
       const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, updatePayload)) }, allEmployees)
-      if (!isCompletedStatus(appointment.status) && isCompletedStatus(status)) {
+      if (isCompletedStatus(normalizedStatus)) {
         await ensureCashMovementForCompletedAppointment(saved)
       }
       setAppointments((current) => current.map((item) => item.id === id ? saved : item))
-      if (isCompletedStatus(status)) notify?.('Comissão calculada e lançada no caixa.')
+      const refreshedRows = await fetchAppointmentsFromSupabase(salonId)
+      setAppointments((refreshedRows ?? []).map((item) => normalizeAppointmentRecord(item, allEmployees)))
+      if (isCompletedStatus(normalizedStatus)) notify?.('Comissão calculada e lançada no caixa.')
     } catch (error) {
+      setAppointments((current) => current.map((item) => item.id === id ? appointment : item))
       handleDataActionError(error, notify)
     }
   }
@@ -1757,10 +1794,10 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   async function deleteAppointment(appointment) {
     if (user.role !== 'admin' && user.role !== 'cashier') return false
 
-    if (appointment.status === 'Concluído') {
+    if (isCompletedStatus(appointment.status)) {
       if (!window.confirm('Este agendamento já foi concluído. Deseja cancelar em vez de excluir?')) return false
       try {
-        const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, appointment.id, { status: 'Cancelado' })) }, allEmployees)
+        const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, appointment.id, { status: 'cancelado' })) }, allEmployees)
         setAppointments((current) => current.map((item) => item.id === appointment.id ? saved : item))
         notify?.('Agendamento cancelado com sucesso')
         return true
@@ -1833,7 +1870,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       valor: Number(data.value) || 0,
       duration,
       duracao: duration,
-      status: 'Concluído',
+      status: 'concluido',
       paymentMethod: selectedPaymentMethod,
       payment_method: selectedPaymentMethod || null
     }
@@ -1904,7 +1941,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       valor: value,
       duration,
       duracao: duration,
-      status: 'Aguardando',
+      status: 'agendado',
       paymentMethod: selectedPaymentMethod,
       payment_method: selectedPaymentMethod || null
     }
@@ -1993,12 +2030,12 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
                     <p className="mt-1 text-sm text-gray-600">{item.service} com {getAppointmentEmployeeName(item, allEmployees)}</p>
                     <p className="mt-2 text-sm text-gray-500">Duração: {getAppointmentDuration(item, allEmployees.find((employee) => isAppointmentForEmployee(item, employee)))} min</p>
                     {user.role === 'admin' && <p className="mt-2 text-sm font-semibold text-goldSoft">{money.format(item.value)}</p>}
-                    {item.status === 'Concluído' && <p className="mt-1 text-sm font-semibold text-emerald-700">Comissão: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
+                    {isCompletedStatus(item.status) && <p className="mt-1 text-sm font-semibold text-emerald-700">Comissão: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
                   </div>
                   <div className="flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
                     <button type="button" onClick={() => sendConfirmation(item)} className={`${buttonSecondary} rounded-full px-3 py-2`}>Enviar confirmação</button>
-                    <select className={`focus-ring min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[item.status]}`} value={item.status} onChange={(event) => updateStatus(item.id, event.target.value)}>
-                      {Object.keys(statusStyles).map((status) => <option key={status}>{status}</option>)}
+                    <select className={`focus-ring min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[normalizeAppointmentStatus(item.status)]}`} value={normalizeAppointmentStatus(item.status)} onChange={(event) => updateStatus(item.id, event.target.value)}>
+                      {appointmentStatusOptions.map((status) => <option key={status} value={status}>{formatAppointmentStatus(status)}</option>)}
                     </select>
                     {(user.role === 'admin' || user.role === 'cashier') && <button type="button" onClick={() => deleteAppointment(item)} className={`${buttonDanger} rounded-full px-3 py-2`}>Excluir</button>}
                   </div>
@@ -2023,10 +2060,10 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
 function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStatusChange, onSendConfirmation, onDeleteAppointment }) {
   const [selectedItem, setSelectedItem] = useState(null)
   const weeklyStatusStyles = {
-    Aguardando: 'border-amber-200 bg-amber-50 text-amber-900',
-    Confirmado: 'border-sky-200 bg-sky-50 text-sky-900',
-    'Concluído': 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    Cancelado: 'border-rose-200 bg-rose-50 text-rose-900'
+    agendado: 'border-amber-200 bg-amber-50 text-amber-900',
+    confirmado: 'border-sky-200 bg-sky-50 text-sky-900',
+    concluido: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    cancelado: 'border-rose-200 bg-rose-50 text-rose-900'
   }
 
   return (
@@ -2056,7 +2093,7 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
                       key={item.id}
                       type="button"
                       onClick={() => setSelectedItem(item)}
-                      className={`block w-full rounded-xl border px-3 py-2 text-left text-xs shadow-sm transition hover:-translate-y-0.5 hover:shadow-soft ${weeklyStatusStyles[item.status] ?? weeklyStatusStyles.Aguardando}`}
+                      className={`block w-full rounded-xl border px-3 py-2 text-left text-xs shadow-sm transition hover:-translate-y-0.5 hover:shadow-soft ${weeklyStatusStyles[normalizeAppointmentStatus(item.status)] ?? weeklyStatusStyles.agendado}`}
                     >
                       <p className="font-extrabold">{item.time}</p>
                       <p className="mt-1 truncate font-bold">{item.client}</p>
@@ -2085,8 +2122,8 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <button type="button" onClick={() => onSendConfirmation(selectedItem)} className={buttonSecondary}>Enviar confirmação</button>
               {(user.role === 'admin' || user.role === 'cashier' || getAppointmentEmployeeName(selectedItem, employees) === user.name) && (
-                <select className={`focus-ring min-w-[130px] rounded-xl border px-3 py-2 text-sm font-semibold ${statusStyles[selectedItem.status]}`} value={selectedItem.status} onChange={(event) => { onStatusChange(selectedItem.id, event.target.value); setSelectedItem({ ...selectedItem, status: event.target.value }) }}>
-                  {Object.keys(statusStyles).map((status) => <option key={status}>{status}</option>)}
+                <select className={`focus-ring min-w-[130px] rounded-xl border px-3 py-2 text-sm font-semibold ${statusStyles[normalizeAppointmentStatus(selectedItem.status)]}`} value={normalizeAppointmentStatus(selectedItem.status)} onChange={(event) => { onStatusChange(selectedItem.id, event.target.value); setSelectedItem({ ...selectedItem, status: event.target.value }) }}>
+                  {appointmentStatusOptions.map((status) => <option key={status} value={status}>{formatAppointmentStatus(status)}</option>)}
                 </select>
               )}
               {(user.role === 'admin' || user.role === 'cashier') && (
@@ -2229,7 +2266,7 @@ function AvailabilityPanel({ employee, date, service, salonSettings, availableSl
               {occupiedSlots.map((appointment) => (
                 <div key={appointment.id} className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm">
                   <p className="font-bold text-rose-800">{appointment.time} - {appointment.client} - {appointment.service}</p>
-                  <p className="mt-1 text-rose-700">Duração: {getAppointmentDuration(appointment, employee)} min · {appointment.status}</p>
+                  <p className="mt-1 text-rose-700">Duração: {getAppointmentDuration(appointment, employee)} min · {formatAppointmentStatus(appointment.status)}</p>
                 </div>
               ))}
             </div>
@@ -2705,7 +2742,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 
     const hasLinkedFutureAppointments = appointments.some((appointment) => (
       isAppointmentForEmployee(appointment, employee) &&
-      appointment.status !== 'Cancelado' &&
+      !isCancelledStatus(appointment.status) &&
       (appointment.date ?? '') >= todayIso
     ))
 
@@ -3265,7 +3302,7 @@ function InventoryModal({ product, onClose, onSave }) {
 
 function Reports({ appointments, employees, cashEntries = [], user }) {
   const appointmentEntries = cashEntries.filter(isAppointmentCashEntry)
-  const completed = appointmentEntries.length ? appointmentEntries : appointments.filter((item) => item.status === 'Concluído')
+  const completed = appointmentEntries.length ? appointmentEntries : appointments.filter((item) => isCompletedStatus(item.status))
   const commissions = appointmentEntries.length
     ? appointmentEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
     : completed.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
@@ -3383,7 +3420,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
         <Panel title={view === 'day' ? 'Meus agendamentos do dia' : 'Minha semana'}>
           {view === 'day' ? (
             <div className="space-y-3">
-              {dayAppointments.map((item) => <LineItem key={item.id} label={`${item.time} · ${item.client} · ${item.service}`} value={item.status} />)}
+              {dayAppointments.map((item) => <LineItem key={item.id} label={`${item.time} · ${item.client} · ${item.service}`} value={formatAppointmentStatus(item.status)} />)}
               {dayAppointments.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum agendamento nesta data.</p>}
             </div>
           ) : (
@@ -3442,13 +3479,13 @@ function MyAppointments({ user, appointments }) {
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
         <Metric title="Atendimentos hoje" value={appointments.length} detail={user.name} />
-        <Metric title="Concluídos" value={appointments.filter((item) => item.status === 'Concluído').length} detail="Sem valores financeiros" />
-        <Metric title="Confirmados" value={appointments.filter((item) => item.status === 'Confirmado').length} detail="Próximos Horários" />
-        <Metric title="Minha Comissão" value={money.format(appointments.filter((item) => item.status === 'Concluído').reduce((sum, item) => sum + Number(item.comissaoCalculada ?? item.commission ?? 0), 0))} detail="Atendimentos concluídos" />
+        <Metric title="Concluídos" value={appointments.filter((item) => isCompletedStatus(item.status)).length} detail="Sem valores financeiros" />
+        <Metric title="Confirmados" value={appointments.filter((item) => normalizeAppointmentStatus(item.status) === 'confirmado').length} detail="Próximos Horários" />
+        <Metric title="Minha Comissão" value={money.format(appointments.filter((item) => isCompletedStatus(item.status)).reduce((sum, item) => sum + Number(item.comissaoCalculada ?? item.commission ?? 0), 0))} detail="Atendimentos concluídos" />
       </div>
       <Panel title="Meus atendimentos">
         <div className="space-y-3">
-          {appointments.map((item) => <LineItem key={item.id} label={`${formatDate(item.date)} · ${item.time} · ${item.client}`} value={item.status} />)}
+          {appointments.map((item) => <LineItem key={item.id} label={`${formatDate(item.date)} · ${item.time} · ${item.client}`} value={formatAppointmentStatus(item.status)} />)}
         </div>
       </Panel>
     </div>

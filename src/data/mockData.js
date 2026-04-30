@@ -26,12 +26,12 @@ export const clients = [
 ]
 
 export const appointments = [
-  { id: 1, client: 'Ana Paula Martins', service: 'Corte feminino', employee_id: 2, employee_name: 'Livia Moreira', date: '2026-04-27', time: '08:30', value: 90, status: 'Confirmado' },
-  { id: 2, client: 'Juliana Nunes', service: 'Manicure gel', employee_id: 1, employee_name: 'Camila Rocha', date: '2026-04-27', time: '09:00', value: 70, status: 'Aguardando' },
-  { id: 3, client: 'Carla Mendes', service: 'Coloração', employee_id: 2, employee_name: 'Livia Moreira', date: '2026-04-27', time: '10:30', value: 220, status: 'Confirmado' },
-  { id: 4, client: 'Patricia Souza', service: 'Limpeza de pele', employee_id: 3, employee_name: 'Bianca Reis', date: '2026-04-27', time: '13:00', value: 160, status: 'Concluído' },
-  { id: 5, client: 'Fernanda Alves', service: 'Maquiagem social', employee_id: 4, employee_name: 'Renata Lima', date: '2026-04-27', time: '15:30', value: 180, status: 'Cancelado' },
-  { id: 6, client: 'Juliana Nunes', service: 'Pedicure spa', employee_id: 1, employee_name: 'Camila Rocha', date: '2026-04-28', time: '14:00', value: 85, status: 'Confirmado' }
+  { id: 1, client: 'Ana Paula Martins', service: 'Corte feminino', employee_id: 2, employee_name: 'Livia Moreira', date: '2026-04-27', time: '08:30', value: 90, status: 'confirmado' },
+  { id: 2, client: 'Juliana Nunes', service: 'Manicure gel', employee_id: 1, employee_name: 'Camila Rocha', date: '2026-04-27', time: '09:00', value: 70, status: 'agendado' },
+  { id: 3, client: 'Carla Mendes', service: 'Coloração', employee_id: 2, employee_name: 'Livia Moreira', date: '2026-04-27', time: '10:30', value: 220, status: 'confirmado' },
+  { id: 4, client: 'Patricia Souza', service: 'Limpeza de pele', employee_id: 3, employee_name: 'Bianca Reis', date: '2026-04-27', time: '13:00', value: 160, status: 'concluido' },
+  { id: 5, client: 'Fernanda Alves', service: 'Maquiagem social', employee_id: 4, employee_name: 'Renata Lima', date: '2026-04-27', time: '15:30', value: 180, status: 'cancelado' },
+  { id: 6, client: 'Juliana Nunes', service: 'Pedicure spa', employee_id: 1, employee_name: 'Camila Rocha', date: '2026-04-28', time: '14:00', value: 85, status: 'confirmado' }
 ]
 
 export const cashFlow = [
