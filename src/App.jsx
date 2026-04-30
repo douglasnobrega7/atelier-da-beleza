@@ -319,6 +319,43 @@ function shiftDate(date, days) {
   return `${nextYear}-${nextMonth}-${nextDay}`
 }
 
+function addMonthsIso(date, months) {
+  if (!date) return getTodayIso()
+  const [year, month, day] = date.split('-').map(Number)
+  const nextDate = new Date(year, month - 1, day)
+  nextDate.setMonth(nextDate.getMonth() + months)
+  const nextYear = nextDate.getFullYear()
+  const nextMonth = String(nextDate.getMonth() + 1).padStart(2, '0')
+  const nextDay = String(nextDate.getDate()).padStart(2, '0')
+  return `${nextYear}-${nextMonth}-${nextDay}`
+}
+
+function getPeriodEndDate(startDate, periodType) {
+  if (periodType === 'quinzena') return shiftDate(startDate, 15)
+  if (periodType === 'mes') return addMonthsIso(startDate, 1)
+  return shiftDate(startDate, 7)
+}
+
+function parseDateStart(date) {
+  const [year, month, day] = String(date ?? '').split('-').map(Number)
+  const parsed = new Date(year, month - 1, day)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function parseDateEnd(date) {
+  const parsed = parseDateStart(date)
+  if (!parsed) return null
+  parsed.setHours(23, 59, 59, 999)
+  return parsed
+}
+
+function parseCashCreatedAt(entry) {
+  const createdAt = field(entry, 'createdAt', 'created_at')
+  if (!createdAt) return null
+  const parsed = new Date(createdAt)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
 function getWeekDates(date) {
   const [year, month, day] = date.split('-').map(Number)
   const base = new Date(year, month - 1, day)
@@ -3693,6 +3730,8 @@ function InventoryModal({ product, onClose, onSave }) {
 }
 
 function Reports({ appointments, employees, cashEntries = [], user }) {
+  const [employeeResultPeriod, setEmployeeResultPeriod] = useState('semana')
+  const [employeeResultStartDate, setEmployeeResultStartDate] = useState(todayIso)
   const appointmentEntries = cashEntries.filter(isAppointmentCashEntry)
   const completed = appointmentEntries.length ? appointmentEntries : appointments.filter((item) => isCompletedStatus(item.status))
   const commissions = appointmentEntries.length
@@ -3725,7 +3764,19 @@ function Reports({ appointments, employees, cashEntries = [], user }) {
     ? appointmentEntries.reduce((sum, item) => sum + cashValue(item), 0)
     : completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="space-y-5">
+      {user.role === 'admin' && (
+        <EmployeeResultsReport
+          cashEntries={cashEntries}
+          employees={employees}
+          periodType={employeeResultPeriod}
+          startDate={employeeResultStartDate}
+          onPeriodTypeChange={setEmployeeResultPeriod}
+          onStartDateChange={setEmployeeResultStartDate}
+        />
+      )}
+
+      <div className="grid gap-5 lg:grid-cols-2">
       {user.role === 'admin' && <Panel title="Faturamento por período"><CompactList items={[`Mês atual: ${money.format(revenue)}`, `Ticket médio: ${money.format(completed.length ? revenue / completed.length : 0)}`]} /></Panel>}
       <Panel title={user.role === 'admin' ? 'Comissões gerais' : 'Minha Comissão'}><CompactList items={[money.format(commissions)]} /></Panel>
       <Panel title="Comissão por funcionário"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissões calculadas']} /></Panel>
@@ -3733,7 +3784,107 @@ function Reports({ appointments, employees, cashEntries = [], user }) {
       <Panel title="Serviços mais vendidos"><CompactList items={serviceSales.length ? serviceSales.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
       <Panel title="Clientes mais frequentes"><CompactList items={['Juliana Nunes', 'Ana Paula Martins', 'Patricia Souza']} /></Panel>
       {user.role === 'admin' && <Panel title="Pagamentos pendentes"><CompactList items={['Juliana Nunes: R$ 70,00', 'Carla Mendes: R$ 220,00']} /></Panel>}
+      </div>
     </div>
+  )
+}
+
+function EmployeeResultsReport({ cashEntries, employees, periodType, startDate, onPeriodTypeChange, onStartDateChange }) {
+  const endDate = getPeriodEndDate(startDate, periodType)
+  const startDateTime = parseDateStart(startDate)
+  const endDateTime = parseDateEnd(endDate)
+  const resultEntries = (cashEntries || []).filter((entry) => {
+    const createdAt = parseCashCreatedAt(entry)
+    return createdAt &&
+      startDateTime &&
+      endDateTime &&
+      createdAt >= startDateTime &&
+      createdAt <= endDateTime &&
+      cashStatus(entry) === 'pago' &&
+      cashType(entry) === 'entrada'
+  })
+  const rows = Object.values(resultEntries.reduce((acc, entry) => {
+    const employeeId = field(entry, 'employeeId', 'employee_id')
+    if (!employeeId) return acc
+    const key = String(employeeId)
+    const employee = employees.find((item) => String(item.id) === key)
+    acc[key] = acc[key] ?? {
+      id: key,
+      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionário',
+      appointments: 0,
+      revenue: 0,
+      commission: 0,
+      salonProfit: 0
+    }
+    acc[key].appointments += 1
+    acc[key].revenue += cashValue(entry)
+    acc[key].commission += cashCommissionValue(entry)
+    acc[key].salonProfit += cashSalonValue(entry)
+    return acc
+  }, {})).sort((a, b) => b.revenue - a.revenue)
+  const totals = rows.reduce((acc, row) => ({
+    revenue: acc.revenue + row.revenue,
+    commission: acc.commission + row.commission,
+    salonProfit: acc.salonProfit + row.salonProfit,
+    appointments: acc.appointments + row.appointments
+  }), { revenue: 0, commission: 0, salonProfit: 0, appointments: 0 })
+
+  return (
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26] sm:p-6">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-goldSoft">cash_movements</p>
+          <h3 className="mt-1 text-2xl font-bold text-graphite dark:text-gray-100">Resultado dos funcionários</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatusBadge tone="cyan">{formatDate(startDate)} até {formatDate(endDate)}</StatusBadge>
+            <StatusBadge tone="green">{totals.appointments} atendimentos pagos</StatusBadge>
+          </div>
+        </div>
+
+        <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[420px]">
+          <Select
+            label="Tipo de período"
+            value={periodType}
+            onChange={onPeriodTypeChange}
+            options={['Semana', 'Quinzena', 'Mês']}
+            values={['semana', 'quinzena', 'mes']}
+          />
+          <Field label="Data inicial" type="date" value={startDate} onChange={onStartDateChange} />
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-500/10">
+          <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Total faturado</p>
+          <p className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">{money.format(totals.revenue)}</p>
+        </div>
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
+          <p className="text-sm font-bold text-amber-800 dark:text-amber-200">Total de comissões</p>
+          <p className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">{money.format(totals.commission)}</p>
+        </div>
+        <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4 dark:border-cyan-400/20 dark:bg-cyan-500/10">
+          <p className="text-sm font-bold text-cyan-800 dark:text-cyan-200">Lucro do salão</p>
+          <p className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">{money.format(totals.salonProfit)}</p>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        {rows.length ? (
+          <Table
+            rows={rows}
+            columns={['employeeName', 'appointments', 'revenue', 'commission', 'salonProfit']}
+            labels={['Funcionário', 'Atendimentos concluídos', 'Faturamento bruto', 'Comissão total', 'Valor líquido do salão']}
+            formatValue={(column, value) => {
+              if (column === 'appointments') return <StatusBadge tone="gray">{value}</StatusBadge>
+              if (column === 'revenue' || column === 'commission' || column === 'salonProfit') return money.format(value)
+              return value
+            }}
+          />
+        ) : (
+          <EmptyState>Nenhum resultado encontrado para este período.</EmptyState>
+        )}
+      </div>
+    </section>
   )
 }
 
