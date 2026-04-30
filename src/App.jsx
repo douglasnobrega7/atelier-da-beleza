@@ -386,7 +386,10 @@ function isCompletedStatus(status) {
 }
 
 function cashAppointmentId(entry) {
-  return field(entry, 'appointmentId', 'appointment_id') ?? field(entry, 'referenciaId', 'referencia_id')
+  const appointmentId = field(entry, 'appointmentId', 'appointment_id')
+  if (appointmentId) return appointmentId
+  const referenceType = String(field(entry, 'referenciaTipo', 'referencia_tipo') ?? '').toLowerCase()
+  return referenceType === 'appointment' ? field(entry, 'referenciaId', 'referencia_id') : null
 }
 
 function cashCommissionValue(entry) {
@@ -397,6 +400,22 @@ function cashSalonValue(entry) {
   return Number(field(entry, 'salonValue', 'salon_value') ?? cashValue(entry))
 }
 
+function cashClientName(entry) {
+  return field(entry, 'clientName', 'client_name') ?? ''
+}
+
+function cashServiceName(entry) {
+  return field(entry, 'serviceName', 'service_name') ?? ''
+}
+
+function cashEmployeeName(entry) {
+  return field(entry, 'employeeName', 'employee_name') ?? ''
+}
+
+function isAppointmentCashEntry(entry) {
+  return cashType(entry) === 'entrada' && Boolean(cashAppointmentId(entry))
+}
+
 function createCompletedAppointmentCashEntry(appointment, employees = [], serviceItems = services) {
   const service = serviceItems.find((item) => item.name === appointment.service)
   const employee = employees.find((item) => item.name === appointment.professional)
@@ -404,6 +423,7 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
   const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? 0) || 0
   const commissionValue = (serviceValue * commissionPercent) / 100
   const salonValue = serviceValue - commissionValue
+  const createdAt = new Date().toISOString()
   return {
     type: 'entrada',
     tipo: 'entrada',
@@ -417,6 +437,13 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     valor: serviceValue,
     date: appointment.date ?? todayIso,
     data: appointment.date ?? todayIso,
+    status: 'concluido',
+    clientName: appointment.client ?? '',
+    client_name: appointment.client ?? '',
+    serviceName: service?.name ?? appointment.service ?? '',
+    service_name: service?.name ?? appointment.service ?? '',
+    employeeName: employee?.name ?? appointment.professional ?? '',
+    employee_name: employee?.name ?? appointment.professional ?? '',
     serviceValue,
     service_value: serviceValue,
     commissionPercent,
@@ -434,7 +461,9 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     referenciaId: appointment.id,
     referencia_id: appointment.id,
     referenciaTipo: 'appointment',
-    referencia_tipo: 'appointment'
+    referencia_tipo: 'appointment',
+    createdAt,
+    created_at: createdAt
   }
 }
 
@@ -603,6 +632,13 @@ function normalizeCashMovementRecord(row) {
     valor: Number(field(row, 'valor') ?? field(row, 'value') ?? 0),
     date: field(row, 'date') ?? field(row, 'data') ?? todayIso,
     data: field(row, 'data') ?? field(row, 'date') ?? todayIso,
+    status: field(row, 'status') ?? '',
+    clientName: field(row, 'clientName', 'client_name') ?? '',
+    client_name: field(row, 'client_name') ?? field(row, 'clientName') ?? '',
+    serviceName: field(row, 'serviceName', 'service_name') ?? '',
+    service_name: field(row, 'service_name') ?? field(row, 'serviceName') ?? '',
+    employeeName: field(row, 'employeeName', 'employee_name') ?? '',
+    employee_name: field(row, 'employee_name') ?? field(row, 'employeeName') ?? '',
     serviceValue,
     service_value: serviceValue,
     commissionPercent: Number(field(row, 'commissionPercent', 'commission_percent') ?? 0),
@@ -620,7 +656,9 @@ function normalizeCashMovementRecord(row) {
     referenciaId: field(row, 'referenciaId', 'referencia_id'),
     referencia_id: field(row, 'referencia_id') ?? field(row, 'referenciaId'),
     referenciaTipo: field(row, 'referenciaTipo', 'referencia_tipo'),
-    referencia_tipo: field(row, 'referencia_tipo') ?? field(row, 'referenciaTipo')
+    referencia_tipo: field(row, 'referencia_tipo') ?? field(row, 'referenciaTipo'),
+    createdAt: field(row, 'createdAt', 'created_at'),
+    created_at: field(row, 'created_at') ?? field(row, 'createdAt')
   }
 }
 
@@ -1405,7 +1443,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     caixa: <CashRegister entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} notify={notify} />,
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
-    relatorios: user.role === 'admin' ? <Reports appointments={appointments} employees={employees} user={user} /> : <AccessDenied />,
+    relatorios: user.role === 'admin' ? <Reports appointments={appointments} employees={employees} cashEntries={cashEntries} user={user} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
@@ -2791,16 +2829,16 @@ function CashRegister({ entries, setEntries, closures, setClosures, notify }) {
       <Panel title="Movimentações do caixa">
         <Table
           rows={todayEntries}
-          columns={['date', 'description', 'type', 'category', 'value', 'commission', 'salon']}
-          labels={['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor', 'Comissão paga', 'Salão']}
+          columns={['date', 'client', 'service', 'employee', 'value', 'commission', 'salon']}
+          labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Valor total', 'Comissão', 'Salão']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
-            if (key === 'description') return cashDescription(row)
-            if (key === 'type') return cashType(row) === 'entrada' ? 'Entrada' : 'Saída'
-            if (key === 'category') return cashCategory(row) || '-'
+            if (key === 'client') return cashClientName(row) || cashDescription(row) || '-'
+            if (key === 'service') return cashServiceName(row) || cashCategory(row) || '-'
+            if (key === 'employee') return cashEmployeeName(row) || '-'
             if (key === 'value') return money.format(cashValue(row))
-            if (key === 'commission') return cashCommissionValue(row) ? money.format(cashCommissionValue(row)) : '-'
-            if (key === 'salon') return cashCommissionValue(row) ? money.format(cashSalonValue(row)) : '-'
+            if (key === 'commission') return isAppointmentCashEntry(row) ? money.format(cashCommissionValue(row)) : '-'
+            if (key === 'salon') return isAppointmentCashEntry(row) ? money.format(cashSalonValue(row)) : '-'
             return value
           }}
         />
@@ -3133,22 +3171,41 @@ function InventoryModal({ product, onClose, onSave }) {
   )
 }
 
-function Reports({ appointments, employees, user }) {
-  const professionals = getProfessionals(employees)
-  const visible = user.role === 'admin' ? appointments : appointments.filter((item) => item.professional === user.name)
-  const completed = visible.filter((item) => item.status === 'Concluído')
-  const commissions = completed.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
-  const employeeCommissions = professionals
-    .map((employee) => ({
-      name: employee.name,
-      value: completed.filter((item) => item.professional === employee.name).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
-    }))
-    .filter((item) => user.role === 'admin' || item.name === user.name)
-  const serviceCommissions = topEntries(completed.reduce((acc, item) => ({ ...acc, [item.service]: (acc[item.service] || 0) + getAppointmentCommission(item, employees) }), {}), 8)
-  const serviceSales = topEntries(countBy(completed, (item) => item.service))
+function Reports({ appointments, employees, cashEntries = [], user }) {
+  const appointmentEntries = cashEntries.filter(isAppointmentCashEntry)
+  const completed = appointmentEntries.length ? appointmentEntries : appointments.filter((item) => item.status === 'Concluído')
+  const commissions = appointmentEntries.length
+    ? appointmentEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
+    : completed.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
+  const employeeCommissions = appointmentEntries.length
+    ? Object.values(appointmentEntries.reduce((acc, item) => {
+      const key = String(field(item, 'employeeId', 'employee_id') ?? cashEmployeeName(item) ?? '')
+      if (!key) return acc
+      const employee = employees.find((current) => String(current.id) === key || current.name === cashEmployeeName(item))
+      acc[key] = acc[key] ?? { name: employee?.name ?? cashEmployeeName(item), value: 0, count: 0 }
+      acc[key].value += cashCommissionValue(item)
+      acc[key].count += 1
+      return acc
+    }, {})).filter((item) => item.count > 0)
+    : getProfessionals(employees)
+      .map((employee) => ({
+        name: employee.name,
+        value: completed.filter((item) => item.professional === employee.name).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0),
+        count: completed.filter((item) => item.professional === employee.name).length
+      }))
+      .filter((item) => item.count > 0)
+  const serviceCommissions = appointmentEntries.length
+    ? topEntries(appointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}), 8)
+    : topEntries(completed.reduce((acc, item) => ({ ...acc, [item.service]: (acc[item.service] || 0) + getAppointmentCommission(item, employees) }), {}), 8)
+  const serviceSales = appointmentEntries.length
+    ? topEntries(countBy(appointmentEntries, (item) => cashServiceName(item) || 'Serviço'))
+    : topEntries(countBy(completed, (item) => item.service))
+  const revenue = appointmentEntries.length
+    ? appointmentEntries.reduce((sum, item) => sum + cashValue(item), 0)
+    : completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      {user.role === 'admin' && <Panel title="Faturamento por período"><CompactList items={[`Mês atual: ${money.format(completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0))}`, `Ticket médio: ${money.format(completed.length ? completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0) / completed.length : 0)}`]} /></Panel>}
+      {user.role === 'admin' && <Panel title="Faturamento por período"><CompactList items={[`Mês atual: ${money.format(revenue)}`, `Ticket médio: ${money.format(completed.length ? revenue / completed.length : 0)}`]} /></Panel>}
       <Panel title={user.role === 'admin' ? 'Comissões gerais' : 'Minha Comissão'}><CompactList items={[money.format(commissions)]} /></Panel>
       <Panel title="Comissão por funcionário"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissões calculadas']} /></Panel>
       <Panel title="Comissão por serviço"><CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissões calculadas']} /></Panel>

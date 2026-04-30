@@ -6,6 +6,10 @@ alter table public.cash_movements
   add column if not exists employee_id bigint,
   add column if not exists service_id bigint,
   add column if not exists appointment_id bigint,
+  add column if not exists client_name text,
+  add column if not exists service_name text,
+  add column if not exists employee_name text,
+  add column if not exists status text not null default 'concluido',
   add column if not exists referencia_id bigint,
   add column if not exists referencia_tipo text;
 

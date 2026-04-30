@@ -130,9 +130,12 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
     ...(includeSalon ? { salon_id: salonId } : {}),
     client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client') ? payload.clientName ?? payload.client ?? '' : undefined,
     service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service') ? payload.serviceName ?? payload.service ?? '' : undefined,
+    professional: includeSalon || hasField(payload, 'professional') ? payload.professional ?? '' : undefined,
     appointment_date: includeSalon || hasField(payload, 'appointmentDate') || hasField(payload, 'date') ? payload.appointmentDate ?? payload.date : undefined,
     appointment_time: includeSalon || hasField(payload, 'appointmentTime') || hasField(payload, 'time') || hasField(payload, 'horario') ? payload.appointmentTime ?? payload.time ?? payload.horario : undefined,
     status: includeSalon || hasField(payload, 'status') ? payload.status ?? 'Aguardando' : undefined,
+    payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? payload.paymentMethod ?? payload.payment_method ?? '' : undefined,
+    duration: includeSalon || hasField(payload, 'duration') || hasField(payload, 'duracao') ? Number(payload.duration ?? payload.duracao ?? 0) : undefined,
     price: includeSalon || hasField(payload, 'price') || hasField(payload, 'value') || hasField(payload, 'valor') ? Number(payload.price ?? payload.value ?? payload.valor ?? 0) : undefined
   })
 }
@@ -148,6 +151,10 @@ function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
     method: includeSalon || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') || hasField(payload, 'paymentMethod') ? payload.method ?? payload.forma_pagamento ?? payload.paymentMethod ?? '' : undefined,
     value: includeSalon || hasField(payload, 'value') || hasField(payload, 'valor') || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? value : undefined,
     date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
+    status: includeSalon || hasField(payload, 'status') ? payload.status ?? '' : undefined,
+    client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client_name') ? payload.clientName ?? payload.client_name ?? '' : undefined,
+    service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service_name') ? payload.serviceName ?? payload.service_name ?? '' : undefined,
+    employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? payload.employeeName ?? payload.employee_name ?? '' : undefined,
     service_value: includeSalon || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? Number(payload.serviceValue ?? payload.service_value ?? value) : undefined,
     commission_percent: includeSalon || hasField(payload, 'commissionPercent') || hasField(payload, 'commission_percent') ? Number(payload.commissionPercent ?? payload.commission_percent ?? 0) : undefined,
     commission_value: includeSalon || hasField(payload, 'commissionValue') || hasField(payload, 'commission_value') ? Number(payload.commissionValue ?? payload.commission_value ?? 0) : undefined,
@@ -156,7 +163,8 @@ function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
     service_id: includeSalon || hasField(payload, 'serviceId') || hasField(payload, 'service_id') ? payload.serviceId ?? payload.service_id ?? null : undefined,
     appointment_id: includeSalon || hasField(payload, 'appointmentId') || hasField(payload, 'appointment_id') ? payload.appointmentId ?? payload.appointment_id ?? null : undefined,
     referencia_id: includeSalon || hasField(payload, 'referenciaId') || hasField(payload, 'referencia_id') ? payload.referenciaId ?? payload.referencia_id ?? null : undefined,
-    referencia_tipo: includeSalon || hasField(payload, 'referenciaTipo') || hasField(payload, 'referencia_tipo') ? payload.referenciaTipo ?? payload.referencia_tipo ?? '' : undefined
+    referencia_tipo: includeSalon || hasField(payload, 'referenciaTipo') || hasField(payload, 'referencia_tipo') ? payload.referenciaTipo ?? payload.referencia_tipo ?? '' : undefined,
+    created_at: includeSalon || hasField(payload, 'createdAt') || hasField(payload, 'created_at') ? payload.createdAt ?? payload.created_at : undefined
   })
 }
 
