@@ -46,7 +46,8 @@ function getTodayIso() {
 const todayIso = getTodayIso()
 
 function timeToMinutes(time) {
-  const [hoursValue, minutesValue] = time.split(':').map(Number)
+  const [hoursValue, minutesValue] = String(time ?? '').split(':').map(Number)
+  if (!Number.isFinite(hoursValue) || !Number.isFinite(minutesValue)) return Number.NaN
   return (hoursValue * 60) + minutesValue
 }
 
@@ -70,7 +71,12 @@ function getAppointmentDuration(appointment, employee) {
   return Number(appointment.duracao) || Number(appointment.duration) || serviceDurationToMinutes(service?.duration, Number(employee?.defaultDuration) || 60)
 }
 
+function getAppointmentSortKey(appointment) {
+  return `${appointment?.date ?? ''} ${appointment?.time ?? appointment?.horario ?? ''}`
+}
+
 function intervalsOverlap(startA, endA, startB, endB) {
+  if (![startA, endA, startB, endB].every(Number.isFinite)) return false
   return startA < endB && startB < endA
 }
 
@@ -115,7 +121,7 @@ function getOccupiedSlots({ employee, date, appointments }) {
       appointment.date === date &&
       appointment.status !== 'Cancelado'
     ))
-    .sort((a, b) => (a.time ?? a.horario).localeCompare(b.time ?? b.horario))
+    .sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b)))
 }
 
 function formatDate(date) {
@@ -733,8 +739,6 @@ function App() {
       .eq('id', authUser.id)
       .maybeSingle()
 
-    console.log('Perfil:', profileById)
-
     if (profileByIdError) {
       console.error('Erro perfil:', profileByIdError)
       throw new Error(`Erro ao buscar perfil: ${profileByIdError.message}`)
@@ -753,8 +757,6 @@ function App() {
       })
       .select()
       .single()
-
-    console.log('Novo perfil:', newProfile)
 
     if (createProfileError) {
       console.error('Erro criando perfil:', createProfileError)
@@ -834,8 +836,6 @@ function App() {
   }
 
   async function handleLogin(email, password, keepConnected) {
-    console.log('Tentando login:', email)
-
     try {
       const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
@@ -848,6 +848,7 @@ function App() {
       }
 
       const authUser = loginData.user
+      if (!authUser?.id) return { success: false, error: 'Login sem usuário retornado pelo Auth.' }
 
       const activeProfile = await loadProfileForAuthUser(authUser, { createMissingProfile: true })
 
@@ -1612,7 +1613,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
                 <p className="mt-1">{block.professional} · {block.reason}</p>
               </div>
             ))}
-            {[...visibleAppointments].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)).map((item) => (
+            {[...visibleAppointments].sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b))).map((item) => (
               <div key={item.id} className={`${cardBase} p-4`}>
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0 flex-1">
@@ -1661,7 +1662,7 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
       <div className="simple-scrollbar overflow-x-auto pb-2">
         <div className="grid min-w-[980px] grid-cols-7 gap-3">
           {weekDates.map((date) => {
-            const dayAppointments = appointments.filter((item) => item.date === date).sort((a, b) => a.time.localeCompare(b.time))
+            const dayAppointments = appointments.filter((item) => item.date === date).sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b)))
             const dayBlocks = blocks.filter((item) => item.date === date)
             const [weekday, fullDate] = formatDate(date).split(', ')
             const shortDate = fullDate?.slice(0, 5) ?? ''
@@ -2223,7 +2224,8 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
               email: loginEmail,
               password: temporaryPassword,
               name: employeeName,
-              salon_id: salonId
+              salon_id: salonId,
+              role: employeeType === 'cashier' ? 'caixa' : 'profissional'
             })
           })
 

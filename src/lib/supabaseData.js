@@ -227,8 +227,6 @@ export async function createSalonForAdmin(profile, authUser) {
       .single()
   )
 
-  console.log('Salão criado:', salon)
-
   const updatedProfile = await runQuery(
     supabase
       .from(TABLES.users)
@@ -237,8 +235,6 @@ export async function createSalonForAdmin(profile, authUser) {
       .select('*')
       .single()
   )
-
-  console.log('User atualizado:', updatedProfile)
 
   return { salon, profile: updatedProfile }
 }
