@@ -129,7 +129,9 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client') ? payload.clientName ?? payload.client ?? '' : undefined,
-    service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service') ? payload.serviceName ?? payload.service ?? '' : undefined,
+    service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service_name') || hasField(payload, 'service') ? payload.serviceName ?? payload.service_name ?? payload.service ?? '' : undefined,
+    service_id: includeSalon || hasField(payload, 'serviceId') || hasField(payload, 'service_id') ? payload.serviceId ?? payload.service_id ?? null : undefined,
+    employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
     professional: includeSalon || hasField(payload, 'professional') ? payload.professional ?? '' : undefined,
     appointment_date: includeSalon || hasField(payload, 'appointmentDate') || hasField(payload, 'date') ? payload.appointmentDate ?? payload.date : undefined,
     appointment_time: includeSalon || hasField(payload, 'appointmentTime') || hasField(payload, 'time') || hasField(payload, 'horario') ? payload.appointmentTime ?? payload.time ?? payload.horario : undefined,

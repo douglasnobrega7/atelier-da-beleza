@@ -82,18 +82,35 @@ function minutesToTime(totalMinutes) {
   return `${String(hoursValue).padStart(2, '0')}:${String(minutesValue).padStart(2, '0')}`
 }
 
-function serviceDurationToMinutes(duration, fallback = 60) {
-  if (!duration) return fallback
-  const hoursMatch = duration.match(/(\d+)\s*h/)
-  const minutesMatch = duration.match(/(\d+)\s*min/)
+function parseDurationToMinutes(duration, fallback = 60) {
+  if (typeof duration === 'number' && Number.isFinite(duration)) return duration
+  const text = String(duration ?? '').trim().toLowerCase()
+  if (!text) return fallback
+  const plainNumber = text.match(/^\d+$/)
+  if (plainNumber) return Number(text)
+  const hoursMatch = text.match(/(\d+)\s*h/)
+  const minutesMatch = text.match(/(\d+)\s*min/)
   const hoursValue = hoursMatch ? Number(hoursMatch[1]) * 60 : 0
   const minutesValue = minutesMatch ? Number(minutesMatch[1]) : 0
   return hoursValue + minutesValue || fallback
 }
 
+function serviceDurationToMinutes(serviceOrDuration, fallback = 60) {
+  if (serviceOrDuration && typeof serviceOrDuration === 'object') {
+    return parseDurationToMinutes(
+      serviceOrDuration.duration_minutes ??
+      serviceOrDuration.durationMinutes ??
+      serviceOrDuration.duration ??
+      serviceOrDuration.durationText,
+      fallback
+    )
+  }
+  return parseDurationToMinutes(serviceOrDuration, fallback)
+}
+
 function getAppointmentDuration(appointment, employee) {
   const service = services.find((item) => item.name === appointment.service)
-  return Number(appointment.duracao) || Number(appointment.duration) || serviceDurationToMinutes(service?.duration, Number(employee?.defaultDuration) || 60)
+  return Number(appointment.duracao) || Number(appointment.duration) || serviceDurationToMinutes(service, Number(employee?.defaultDuration) || 60)
 }
 
 function parseJsonValue(value, fallback) {
@@ -167,7 +184,7 @@ function getAvailableSlots({ employee, date, service, appointments, blockedSlots
 
   const start = salonHours.openMinutes
   const end = salonHours.closeMinutes
-  const duration = serviceDurationToMinutes(service?.duration, Number(employee.defaultDuration) || 60)
+  const duration = serviceDurationToMinutes(service, Number(employee.defaultDuration) || 60)
   const breakStart = employee.breakStart ? timeToMinutes(employee.breakStart) : null
   const breakEnd = employee.breakEnd ? timeToMinutes(employee.breakEnd) : null
   const booked = appointments.filter((appointment) => (
@@ -602,6 +619,12 @@ function normalizeAppointmentRecord(row, employees = []) {
     ...row,
     client: field(row, 'client') ?? field(row, 'clientName', 'client_name') ?? '',
     service: field(row, 'service') ?? field(row, 'serviceName', 'service_name') ?? '',
+    serviceName: field(row, 'serviceName', 'service_name') ?? field(row, 'service') ?? '',
+    service_name: field(row, 'service_name') ?? field(row, 'serviceName') ?? field(row, 'service') ?? '',
+    serviceId: field(row, 'serviceId', 'service_id'),
+    service_id: field(row, 'service_id') ?? field(row, 'serviceId'),
+    employeeId: field(row, 'employeeId', 'employee_id'),
+    employee_id: field(row, 'employee_id') ?? field(row, 'employeeId'),
     professional: field(row, 'professional') ?? '',
     date: field(row, 'date') ?? field(row, 'appointmentDate', 'appointment_date') ?? todayIso,
     time,
@@ -1742,17 +1765,25 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const now = new Date()
     const date = getTodayIso()
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const selectedQuickService = services.find((item) => item.name === data.service)
+    const duration = serviceDurationToMinutes(selectedQuickService, professional?.defaultDuration ?? 60)
     const appointmentPayload = {
       client: data.client,
       service: data.service,
+      serviceName: selectedQuickService?.name ?? data.service,
+      service_name: selectedQuickService?.name ?? data.service,
+      serviceId: selectedQuickService?.id ?? null,
+      service_id: selectedQuickService?.id ?? null,
       professional: data.professional,
+      employeeId: professional?.id ?? null,
+      employee_id: professional?.id ?? null,
       date,
       time,
       horario: time,
       value: Number(data.value) || 0,
       valor: Number(data.value) || 0,
-      duration: serviceDurationToMinutes(services.find((item) => item.name === data.service)?.duration, professional?.defaultDuration ?? 60),
-      duracao: serviceDurationToMinutes(services.find((item) => item.name === data.service)?.duration, professional?.defaultDuration ?? 60),
+      duration,
+      duracao: duration,
       status: 'Concluído',
       paymentMethod: data.paymentMethod
     }
@@ -1802,12 +1833,18 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       return
     }
 
-    const duration = serviceDurationToMinutes(selectedService?.duration, Number(selectedProfessional.defaultDuration) || 60)
+    const duration = serviceDurationToMinutes(selectedService, Number(selectedProfessional.defaultDuration) || 60)
     const value = Number(selectedService?.price ?? form.value)
     const newAppointmentPayload = {
       client: form.client,
       service: form.service,
+      serviceName: selectedService.name,
+      service_name: selectedService.name,
+      serviceId: selectedService.id,
+      service_id: selectedService.id,
       professional: form.professional,
+      employeeId: selectedProfessional.id,
+      employee_id: selectedProfessional.id,
       date: form.date,
       time: form.time,
       horario: form.time,
