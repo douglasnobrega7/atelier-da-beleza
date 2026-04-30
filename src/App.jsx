@@ -897,12 +897,23 @@ const appointmentStatusDetailStyles = {
   cancelado: 'text-red-700 dark:text-red-200'
 }
 
+const appointmentStatusTextStyles = {
+  agendado: 'text-[#f59e0b]',
+  confirmado: 'text-[#8b5cf6]',
+  concluido: 'text-[#22c55e]',
+  cancelado: 'text-[#ef4444]'
+}
+
 function getAppointmentStatusClass(status) {
   return appointmentStatusCardStyles[normalizeAppointmentStatus(status)] ?? appointmentStatusCardStyles.agendado
 }
 
 function getAppointmentStatusDetailClass(status) {
   return appointmentStatusDetailStyles[normalizeAppointmentStatus(status)] ?? appointmentStatusDetailStyles.agendado
+}
+
+function getAppointmentStatusTextClass(status) {
+  return appointmentStatusTextStyles[normalizeAppointmentStatus(status)] ?? appointmentStatusTextStyles.agendado
 }
 
 const employeeStatuses = ['Ativo', 'De folga', 'Horário de almoço']
@@ -2083,9 +2094,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
                     </div>
                     <div className="flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
                       <button type="button" onClick={() => sendConfirmation(item)} className={`${buttonSecondary} rounded-full px-3 py-2`}>Enviar confirmação</button>
-                      <select className={`focus-ring min-w-[130px] rounded-full border px-3 py-2 text-sm font-semibold ${statusStyles[normalizeAppointmentStatus(item.status)]}`} value={normalizeAppointmentStatus(item.status)} onChange={(event) => updateStatus(item.id, event.target.value)}>
-                        {appointmentStatusOptions.map((status) => <option key={status} value={status}>{formatAppointmentStatus(status)}</option>)}
-                      </select>
+                      <AppointmentStatusSelect value={item.status} onChange={(status) => updateStatus(item.id, status)} roundedClass="rounded-full" />
                       {(user.role === 'admin' || user.role === 'cashier') && <button type="button" onClick={() => deleteAppointment(item)} className={`${buttonDanger} rounded-full px-3 py-2`}>Excluir</button>}
                     </div>
                   </div>
@@ -2166,9 +2175,14 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <button type="button" onClick={() => onSendConfirmation(selectedItem)} className={buttonSecondary}>Enviar confirmação</button>
               {(user.role === 'admin' || user.role === 'cashier' || getAppointmentEmployeeName(selectedItem, employees) === user.name) && (
-                <select className={`focus-ring min-w-[130px] rounded-xl border px-3 py-2 text-sm font-semibold ${statusStyles[normalizeAppointmentStatus(selectedItem.status)]}`} value={normalizeAppointmentStatus(selectedItem.status)} onChange={(event) => { onStatusChange(selectedItem.id, event.target.value); setSelectedItem({ ...selectedItem, status: event.target.value }) }}>
-                  {appointmentStatusOptions.map((status) => <option key={status} value={status}>{formatAppointmentStatus(status)}</option>)}
-                </select>
+                <AppointmentStatusSelect
+                  value={selectedItem.status}
+                  roundedClass="rounded-xl"
+                  onChange={(status) => {
+                    onStatusChange(selectedItem.id, status)
+                    setSelectedItem({ ...selectedItem, status })
+                  }}
+                />
               )}
               {(user.role === 'admin' || user.role === 'cashier') && (
                 <button type="button" onClick={() => { if (onDeleteAppointment(selectedItem)) setSelectedItem(null) }} className={buttonDanger}>Excluir</button>
@@ -3769,6 +3783,76 @@ function Select({ label, value, onChange, options, values, disabled = false }) {
         {(options || []).map((option, index) => <option key={values?.[index] ?? option} value={values?.[index] ?? option}>{option}</option>)}
       </select>
     </label>
+  )
+}
+
+function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
+  const normalizedValue = normalizeAppointmentStatus(value)
+
+  useEffect(() => {
+    if (!open) return undefined
+
+    function handlePointerDown(event) {
+      if (!containerRef.current?.contains(event.target)) setOpen(false)
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  function selectStatus(status) {
+    onChange(status)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={containerRef} className="relative min-w-[150px] flex-shrink-0">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`focus-ring flex w-full items-center justify-between gap-2 border px-3 py-2 text-sm font-semibold shadow-sm transition ${roundedClass} ${statusStyles[normalizedValue] ?? statusStyles.agendado}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>{formatAppointmentStatus(normalizedValue)}</span>
+        <span className="text-xs opacity-80" aria-hidden="true">▾</span>
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Status do agendamento"
+          className="absolute right-0 z-30 mt-2 w-full min-w-[180px] overflow-hidden rounded-xl border border-white/10 bg-[#1e1e2f] p-1 text-white shadow-2xl"
+        >
+          {appointmentStatusOptions.map((status) => {
+            const selected = status === normalizedValue
+            return (
+              <button
+                key={status}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`focus-ring flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold transition hover:bg-[#2a2a3d] ${selected ? 'bg-[#2a2a3d] ring-1 ring-white/15' : 'bg-transparent'} ${getAppointmentStatusTextClass(status)}`}
+                onClick={() => selectStatus(status)}
+              >
+                <span>{formatAppointmentStatus(status)}</span>
+                {selected && <span className="text-xs font-black text-white" aria-hidden="true">✓</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
