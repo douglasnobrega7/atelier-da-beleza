@@ -118,6 +118,9 @@ function servicePayload(payload = {}, salonId, includeSalon = false) {
       ? Number(payload.durationMinutes ?? payload.duration_minutes ?? parseDurationMinutes(duration))
       : undefined,
     duration: includeSalon || hasField(payload, 'duration') ? duration : undefined,
+    commission_by_role: includeSalon || hasField(payload, 'commissionByRole') || hasField(payload, 'commission_by_role')
+      ? payload.commissionByRole ?? payload.commission_by_role ?? {}
+      : undefined,
     responsible: includeSalon || hasField(payload, 'responsible') || hasField(payload, 'professional') ? payload.responsible ?? payload.professional ?? '' : undefined
   })
 }
