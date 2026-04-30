@@ -134,6 +134,15 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
   })
 }
 
+function salonPayload(payload = {}) {
+  return pickDefined({
+    name: hasField(payload, 'name') || hasField(payload, 'salonName') ? payload.name ?? payload.salonName : undefined,
+    whatsapp: hasField(payload, 'whatsapp') || hasField(payload, 'receptionWhatsapp') ? payload.whatsapp ?? payload.receptionWhatsapp ?? '' : undefined,
+    working_days: hasField(payload, 'workingDays') || hasField(payload, 'working_days') ? payload.workingDays ?? payload.working_days ?? [] : undefined,
+    opening_hours: hasField(payload, 'openingHours') || hasField(payload, 'opening_hours') ? payload.openingHours ?? payload.opening_hours ?? {} : undefined
+  })
+}
+
 async function insertRow(table, salonId, payload, mapPayload) {
   requireSalonId(salonId)
   const data = await runQuery(
@@ -294,6 +303,19 @@ export async function createEmployeeUserProfile(salonId, payload) {
 export async function fetchSalon(salonId) {
   requireSalonId(salonId)
   return runQuery(supabase.from(TABLES.salons).select('*').eq('id', salonId).maybeSingle())
+}
+
+export async function updateSalon(salonId, payload) {
+  requireSalonId(salonId)
+  const data = await runQuery(
+    supabase
+      .from(TABLES.salons)
+      .update(salonPayload(payload))
+      .eq('id', salonId)
+      .select('*')
+      .single()
+  )
+  return { ...payload, ...data }
 }
 
 export async function fetchClients(salonId) {

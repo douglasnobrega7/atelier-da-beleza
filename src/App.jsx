@@ -23,6 +23,7 @@ import {
   updateAppointment as updateAppointmentRecord,
   updateClient as updateClientRecord,
   updateEmployee as updateEmployeeRecord,
+  updateSalon as updateSalonRecord,
   updateService as updateServiceRecord
 } from './lib/supabaseData'
 
@@ -55,6 +56,17 @@ function getTodayIso() {
 }
 
 const todayIso = getTodayIso()
+const weekDayOptions = [
+  { id: 'monday', label: 'Segunda' },
+  { id: 'tuesday', label: 'Terça' },
+  { id: 'wednesday', label: 'Quarta' },
+  { id: 'thursday', label: 'Quinta' },
+  { id: 'friday', label: 'Sexta' },
+  { id: 'saturday', label: 'Sábado' },
+  { id: 'sunday', label: 'Domingo' }
+]
+const defaultWorkingDays = weekDayOptions.map((day) => day.id)
+const defaultOpeningHours = Object.fromEntries(weekDayOptions.map((day) => [day.id, { open: '09:00', close: '18:00' }]))
 
 function timeToMinutes(time) {
   const [hoursValue, minutesValue] = String(time ?? '').split(':').map(Number)
@@ -82,6 +94,60 @@ function getAppointmentDuration(appointment, employee) {
   return Number(appointment.duracao) || Number(appointment.duration) || serviceDurationToMinutes(service?.duration, Number(employee?.defaultDuration) || 60)
 }
 
+function parseJsonValue(value, fallback) {
+  if (value === null || value === undefined || value === '') return fallback
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return fallback
+    }
+  }
+  return value
+}
+
+function normalizeWorkingDays(value) {
+  const parsed = parseJsonValue(value, defaultWorkingDays)
+  if (!Array.isArray(parsed)) return defaultWorkingDays
+  return parsed.filter((day) => weekDayOptions.some((option) => option.id === day))
+}
+
+function normalizeOpeningHours(value) {
+  const parsed = parseJsonValue(value, defaultOpeningHours)
+  return weekDayOptions.reduce((acc, day) => {
+    const hours = parsed?.[day.id] ?? {}
+    acc[day.id] = {
+      open: hours.open || defaultOpeningHours[day.id].open,
+      close: hours.close || defaultOpeningHours[day.id].close
+    }
+    return acc
+  }, {})
+}
+
+function getWeekDayId(date) {
+  const [year, month, day] = String(date ?? '').split('-').map(Number)
+  const parsed = new Date(year, month - 1, day)
+  if (Number.isNaN(parsed.getTime())) return null
+  return weekDayOptions[(parsed.getDay() + 6) % 7]?.id ?? null
+}
+
+function getSalonHoursForDate(salonSettings, date) {
+  const weekday = getWeekDayId(date)
+  const workingDays = normalizeWorkingDays(salonSettings?.workingDays)
+  const openingHours = normalizeOpeningHours(salonSettings?.openingHours)
+  if (!weekday || !workingDays.includes(weekday)) return null
+  const hours = openingHours[weekday]
+  const open = timeToMinutes(hours?.open)
+  const close = timeToMinutes(hours?.close)
+  if (!Number.isFinite(open) || !Number.isFinite(close) || close <= open) return null
+  return { ...hours, openMinutes: open, closeMinutes: close }
+}
+
+function formatSalonHoursForDate(salonSettings, date) {
+  const hours = getSalonHoursForDate(salonSettings, date)
+  return hours ? `${hours.open} às ${hours.close}` : 'Fechado'
+}
+
 function getAppointmentSortKey(appointment) {
   return `${appointment?.date ?? ''} ${appointment?.time ?? appointment?.horario ?? ''}`
 }
@@ -91,11 +157,14 @@ function intervalsOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA
 }
 
-function getAvailableSlots({ employee, date, service, appointments, blockedSlots = [] }) {
+function getAvailableSlots({ employee, date, service, appointments, blockedSlots = [], salonSettings }) {
   if (!employee || !date || employee.workStatus === 'De folga') return []
 
-  const start = timeToMinutes(employee.workStart)
-  const end = timeToMinutes(employee.workEnd)
+  const salonHours = getSalonHoursForDate(salonSettings, date)
+  if (!salonHours) return []
+
+  const start = Math.max(timeToMinutes(employee.workStart), salonHours.openMinutes)
+  const end = Math.min(timeToMinutes(employee.workEnd), salonHours.closeMinutes)
   const duration = serviceDurationToMinutes(service?.duration, Number(employee.defaultDuration) || 60)
   const scheduleInterval = Math.max(5, Number(employee.scheduleInterval) || duration)
   const breakStart = employee.breakStart ? timeToMinutes(employee.breakStart) : null
@@ -502,7 +571,9 @@ function normalizeStockItemRecord(row) {
 function normalizeSalonSettings(row) {
   return {
     salonName: field(row, 'name') ?? field(row, 'salonName', 'salon_name') ?? '',
-    receptionWhatsapp: field(row, 'receptionWhatsapp', 'reception_whatsapp') ?? ''
+    receptionWhatsapp: field(row, 'whatsapp') ?? field(row, 'receptionWhatsapp', 'reception_whatsapp') ?? '',
+    workingDays: normalizeWorkingDays(field(row, 'workingDays', 'working_days')),
+    openingHours: normalizeOpeningHours(field(row, 'openingHours', 'opening_hours'))
   }
 }
 
@@ -666,7 +737,7 @@ function App() {
   const [cashClosures, setCashClosures] = useState([])
   const [advances, setAdvances] = useState([])
   const [blockedSlots, setBlockedSlots] = useState([])
-  const [salonSettings, setSalonSettings] = useState({ salonName: '', receptionWhatsapp: '' })
+  const [salonSettings, setSalonSettings] = useState({ salonName: '', receptionWhatsapp: '', workingDays: defaultWorkingDays, openingHours: defaultOpeningHours })
   const [serviceItems, setServiceItems] = useState([])
   services = serviceItems
   const [appointments, setAppointments] = useState([])
@@ -679,7 +750,7 @@ function App() {
     setCashClosures([])
     setAdvances([])
     setBlockedSlots([])
-    setSalonSettings({ salonName: '', receptionWhatsapp: '' })
+    setSalonSettings({ salonName: '', receptionWhatsapp: '', workingDays: defaultWorkingDays, openingHours: defaultOpeningHours })
     setServiceItems([])
     services = []
     setAppointments([])
@@ -1112,7 +1183,7 @@ function AuthLoadingScreen({ theme, onThemeChange }) {
   )
 }
 
-function Field({ label, value, onChange, type = 'text', placeholder = '', required = false, min, step = type === 'number' ? '0.01' : undefined }) {
+function Field({ label, value, onChange, type = 'text', placeholder = '', required = false, min, step = type === 'number' ? '0.01' : undefined, disabled = false }) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm font-semibold text-gray-600">{label}</span>
@@ -1125,6 +1196,7 @@ function Field({ label, value, onChange, type = 'text', placeholder = '', requir
         required={required}
         min={min}
         step={step}
+        disabled={disabled}
       />
     </label>
   )
@@ -1243,7 +1315,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
 
   const pages = {
     dashboard: <AdminDashboard appointments={appointments} employees={employees} clients={clients} cashEntries={cashEntries} advances={advances} />,
-    agenda: <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
+    agenda: <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
     clientes: <Clients salonId={salonId} user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
     servicos: <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} />,
     funcionarios: <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
@@ -1253,10 +1325,10 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     relatorios: user.role === 'admin' ? <Reports appointments={appointments} employees={employees} user={user} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
-    configuracoes: user.role === 'admin' ? <Settings settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
+    configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
   }
 
-  return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
+  return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
 }
 
 function AdminDashboard({ appointments, employees, clients, cashEntries, advances }) {
@@ -1392,7 +1464,7 @@ function WeeklyRevenueChart({ appointments }) {
   )
 }
 
-function Agenda({ salonId, appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, setCashEntries, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
+function Agenda({ salonId, appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, setCashEntries, salonSettings, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
   const defaultProfessional = employees.find((item) => item.active && item.name === user.name)?.name ?? employees.find((item) => item.active)?.name ?? ''
   const createInitialAppointmentForm = () => {
     const professional = employees.find((item) => item.name === defaultProfessional)
@@ -1409,8 +1481,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   const filteredProfessional = employees.find((employee) => employee.name === professionalFilter)
   const compatibleServices = getCompatibleServicesForProfessional(selectedProfessional)
   const selectedService = compatibleServices.find((item) => item.name === form.service)
-  const availableSlots = getAvailableSlots({ employee: selectedProfessional, date: form.date, service: selectedService, appointments, blockedSlots })
-  const filterAvailableSlots = getAvailableSlots({ employee: filteredProfessional, date: form.date, service: selectedService, appointments, blockedSlots })
+  const availableSlots = getAvailableSlots({ employee: selectedProfessional, date: form.date, service: selectedService, appointments, blockedSlots, salonSettings })
+  const filterAvailableSlots = getAvailableSlots({ employee: filteredProfessional, date: form.date, service: selectedService, appointments, blockedSlots, salonSettings })
   const occupiedSlots = getOccupiedSlots({ employee: filteredProfessional, date: form.date, appointments })
   const selectedSlotAvailable = availableSlots.includes(form.time)
   const weekDates = getWeekDates(form.date)
@@ -1636,6 +1708,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           <DatePickerBar value={form.date} onChange={(value) => setForm({ ...form, date: value, time: '' })} />
           {selectedProfessional && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
+              Salão: {formatSalonHoursForDate(salonSettings, form.date)}<br />
               Expediente: {selectedProfessional.workStart} às {selectedProfessional.workEnd}
               {selectedProfessional.breakStart && selectedProfessional.breakEnd ? ` · intervalo ${selectedProfessional.breakStart} às ${selectedProfessional.breakEnd}` : ''}
             </div>
@@ -1646,7 +1719,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
               {formMessage.text}
             </div>
           )}
-          <button className={`${buttonPrimary} w-full rounded-2xl px-4 py-3`}>Agendar</button>
+          <button disabled={!selectedSlotAvailable} className={`${buttonPrimary} w-full rounded-2xl px-4 py-3`}>Agendar</button>
           <div className="grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => setBlockModalOpen(true)} className={`${buttonSecondary} rounded-2xl px-4 py-3`}>Bloquear horário</button>
             <button type="button" onClick={() => setQuickModalOpen(true)} className={`${buttonSecondary} rounded-2xl border-lilacSoft px-4 py-3 hover:bg-lilacSoft/20 dark:border-lilacSoft/40`}>Atender agora</button>
@@ -1654,7 +1727,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
         </form>
       </Panel>
       <div className="space-y-5">
-        <AvailabilityPanel employee={filteredProfessional} date={form.date} service={selectedService} availableSlots={filterAvailableSlots} occupiedSlots={occupiedSlots} />
+        <AvailabilityPanel employee={filteredProfessional} date={form.date} service={selectedService} salonSettings={salonSettings} availableSlots={filterAvailableSlots} occupiedSlots={occupiedSlots} />
         <Panel title={`Agenda do Salão · ${formatDate(form.date)}`}>
           <div className="mb-4 inline-flex rounded-2xl border border-blush bg-pearl p-1 text-sm font-bold dark:border-white/10 dark:bg-white/5">
             <button type="button" onClick={() => setAgendaView('day')} className={`rounded-xl px-5 py-2 transition ${agendaView === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Dia</button>
@@ -1859,7 +1932,7 @@ function DatePickerBar({ value, onChange }) {
   )
 }
 
-function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSlots }) {
+function AvailabilityPanel({ employee, date, service, salonSettings, availableSlots, occupiedSlots }) {
   if (!employee) {
     return (
       <Panel title="Disponibilidade do profissional">
@@ -1872,6 +1945,7 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
 
   const dayOff = employee.workStatus === 'De folga'
   const lunchNow = employee.workStatus === 'Horário de almoço'
+  const salonClosed = !getSalonHoursForDate(salonSettings, date)
 
   return (
     <Panel title="Disponibilidade do profissional">
@@ -1879,6 +1953,7 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
         <div className="rounded-2xl border border-blush bg-pearl p-4 text-sm">
           <p><strong>Profissional:</strong> {employee.name}</p>
           <p className="mt-1"><strong>Data:</strong> {formatDate(date)}</p>
+          <p className="mt-1"><strong>Salão:</strong> {formatSalonHoursForDate(salonSettings, date)}</p>
           <p className="mt-1"><strong>Trabalho:</strong> {employee.workStart} às {employee.workEnd}</p>
           <p className="mt-1"><strong>Intervalo:</strong> {employee.breakStart && employee.breakEnd ? `${employee.breakStart} às ${employee.breakEnd}` : 'Sem intervalo cadastrado'}</p>
           <p className="mt-1"><strong>Serviço base:</strong> {service?.name ?? 'Não selecionado'}</p>
@@ -1887,6 +1962,12 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
         {dayOff && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
             Este profissional está de folga nesta data
+          </div>
+        )}
+
+        {salonClosed && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+            O salão não funciona nesta data
           </div>
         )}
 
@@ -1914,7 +1995,9 @@ function AvailabilityPanel({ employee, date, service, availableSlots, occupiedSl
 
         <div>
           <h4 className="mb-2 text-sm font-bold text-graphite">Disponíveis</h4>
-          {dayOff ? (
+          {salonClosed ? (
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horários disponíveis fora do funcionamento do salão.</p>
+          ) : dayOff ? (
             <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem Horários disponíveis por folga.</p>
           ) : availableSlots.length === 0 ? (
             <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem Horários disponíveis nesta data.</p>
@@ -2959,7 +3042,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
   const weekDates = getWeekDates(date)
   const dayAppointments = appointments.filter((item) => item.date === date)
   const weekAppointments = appointments.filter((item) => weekDates.includes(item.date))
-  const availableSlots = getAvailableSlots({ employee, date, service: selectedService, appointments, blockedSlots })
+  const availableSlots = getAvailableSlots({ employee, date, service: selectedService, appointments, blockedSlots, salonSettings })
   const occupiedSlots = getOccupiedSlots({ employee, date, appointments })
   const serviceOptions = employeeServices.length ? employeeServices : services.filter((item) => item.professional === employee.name).map((item) => item.name)
 
@@ -3042,7 +3125,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
         </Panel>
       </div>
 
-      <AvailabilityPanel employee={employee} date={date} service={selectedService} availableSlots={availableSlots} occupiedSlots={occupiedSlots} />
+      <AvailabilityPanel employee={employee} date={date} service={selectedService} salonSettings={salonSettings} availableSlots={availableSlots} occupiedSlots={occupiedSlots} />
       {selectedSlot && <ScheduleRequestModal employee={employee} slot={selectedSlot} date={date} serviceName={serviceName} onClose={() => setSelectedSlot(null)} onSubmit={requestSlot} />}
     </div>
   )
@@ -3118,33 +3201,85 @@ function EmployeeProfile({ user, appointments, employees, setEmployees }) {
   )
 }
 
-function Settings({ settings, setSettings, notify }) {
+function Settings({ salonId, settings, setSettings, notify }) {
   const [form, setForm] = useState({
     salonName: settings.salonName ?? '',
-    receptionWhatsapp: settings.receptionWhatsapp ?? ''
+    receptionWhatsapp: settings.receptionWhatsapp ?? '',
+    workingDays: normalizeWorkingDays(settings.workingDays),
+    openingHours: normalizeOpeningHours(settings.openingHours)
   })
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setForm({
       salonName: settings.salonName ?? '',
-      receptionWhatsapp: settings.receptionWhatsapp ?? ''
+      receptionWhatsapp: settings.receptionWhatsapp ?? '',
+      workingDays: normalizeWorkingDays(settings.workingDays),
+      openingHours: normalizeOpeningHours(settings.openingHours)
     })
-  }, [settings.salonName, settings.receptionWhatsapp])
+  }, [settings.salonName, settings.receptionWhatsapp, settings.workingDays, settings.openingHours])
 
-  function saveSalonSettings(event) {
+  function setQuickDays(days) {
+    setForm((current) => ({ ...current, workingDays: days }))
+  }
+
+  function toggleDay(dayId) {
+    setForm((current) => {
+      const active = current.workingDays.includes(dayId)
+      return {
+        ...current,
+        workingDays: active ? current.workingDays.filter((item) => item !== dayId) : [...current.workingDays, dayId]
+      }
+    })
+  }
+
+  function updateDayHours(dayId, key, value) {
+    setForm((current) => ({
+      ...current,
+      openingHours: {
+        ...current.openingHours,
+        [dayId]: {
+          ...(current.openingHours[dayId] ?? defaultOpeningHours[dayId]),
+          [key]: value
+        }
+      }
+    }))
+  }
+
+  async function saveSalonSettings(event) {
     event.preventDefault()
+
+    const invalidDay = form.workingDays.find((dayId) => {
+      const hours = form.openingHours[dayId]
+      return !hours?.open || !hours?.close || timeToMinutes(hours.close) <= timeToMinutes(hours.open)
+    })
+
+    if (invalidDay) {
+      notify?.('Confira abertura e fechamento dos dias ativos.', 'error')
+      return
+    }
 
     const payload = {
       salonName: form.salonName.trim(),
-      receptionWhatsapp: form.receptionWhatsapp.trim()
+      receptionWhatsapp: form.receptionWhatsapp.trim(),
+      workingDays: form.workingDays,
+      openingHours: form.openingHours
     }
 
-    setSettings((current) => ({ ...current, ...payload }))
-    notify?.('Salvo com sucesso')
+    setSaving(true)
+    try {
+      const saved = normalizeSalonSettings(await updateSalonRecord(salonId, payload))
+      setSettings((current) => ({ ...current, ...saved }))
+      notify?.('Salvo com sucesso')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-4xl">
       <form onSubmit={saveSalonSettings} className="space-y-6 rounded-2xl border border-blush bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#1c1922] sm:p-8">
         <div>
           <h3 className="text-xl font-bold">Dados do Salão</h3>
@@ -3156,9 +3291,37 @@ function Settings({ settings, setSettings, notify }) {
           <Field label="WhatsApp da recepção/caixa" value={form.receptionWhatsapp} onChange={(value) => setForm((current) => ({ ...current, receptionWhatsapp: value }))} placeholder="Ex.: 5511999999999" />
         </div>
 
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 className="text-base font-bold text-graphite dark:text-gray-100">Horário de funcionamento</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Dias desmarcados não aparecem como disponíveis na agenda.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setQuickDays(['monday', 'tuesday', 'wednesday', 'thursday', 'friday'])} className={buttonSecondary}>Segunda a sexta</button>
+              <button type="button" onClick={() => setQuickDays(['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'])} className={buttonSecondary}>Terça a sábado</button>
+              <button type="button" onClick={() => setQuickDays(defaultWorkingDays)} className={buttonSecondary}>Todos os dias</button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {weekDayOptions.map((day) => {
+              const active = form.workingDays.includes(day.id)
+              const hours = form.openingHours[day.id] ?? defaultOpeningHours[day.id]
+              return (
+                <div key={day.id} className="grid gap-3 rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5 sm:grid-cols-[1fr_150px_150px] sm:items-end">
+                  <Toggle label={day.label} checked={active} onChange={() => toggleDay(day.id)} />
+                  <Field label="Abertura" type="time" value={hours.open} onChange={(value) => updateDayHours(day.id, 'open', value)} disabled={!active} />
+                  <Field label="Fechamento" type="time" value={hours.close} onChange={(value) => updateDayHours(day.id, 'close', value)} disabled={!active} />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         <div className="flex justify-end">
-          <button type="submit" className={`${buttonPrimary} rounded-2xl px-5 py-3`}>
-            Salvar alterações
+          <button type="submit" disabled={saving} className={`${buttonPrimary} rounded-2xl px-5 py-3`}>
+            {saving ? 'Salvando...' : 'Salvar alterações'}
           </button>
         </div>
       </form>
