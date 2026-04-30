@@ -355,6 +355,21 @@ function formatServiceFunctions(category) {
   return toList(category).join(', ')
 }
 
+function getCompatibleServicesForProfessional(professional, serviceItems = services) {
+  if (!professional) return []
+
+  const professionalFunctions = toList(professional.role).map((item) => item.toLowerCase())
+  if (professionalFunctions.length === 0) return []
+
+  return (serviceItems || []).filter((service) => (
+    toList(service.category).some((category) => professionalFunctions.includes(category.toLowerCase()))
+  ))
+}
+
+function isServiceCompatibleWithProfessional(service, professional) {
+  return getCompatibleServicesForProfessional(professional).some((item) => item.name === service?.name)
+}
+
 function toObjectList(value) {
   return Array.isArray(value) ? value : []
 }
@@ -1379,8 +1394,11 @@ function WeeklyRevenueChart({ appointments }) {
 
 function Agenda({ salonId, appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, setCashEntries, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
   const defaultProfessional = employees.find((item) => item.active && item.name === user.name)?.name ?? employees.find((item) => item.active)?.name ?? ''
-  const firstService = services[0] ?? { name: '', price: 0 }
-  const createInitialAppointmentForm = () => ({ client: clients[0]?.name ?? '', service: firstService.name, professional: defaultProfessional, date: todayIso, time: '', value: firstService.price })
+  const createInitialAppointmentForm = () => {
+    const professional = employees.find((item) => item.name === defaultProfessional)
+    const firstService = getCompatibleServicesForProfessional(professional)[0] ?? { name: '', price: 0 }
+    return { client: clients[0]?.name ?? '', service: firstService.name, professional: defaultProfessional, date: todayIso, time: '', value: firstService.price ?? 0 }
+  }
   const [form, setForm] = useState(createInitialAppointmentForm)
   const [formMessage, setFormMessage] = useState({ type: '', text: '' })
   const [professionalFilter, setProfessionalFilter] = useState(initialProfessionalFilter)
@@ -1389,7 +1407,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   const [quickModalOpen, setQuickModalOpen] = useState(false)
   const selectedProfessional = employees.find((employee) => employee.name === form.professional)
   const filteredProfessional = employees.find((employee) => employee.name === professionalFilter)
-  const selectedService = services.find((item) => item.name === form.service)
+  const compatibleServices = getCompatibleServicesForProfessional(selectedProfessional)
+  const selectedService = compatibleServices.find((item) => item.name === form.service)
   const availableSlots = getAvailableSlots({ employee: selectedProfessional, date: form.date, service: selectedService, appointments, blockedSlots })
   const filterAvailableSlots = getAvailableSlots({ employee: filteredProfessional, date: form.date, service: selectedService, appointments, blockedSlots })
   const occupiedSlots = getOccupiedSlots({ employee: filteredProfessional, date: form.date, appointments })
@@ -1406,11 +1425,16 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   const selectedClient = clients.find((client) => client.name === form.client)
   const selectedClientInsights = selectedClient ? getClientInsights(selectedClient.name, appointments) : null
 
+  function changeAppointmentProfessional(value) {
+    setForm((current) => ({ ...current, professional: value, service: '', value: 0, time: '' }))
+    setFormMessage({ type: '', text: '' })
+  }
+
   useEffect(() => {
     const safeFilter = initialProfessionalFilter === 'all' || employees.some((item) => item.name === initialProfessionalFilter) ? initialProfessionalFilter : 'all'
     setProfessionalFilter(safeFilter)
     if (safeFilter !== 'all') {
-      setForm((current) => ({ ...current, professional: safeFilter, time: '' }))
+      setForm((current) => current.professional === safeFilter ? current : { ...current, professional: safeFilter, service: '', value: 0, time: '' })
     }
   }, [initialProfessionalFilter, employees])
 
@@ -1418,7 +1442,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     setProfessionalFilter(value)
     onProfessionalFilterChange?.(value)
     if (value !== 'all') {
-      setForm((current) => ({ ...current, professional: value, time: '' }))
+      setForm((current) => ({ ...current, professional: value, service: '', value: 0, time: '' }))
+      setFormMessage({ type: '', text: '' })
     }
   }
 
@@ -1541,6 +1566,12 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       return
     }
 
+    if (!selectedService || !isServiceCompatibleWithProfessional(selectedService, selectedProfessional)) {
+      setFormMessage({ type: 'error', text: 'Selecione um serviço disponível para a função deste profissional.' })
+      notify?.('Erro ao salvar: serviço incompatível com o profissional.', 'error')
+      return
+    }
+
     if (!selectedSlotAvailable) {
       setFormMessage({ type: 'error', text: 'Escolha um horário disponível para esta data.' })
       notify?.('Erro ao salvar: horário indisponível.', 'error')
@@ -1566,7 +1597,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     try {
       const newAppointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, newAppointmentPayload), allEmployees)
       setAppointments((current) => [...current, newAppointment])
-      setForm({ ...createInitialAppointmentForm(), date: form.date, professional: form.professional, time: '' })
+      setForm({ ...createInitialAppointmentForm(), date: form.date, professional: form.professional, service: '', value: 0, time: '' })
       setFormMessage({ type: 'success', text: 'Agendamento criado com sucesso!' })
       notify?.('Agendamento criado.')
     } catch (error) {
@@ -1593,10 +1624,15 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
             </div>
           )}
           <Select label="Serviço" value={form.service} onChange={(value) => {
-            const selected = services.find((item) => item.name === value)
+            const selected = compatibleServices.find((item) => item.name === value)
             setForm({ ...form, service: value, value: selected?.price ?? form.value, time: '' })
-          }} options={services.map((item) => item.name)} />
-          <Select label="Profissional" value={form.professional} onChange={(value) => setForm({ ...form, professional: value, time: '' })} options={employees.filter((item) => item.active).map((item) => item.name)} />
+          }} options={['Selecione um serviço', ...compatibleServices.map((item) => item.name)]} values={['', ...compatibleServices.map((item) => item.name)]} disabled={!selectedProfessional || compatibleServices.length === 0} />
+          {selectedProfessional && compatibleServices.length === 0 && (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+              Nenhum serviço disponível para a função deste profissional.
+            </p>
+          )}
+          <Select label="Profissional" value={form.professional} onChange={changeAppointmentProfessional} options={employees.filter((item) => item.active).map((item) => item.name)} />
           <DatePickerBar value={form.date} onChange={(value) => setForm({ ...form, date: value, time: '' })} />
           {selectedProfessional && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
