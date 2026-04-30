@@ -189,6 +189,29 @@ function getAppointmentSortKey(appointment) {
   return `${appointment?.date ?? ''} ${appointment?.time ?? appointment?.horario ?? ''}`
 }
 
+function getAppointmentEmployeeId(appointment) {
+  return field(appointment, 'employeeId', 'employee_id')
+}
+
+function getAppointmentEmployeeName(appointment, employees = []) {
+  const employeeId = getAppointmentEmployeeId(appointment)
+  const employee = employees.find((item) => String(item.id) === String(employeeId))
+  return employee?.name ?? field(appointment, 'employeeName', 'employee_name') ?? ''
+}
+
+function isAppointmentForEmployee(appointment, employee) {
+  if (!employee) return false
+  const employeeId = getAppointmentEmployeeId(appointment)
+  if (employeeId !== undefined && employeeId !== null && employeeId !== '') {
+    return String(employeeId) === String(employee.id)
+  }
+  return getAppointmentEmployeeName(appointment) === employee.name
+}
+
+function getBlockEmployeeName(block) {
+  return field(block, 'employeeName', 'employee_name') ?? ''
+}
+
 function intervalsOverlap(startA, endA, startB, endB) {
   if (![startA, endA, startB, endB].every(Number.isFinite)) return false
   return startA < endB && startB < endA
@@ -206,11 +229,11 @@ function getAvailableSlots({ employee, date, service, appointments, blockedSlots
   const breakStart = employee.breakStart ? timeToMinutes(employee.breakStart) : null
   const breakEnd = employee.breakEnd ? timeToMinutes(employee.breakEnd) : null
   const booked = appointments.filter((appointment) => (
-    appointment.professional === employee.name &&
+    isAppointmentForEmployee(appointment, employee) &&
     appointment.date === date &&
     appointment.status !== 'Cancelado'
   ))
-  const blocked = blockedSlots.filter((block) => block.professional === employee.name && block.date === date)
+  const blocked = blockedSlots.filter((block) => getBlockEmployeeName(block) === employee.name && block.date === date)
 
   const slots = []
   for (let current = start; current + duration <= end; current += appointmentSlotInterval) {
@@ -233,7 +256,7 @@ function getOccupiedSlots({ employee, date, appointments }) {
 
   return appointments
     .filter((appointment) => (
-      appointment.professional === employee.name &&
+      isAppointmentForEmployee(appointment, employee) &&
       appointment.date === date &&
       appointment.status !== 'Cancelado'
     ))
@@ -295,7 +318,7 @@ function normalizePhone(phone = '') {
 }
 
 function calculateCommission(appointment, employees) {
-  const employee = employees.find((item) => item.name === appointment.professional)
+  const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
   return calculateCommissionDetails(appointment, employee).comissaoCalculada
 }
 
@@ -365,7 +388,7 @@ function getProfessionals(employees) {
 
 function withCommission(appointment, employees) {
   if (!isCompletedStatus(appointment.status)) return { ...appointment, commission: 0, comissaoCalculada: 0 }
-  const employee = employees.find((item) => item.name === appointment.professional)
+  const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
   return { ...appointment, ...calculateCommissionDetails(appointment, employee) }
 }
 
@@ -453,7 +476,7 @@ function isAppointmentCashEntry(entry) {
 
 function createCompletedAppointmentCashEntry(appointment, employees = [], serviceItems = services) {
   const service = serviceItems.find((item) => item.name === appointment.service)
-  const employee = employees.find((item) => item.name === appointment.professional)
+  const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
   const serviceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
   const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? 0) || 0
   const commissionValue = (serviceValue * commissionPercent) / 100
@@ -477,8 +500,8 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     client_name: appointment.client ?? '',
     serviceName: service?.name ?? appointment.service ?? '',
     service_name: service?.name ?? appointment.service ?? '',
-    employeeName: employee?.name ?? appointment.professional ?? '',
-    employee_name: employee?.name ?? appointment.professional ?? '',
+    employeeName: employee?.name ?? getAppointmentEmployeeName(appointment) ?? '',
+    employee_name: employee?.name ?? getAppointmentEmployeeName(appointment) ?? '',
     serviceValue,
     service_value: serviceValue,
     commissionPercent,
@@ -622,7 +645,7 @@ function normalizeServiceRecord(row) {
     price: Number(field(row, 'price') ?? 0),
     duration: field(row, 'duration') ?? '1h',
     durationMinutes: field(row, 'durationMinutes', 'duration_minutes'),
-    professional: field(row, 'professional') ?? field(row, 'responsible') ?? '',
+    responsible: field(row, 'responsible') ?? '',
     category: field(row, 'category') ?? '',
     commission_percent: commissionPercent,
     commissionPercent
@@ -633,6 +656,9 @@ function normalizeAppointmentRecord(row, employees = []) {
   const time = field(row, 'time') ?? field(row, 'horario') ?? field(row, 'appointmentTime', 'appointment_time') ?? ''
   const value = Number(field(row, 'value') ?? field(row, 'valor') ?? field(row, 'price') ?? 0)
   const duration = field(row, 'duration') ?? field(row, 'duracao')
+  const employeeId = field(row, 'employeeId', 'employee_id')
+  const employee = employees.find((item) => String(item.id) === String(employeeId))
+  const employeeName = employee?.name ?? field(row, 'employeeName', 'employee_name') ?? row?.employees?.name ?? ''
   return withCommission({
     ...row,
     client: field(row, 'client') ?? field(row, 'clientName', 'client_name') ?? '',
@@ -641,9 +667,10 @@ function normalizeAppointmentRecord(row, employees = []) {
     service_name: field(row, 'service_name') ?? field(row, 'serviceName') ?? field(row, 'service') ?? '',
     serviceId: field(row, 'serviceId', 'service_id'),
     service_id: field(row, 'service_id') ?? field(row, 'serviceId'),
-    employeeId: field(row, 'employeeId', 'employee_id'),
+    employeeId,
     employee_id: field(row, 'employee_id') ?? field(row, 'employeeId'),
-    professional: field(row, 'professional') ?? '',
+    employeeName,
+    employee_name: employeeName,
     date: field(row, 'date') ?? field(row, 'appointmentDate', 'appointment_date') ?? todayIso,
     time,
     horario: time,
@@ -1410,7 +1437,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
     ...clients.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Cliente', page: 'clientes' })),
     ...services.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Serviço', page: 'servicos' })),
     ...employees.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Funcionário', page: 'funcionarios' })),
-    ...appointments.filter((item) => `${item.client} ${item.service} ${item.professional}`.toLowerCase().includes(search)).map((item) => ({ label: `${item.client} · ${item.time}`, detail: `Agenda · ${item.service}`, page: 'agenda' }))
+    ...appointments.filter((item) => `${item.client} ${item.service} ${getAppointmentEmployeeName(item, employees)}`.toLowerCase().includes(search)).map((item) => ({ label: `${item.client} · ${item.time}`, detail: `Agenda · ${item.service}`, page: 'agenda' }))
   ].slice(0, 8) : []
 
   function openResult(page) {
@@ -1468,7 +1495,7 @@ function ThemeToggle({ theme, onChange }) {
 }
 
 function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
-  const employeeAppointments = appointments.filter((item) => item.professional === user.name)
+  const employeeAppointments = appointments.filter((item) => getAppointmentEmployeeName(item, employees) === user.name)
   const visibleAppointments = appointments
   const activeClients = clients.filter((client) => client.active)
   const professionals = getProfessionals(employees)
@@ -1498,7 +1525,7 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const completed = appointments.filter((item) => item.status === 'Concluído')
   const dayRevenue = completed.reduce((sum, item) => sum + item.value, 0)
   const monthRevenue = completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
-  const commissions = professionals.map((employee) => ({ name: employee.name, value: completed.filter((item) => item.professional === employee.name).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0) }))
+  const commissions = professionals.map((employee) => ({ name: employee.name, value: completed.filter((item) => isAppointmentForEmployee(item, employee)).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0) }))
   const todayCompleted = completed.filter((item) => item.date === todayIso)
   const dayCommissions = todayCompleted.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
   const monthCommissions = completed.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
@@ -1568,7 +1595,7 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
             {appointments.filter((item) => item.status !== 'Cancelado').slice(0, 4).map((item) => (
               <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-3 text-sm">
                 <p className="font-semibold">{formatDate(item.date)} · {item.time} · {item.client}</p>
-                <p className="text-gray-500">{item.service} com {item.professional}</p>
+                <p className="text-gray-500">{item.service} com {getAppointmentEmployeeName(item, employees)}</p>
               </div>
             ))}
           </div>
@@ -1627,11 +1654,11 @@ function WeeklyRevenueChart({ appointments }) {
 }
 
 function Agenda({ salonId, appointments, setAppointments, user, clients, employees, allEmployees = employees, blockedSlots, setBlockedSlots, cashEntries = [], setCashEntries, salonSettings, initialProfessionalFilter = 'all', onProfessionalFilterChange, notify }) {
-  const defaultProfessional = employees.find((item) => item.active && item.name === user.name)?.name ?? employees.find((item) => item.active)?.name ?? ''
+  const defaultEmployeeName = employees.find((item) => item.active && item.name === user.name)?.name ?? employees.find((item) => item.active)?.name ?? ''
   const createInitialAppointmentForm = () => {
-    const professional = employees.find((item) => item.name === defaultProfessional)
-    const firstService = getCompatibleServicesForProfessional(professional)[0] ?? { name: '', price: 0 }
-    return { client: clients[0]?.name ?? '', service: firstService.name, professional: defaultProfessional, date: todayIso, time: '', paymentMethod: '', value: firstService.price ?? 0 }
+    const employee = employees.find((item) => item.name === defaultEmployeeName)
+    const firstService = getCompatibleServicesForProfessional(employee)[0] ?? { name: '', price: 0 }
+    return { client: clients[0]?.name ?? '', service: firstService.name, employeeName: defaultEmployeeName, date: todayIso, time: '', paymentMethod: '', value: firstService.price ?? 0 }
   }
   const [form, setForm] = useState(createInitialAppointmentForm)
   const [formMessage, setFormMessage] = useState({ type: '', text: '' })
@@ -1639,28 +1666,28 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   const [agendaView, setAgendaView] = useState('day')
   const [blockModalOpen, setBlockModalOpen] = useState(false)
   const [quickModalOpen, setQuickModalOpen] = useState(false)
-  const selectedProfessional = employees.find((employee) => employee.name === form.professional)
+  const selectedEmployee = employees.find((employee) => employee.name === form.employeeName)
   const filteredProfessional = employees.find((employee) => employee.name === professionalFilter)
-  const compatibleServices = getCompatibleServicesForProfessional(selectedProfessional)
+  const compatibleServices = getCompatibleServicesForProfessional(selectedEmployee)
   const selectedService = compatibleServices.find((item) => item.name === form.service)
-  const availableSlots = getAvailableSlots({ employee: selectedProfessional, date: form.date, service: selectedService, appointments, blockedSlots, salonSettings })
+  const availableSlots = getAvailableSlots({ employee: selectedEmployee, date: form.date, service: selectedService, appointments, blockedSlots, salonSettings })
   const filterAvailableSlots = getAvailableSlots({ employee: filteredProfessional, date: form.date, service: selectedService, appointments, blockedSlots, salonSettings })
   const occupiedSlots = getOccupiedSlots({ employee: filteredProfessional, date: form.date, appointments })
   const selectedSlotAvailable = availableSlots.includes(form.time)
   const weekDates = getWeekDates(form.date)
   const visibleAppointments = appointments.filter((item) => (
     (agendaView === 'day' ? item.date === form.date : weekDates.includes(item.date)) &&
-    (professionalFilter === 'all' || item.professional === professionalFilter)
+    (professionalFilter === 'all' || getAppointmentEmployeeName(item, allEmployees) === professionalFilter)
   ))
   const visibleBlocks = blockedSlots.filter((item) => (
     (agendaView === 'day' ? item.date === form.date : weekDates.includes(item.date)) &&
-    (professionalFilter === 'all' || item.professional === professionalFilter)
+    (professionalFilter === 'all' || getBlockEmployeeName(item) === professionalFilter)
   ))
   const selectedClient = clients.find((client) => client.name === form.client)
   const selectedClientInsights = selectedClient ? getClientInsights(selectedClient.name, appointments) : null
 
   function changeAppointmentProfessional(value) {
-    setForm((current) => ({ ...current, professional: value, service: '', value: 0, time: '' }))
+    setForm((current) => ({ ...current, employeeName: value, service: '', value: 0, time: '' }))
     setFormMessage({ type: '', text: '' })
   }
 
@@ -1668,7 +1695,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const safeFilter = initialProfessionalFilter === 'all' || employees.some((item) => item.name === initialProfessionalFilter) ? initialProfessionalFilter : 'all'
     setProfessionalFilter(safeFilter)
     if (safeFilter !== 'all') {
-      setForm((current) => current.professional === safeFilter ? current : { ...current, professional: safeFilter, service: '', value: 0, time: '' })
+      setForm((current) => current.employeeName === safeFilter ? current : { ...current, employeeName: safeFilter, service: '', value: 0, time: '' })
     }
   }, [initialProfessionalFilter, employees])
 
@@ -1676,7 +1703,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     setProfessionalFilter(value)
     onProfessionalFilterChange?.(value)
     if (value !== 'all') {
-      setForm((current) => ({ ...current, professional: value, service: '', value: 0, time: '' }))
+      setForm((current) => ({ ...current, employeeName: value, service: '', value: 0, time: '' }))
       setFormMessage({ type: '', text: '' })
     }
   }
@@ -1712,7 +1739,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   async function updateStatus(id, status) {
     const appointment = appointments.find((item) => item.id === id)
     if (!appointment) return
-    if (user.role !== 'admin' && user.role !== 'cashier' && appointment.professional !== user.name) return
+    if (user.role !== 'admin' && user.role !== 'cashier' && getAppointmentEmployeeName(appointment, allEmployees) !== user.name) return
     const selectedPaymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod)
     const updatePayload = isCompletedStatus(status) ? { status, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null } : { status }
     try {
@@ -1762,12 +1789,12 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       notify?.('Cliente sem telefone cadastrado.', 'error')
       return
     }
-    const message = `Olá ${appointment.client}\nSeu horário está marcado para dia ${formatDate(appointment.date)} às ${appointment.time} com ${appointment.professional}.\nServiço: ${appointment.service}\nQualquer dúvida é só avisar`
+    const message = `Olá ${appointment.client}\nSeu horário está marcado para dia ${formatDate(appointment.date)} às ${appointment.time} com ${getAppointmentEmployeeName(appointment, allEmployees)}.\nServiço: ${appointment.service}\nQualquer dúvida é só avisar`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
   }
 
   function saveBlock(data) {
-    if (!data.professional || !data.date || !data.start || !data.end || timeToMinutes(data.end) <= timeToMinutes(data.start)) {
+    if (!data.employeeName || !data.date || !data.start || !data.end || timeToMinutes(data.end) <= timeToMinutes(data.start)) {
       notify?.('Erro ao bloquear: confira profissional, data e Horários.', 'error')
       return
     }
@@ -1777,11 +1804,11 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   }
 
   async function saveQuickService(data) {
-    if (!data.client.trim() || !data.service || !data.professional || Number(data.value) <= 0) {
+    if (!data.client.trim() || !data.service || !data.employeeName || Number(data.value) <= 0) {
       notify?.('Erro ao salvar: confira cliente, serviço, profissional e valor.', 'error')
       return
     }
-    const professional = employees.find((item) => item.name === data.professional)
+    const professional = employees.find((item) => item.name === data.employeeName)
     const now = new Date()
     const date = getTodayIso()
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -1795,7 +1822,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       service_name: selectedQuickService?.name ?? data.service,
       serviceId: selectedQuickService?.id ?? null,
       service_id: selectedQuickService?.id ?? null,
-      professional: data.professional,
+      employeeName: professional?.name ?? '',
+      employee_name: professional?.name ?? '',
       employeeId: professional?.id ?? null,
       employee_id: professional?.id ?? null,
       date,
@@ -1825,7 +1853,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const requiredFields = [
       ['client', 'cliente'],
       ['service', 'serviço'],
-      ['professional', 'profissional'],
+      ['employeeName', 'profissional'],
       ['date', 'data'],
       ['time', 'horário']
     ]
@@ -1837,13 +1865,13 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       return
     }
 
-    if (!selectedProfessional) {
+    if (!selectedEmployee) {
       setFormMessage({ type: 'error', text: 'Selecione um profissional ativo.' })
       notify?.('Erro ao salvar: selecione um profissional.', 'error')
       return
     }
 
-    if (!selectedService || !isServiceCompatibleWithProfessional(selectedService, selectedProfessional)) {
+    if (!selectedService || !isServiceCompatibleWithProfessional(selectedService, selectedEmployee)) {
       setFormMessage({ type: 'error', text: 'Selecione um serviço disponível para a função deste profissional.' })
       notify?.('Erro ao salvar: serviço incompatível com o profissional.', 'error')
       return
@@ -1855,7 +1883,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       return
     }
 
-    const duration = serviceDurationToMinutes(selectedService, Number(selectedProfessional.defaultDuration) || 60)
+    const duration = serviceDurationToMinutes(selectedService, Number(selectedEmployee.defaultDuration) || 60)
     const value = Number(selectedService?.price ?? form.value)
     const selectedPaymentMethod = normalizeAppointmentPaymentMethod(form.paymentMethod)
     const newAppointmentPayload = {
@@ -1865,9 +1893,10 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       service_name: selectedService.name,
       serviceId: selectedService.id,
       service_id: selectedService.id,
-      professional: form.professional,
-      employeeId: selectedProfessional.id,
-      employee_id: selectedProfessional.id,
+      employeeName: selectedEmployee.name,
+      employee_name: selectedEmployee.name,
+      employeeId: selectedEmployee.id,
+      employee_id: selectedEmployee.id,
       date: form.date,
       time: form.time,
       horario: form.time,
@@ -1883,7 +1912,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     try {
       const newAppointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, newAppointmentPayload), allEmployees)
       setAppointments((current) => [...current, newAppointment])
-      setForm({ ...createInitialAppointmentForm(), date: form.date, professional: form.professional, service: '', value: 0, time: '', paymentMethod: '' })
+      setForm({ ...createInitialAppointmentForm(), date: form.date, employeeName: form.employeeName, service: '', value: 0, time: '', paymentMethod: '' })
       setFormMessage({ type: 'success', text: 'Agendamento criado com sucesso!' })
       notify?.('Agendamento criado.')
     } catch (error) {
@@ -1912,18 +1941,18 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           <Select label="Serviço" value={form.service} onChange={(value) => {
             const selected = compatibleServices.find((item) => item.name === value)
             setForm({ ...form, service: value, value: selected?.price ?? form.value, time: '' })
-          }} options={['Selecione um serviço', ...compatibleServices.map((item) => item.name)]} values={['', ...compatibleServices.map((item) => item.name)]} disabled={!selectedProfessional || compatibleServices.length === 0} />
-          {selectedProfessional && compatibleServices.length === 0 && (
+          }} options={['Selecione um serviço', ...compatibleServices.map((item) => item.name)]} values={['', ...compatibleServices.map((item) => item.name)]} disabled={!selectedEmployee || compatibleServices.length === 0} />
+          {selectedEmployee && compatibleServices.length === 0 && (
             <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
               Nenhum serviço disponível para a função deste profissional.
             </p>
           )}
-          <Select label="Profissional" value={form.professional} onChange={changeAppointmentProfessional} options={employees.filter((item) => item.active).map((item) => item.name)} />
+          <Select label="Profissional" value={form.employeeName} onChange={changeAppointmentProfessional} options={employees.filter((item) => item.active).map((item) => item.name)} />
           <DatePickerBar value={form.date} onChange={(value) => setForm({ ...form, date: value, time: '' })} />
-          {selectedProfessional && (
+          {selectedEmployee && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
               Expediente: {formatSalonHoursForDate(salonSettings, form.date)}
-              {selectedProfessional.breakStart && selectedProfessional.breakEnd ? ` · intervalo ${selectedProfessional.breakStart} às ${selectedProfessional.breakEnd}` : ''}
+              {selectedEmployee.breakStart && selectedEmployee.breakEnd ? ` · intervalo ${selectedEmployee.breakStart} às ${selectedEmployee.breakEnd}` : ''}
             </div>
           )}
           <TimeSlotPicker value={form.time} onChange={(value) => setForm({ ...form, time: value })} slots={availableSlots} />
@@ -1953,7 +1982,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
             {visibleBlocks.map((block) => (
               <div key={block.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                 <p className="text-lg font-bold">{block.start} às {block.end} · Horário bloqueado</p>
-                <p className="mt-1">{block.professional} · {block.reason}</p>
+                <p className="mt-1">{getBlockEmployeeName(block)} · {block.reason}</p>
               </div>
             ))}
             {[...visibleAppointments].sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b))).map((item) => (
@@ -1961,8 +1990,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-lg font-bold">{formatDate(item.date)} · {item.time} · {item.client}</p>
-                    <p className="mt-1 text-sm text-gray-600">{item.service} com {item.professional}</p>
-                    <p className="mt-2 text-sm text-gray-500">Duração: {getAppointmentDuration(item, employees.find((employee) => employee.name === item.professional))} min</p>
+                    <p className="mt-1 text-sm text-gray-600">{item.service} com {getAppointmentEmployeeName(item, allEmployees)}</p>
+                    <p className="mt-2 text-sm text-gray-500">Duração: {getAppointmentDuration(item, allEmployees.find((employee) => isAppointmentForEmployee(item, employee)))} min</p>
                     {user.role === 'admin' && <p className="mt-2 text-sm font-semibold text-goldSoft">{money.format(item.value)}</p>}
                     {item.status === 'Concluído' && <p className="mt-1 text-sm font-semibold text-emerald-700">Comissão: {money.format(getAppointmentCommission(item, allEmployees))}</p>}
                   </div>
@@ -2051,11 +2080,11 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
             <p><strong>Horário:</strong> {selectedItem.time}</p>
             <p><strong>Cliente:</strong> {selectedItem.client}</p>
             <p><strong>Serviço:</strong> {selectedItem.service}</p>
-            <p><strong>Profissional:</strong> {selectedItem.professional}</p>
-            <p><strong>Duração:</strong> {getAppointmentDuration(selectedItem, employees.find((employee) => employee.name === selectedItem.professional))} min</p>
+            <p><strong>Profissional:</strong> {getAppointmentEmployeeName(selectedItem, employees)}</p>
+            <p><strong>Duração:</strong> {getAppointmentDuration(selectedItem, employees.find((employee) => isAppointmentForEmployee(selectedItem, employee)))} min</p>
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <button type="button" onClick={() => onSendConfirmation(selectedItem)} className={buttonSecondary}>Enviar confirmação</button>
-              {(user.role === 'admin' || user.role === 'cashier' || selectedItem.professional === user.name) && (
+              {(user.role === 'admin' || user.role === 'cashier' || getAppointmentEmployeeName(selectedItem, employees) === user.name) && (
                 <select className={`focus-ring min-w-[130px] rounded-xl border px-3 py-2 text-sm font-semibold ${statusStyles[selectedItem.status]}`} value={selectedItem.status} onChange={(event) => { onStatusChange(selectedItem.id, event.target.value); setSelectedItem({ ...selectedItem, status: event.target.value }) }}>
                   {Object.keys(statusStyles).map((status) => <option key={status}>{status}</option>)}
                 </select>
@@ -2073,12 +2102,12 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
 
 function BlockTimeModal({ user, employees, date, onClose, onSave }) {
   const options = user.role === 'admin' || user.role === 'cashier' ? employees.map((item) => item.name) : [user.name]
-  const [form, setForm] = useState({ professional: options[0] ?? '', date, start: '09:00', end: '10:00', reason: 'Horário bloqueado' })
+  const [form, setForm] = useState({ employeeName: options[0] ?? '', date, start: '09:00', end: '10:00', reason: 'Horário bloqueado' })
 
   return (
     <Modal title="Bloquear horário" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Select label="Profissional" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} options={options} />
+        <Select label="Profissional" value={form.employeeName} onChange={(value) => setForm({ ...form, employeeName: value })} options={options} />
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Horário inicial" type="time" value={form.start} onChange={(value) => setForm({ ...form, start: value })} />
@@ -2096,7 +2125,7 @@ function BlockTimeModal({ user, employees, date, onClose, onSave }) {
 
 function QuickServiceModal({ clients, employees, onClose, onSave }) {
   const firstService = services[0] ?? { name: '', price: 0 }
-  const [form, setForm] = useState({ client: clients[0]?.name ?? '', service: firstService.name, professional: employees.find((item) => item.active)?.name ?? '', paymentMethod: 'pix', value: firstService.price })
+  const [form, setForm] = useState({ client: clients[0]?.name ?? '', service: firstService.name, employeeName: employees.find((item) => item.active)?.name ?? '', paymentMethod: 'pix', value: firstService.price })
 
   return (
     <Modal title="Atender agora" onClose={onClose}>
@@ -2106,7 +2135,7 @@ function QuickServiceModal({ clients, employees, onClose, onSave }) {
           const selected = services.find((item) => item.name === value)
           setForm({ ...form, service: value, value: selected?.price ?? form.value })
         }} options={services.map((item) => item.name)} />
-        <Select label="Profissional" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} options={employees.filter((item) => item.active).map((item) => item.name)} />
+        <Select label="Profissional" value={form.employeeName} onChange={(value) => setForm({ ...form, employeeName: value })} options={employees.filter((item) => item.active).map((item) => item.name)} />
         <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={appointmentPaymentOptions} values={appointmentPaymentValues} />
         <Field label="Valor" type="number" value={form.value} onChange={(value) => setForm({ ...form, value })} />
         <div className="flex justify-end gap-2 pt-2">
@@ -2412,7 +2441,7 @@ function Services({ salonId, user, services, setServices, notify }) {
       price: Number(data.price) || 0,
       category: selectedFunctions.join(', '),
       commissionPercent: Number(data.commissionPercent ?? data.commission_percent ?? 0) || 0,
-      professional: ''
+      responsible: ''
     }
     if (!payload.name) {
       notify?.('Erro ao salvar: informe o nome do serviço.', 'error')
@@ -2675,7 +2704,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     if (!window.confirm('Tem certeza que deseja remover este funcionário?')) return
 
     const hasLinkedFutureAppointments = appointments.some((appointment) => (
-      appointment.professional === employee.name &&
+      isAppointmentForEmployee(appointment, employee) &&
       appointment.status !== 'Cancelado' &&
       (appointment.date ?? '') >= todayIso
     ))
@@ -3253,8 +3282,8 @@ function Reports({ appointments, employees, cashEntries = [], user }) {
     : getProfessionals(employees)
       .map((employee) => ({
         name: employee.name,
-        value: completed.filter((item) => item.professional === employee.name).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0),
-        count: completed.filter((item) => item.professional === employee.name).length
+        value: completed.filter((item) => isAppointmentForEmployee(item, employee)).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0),
+        count: completed.filter((item) => isAppointmentForEmployee(item, employee)).length
       }))
       .filter((item) => item.count > 0)
   const serviceCommissions = appointmentEntries.length
@@ -3295,7 +3324,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
   const weekAppointments = appointments.filter((item) => weekDates.includes(item.date))
   const availableSlots = getAvailableSlots({ employee, date, service: selectedService, appointments, blockedSlots, salonSettings })
   const occupiedSlots = getOccupiedSlots({ employee, date, appointments })
-  const serviceOptions = employeeServices.length ? employeeServices : services.filter((item) => item.professional === employee.name).map((item) => item.name)
+  const serviceOptions = employeeServices.length ? employeeServices : services.filter((item) => item.responsible === employee.name).map((item) => item.name)
 
   function requestSlot(data) {
     if (!data.client.trim() || !data.service.trim()) {

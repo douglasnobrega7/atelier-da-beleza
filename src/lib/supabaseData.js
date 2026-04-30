@@ -121,7 +121,7 @@ function servicePayload(payload = {}, salonId, includeSalon = false) {
     commission_percent: includeSalon || hasField(payload, 'commissionPercent') || hasField(payload, 'commission_percent') || hasField(payload, 'commission')
       ? Number(payload.commissionPercent ?? payload.commission_percent ?? payload.commission ?? 0)
       : undefined,
-    responsible: includeSalon || hasField(payload, 'responsible') || hasField(payload, 'professional') ? payload.responsible ?? payload.professional ?? '' : undefined
+    responsible: includeSalon || hasField(payload, 'responsible') ? payload.responsible ?? '' : undefined
   })
 }
 
@@ -133,7 +133,6 @@ function appointmentPayload(payload = {}, salonId, includeSalon = false) {
     service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service_name') || hasField(payload, 'service') ? payload.serviceName ?? payload.service_name ?? payload.service ?? '' : undefined,
     service_id: includeSalon || hasField(payload, 'serviceId') || hasField(payload, 'service_id') ? payload.serviceId ?? payload.service_id ?? null : undefined,
     employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
-    professional: includeSalon || hasField(payload, 'professional') ? payload.professional ?? '' : undefined,
     appointment_date: includeSalon || hasField(payload, 'appointmentDate') || hasField(payload, 'date') ? payload.appointmentDate ?? payload.date : undefined,
     appointment_time: includeSalon || hasField(payload, 'appointmentTime') || hasField(payload, 'time') || hasField(payload, 'horario') ? payload.appointmentTime ?? payload.time ?? payload.horario : undefined,
     status: includeSalon || hasField(payload, 'status') ? payload.status ?? 'Aguardando' : undefined,
@@ -457,20 +456,7 @@ export async function seedSalonData(salonId) {
       .insert(clientPayload({ name: 'Cliente Exemplo', phone: '' }, salonId, true))
   )
 
-  await runQuery(
-    supabase
-      .from(TABLES.appointments)
-      .insert(appointmentPayload({
-        client: 'Cliente Exemplo',
-        service: 'Corte exemplo',
-        date: today,
-        time,
-        price: 50,
-        status: 'Confirmado'
-      }, salonId, true))
-  )
-
-  await runQuery(
+  const employee = await runQuery(
     supabase
       .from(TABLES.employees)
       .insert(employeePayload({
@@ -481,6 +467,22 @@ export async function seedSalonData(salonId) {
         status: 'Ativo',
         commission: 40,
         services: ['Corte exemplo']
+      }, salonId, true))
+      .select('id')
+      .single()
+  )
+
+  await runQuery(
+    supabase
+      .from(TABLES.appointments)
+      .insert(appointmentPayload({
+        client: 'Cliente Exemplo',
+        service: 'Corte exemplo',
+        employee_id: employee.id,
+        date: today,
+        time,
+        price: 50,
+        status: 'Confirmado'
       }, salonId, true))
   )
 
@@ -578,7 +580,20 @@ export async function deleteService(salonId, id) {
 }
 
 export async function fetchAppointments(salonId) {
-  return runQuery(bySalon(TABLES.appointments, salonId).order('appointment_date', { ascending: true }).order('appointment_time', { ascending: true }))
+  requireSalonId(salonId)
+  const rows = await runQuery(
+    supabase
+      .from(TABLES.appointments)
+      .select('*, employees!inner(name)')
+      .eq('salon_id', salonId)
+      .order('appointment_date', { ascending: true })
+      .order('appointment_time', { ascending: true })
+  )
+
+  return (rows ?? []).map((row) => ({
+    ...row,
+    employee_name: row.employee_name ?? row.employees?.name ?? ''
+  }))
 }
 
 export async function createAppointment(salonId, payload) {
