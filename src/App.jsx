@@ -36,6 +36,17 @@ const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center j
 const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-pearl dark:border-white/10 dark:bg-[#24202c] dark:text-gray-100 dark:hover:bg-white/10'
 const buttonDanger = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25'
 const badgeBase = 'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-bold'
+const employeeFunctionOptions = [
+  'Cabeleireiro/Cabeleireira',
+  'Colorista',
+  'Manicure e Pedicure',
+  'Esteticista',
+  'Maquiador/Maquiadora',
+  'Designer de Sobrancelhas / Micropigmentador',
+  'Depilador/Depiladora',
+  'Barbeiro/Barbeira',
+  'Técnico de Alongamento de Cílios'
+]
 
 function getTodayIso() {
   const now = new Date()
@@ -334,6 +345,10 @@ function formatServices(services) {
   if (Array.isArray(services)) return services.join(', ')
   if (typeof services === 'string') return services
   return ''
+}
+
+function formatEmployeeFunctions(role) {
+  return toList(role).join(', ')
 }
 
 function toObjectList(value) {
@@ -2165,18 +2180,13 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
   }
 
   async function saveEmployee(data) {
-    const employeeType = data.employeeType ?? 'professional'
-    const professional = employeeType === 'professional'
+    const employeeType = 'professional'
     const wantsLogin = Boolean(data.loginActive)
     const loginEmail = data.accessEmail?.trim().toLowerCase() ?? ''
     const temporaryPassword = data.temporaryPassword?.trim() ?? ''
     const employeeName = data.name.trim()
     if (!data.name.trim() || !data.phone.trim() || !data.role.trim()) {
-      notify?.('Erro ao salvar: informe nome, telefone e cargo.', 'error')
-      return
-    }
-    if (wantsLogin && (!loginEmail || !temporaryPassword)) {
-      notify?.('Erro ao salvar: informe e-mail e senha temporária do login.', 'error')
+      notify?.('Erro ao salvar: informe nome, telefone e função.', 'error')
       return
     }
     if (wantsLogin && !salonId) {
@@ -2185,25 +2195,33 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     }
     const existingLoginEmail = editing?.accessEmail?.trim().toLowerCase() ?? ''
     const shouldCreateLogin = wantsLogin && (!editing?.loginActive || existingLoginEmail !== loginEmail)
+    if (wantsLogin && !loginEmail) {
+      notify?.('Erro ao salvar: informe e-mail de acesso.', 'error')
+      return
+    }
+    if (shouldCreateLogin && !temporaryPassword) {
+      notify?.('Erro ao salvar: informe a senha do login.', 'error')
+      return
+    }
     const payload = {
       ...data,
       employeeType,
-      commission: professional ? Number(data.commission) || 0 : 0,
-      defaultDuration: professional ? Number(data.defaultDuration) || 60 : 60,
-      scheduleInterval: professional ? Number(data.scheduleInterval) || Number(data.defaultDuration) || 60 : 60,
-      workStart: professional ? data.workStart : '',
-      workEnd: professional ? data.workEnd : '',
-      breakStart: professional ? data.breakStart : '',
-      breakEnd: professional ? data.breakEnd : '',
+      commission: Number(data.commission) || 0,
+      defaultDuration: Number(data.defaultDuration) || 60,
+      scheduleInterval: Number(data.scheduleInterval) || Number(data.defaultDuration) || 60,
+      workStart: data.workStart ?? '09:00',
+      workEnd: data.workEnd ?? '18:00',
+      breakStart: data.breakStart ?? '',
+      breakEnd: data.breakEnd ?? '',
       accessEmail: loginEmail,
       temporaryPassword,
       loginActive: wantsLogin && !shouldCreateLogin,
-      serviceCommissions: professional ? toObjectList(data.serviceCommissions).map((item, index) => ({
+      serviceCommissions: toObjectList(data.serviceCommissions).map((item, index) => ({
         ...item,
         id: item.id ?? Date.now() + index,
         value: Number(item.value) || 0
-      })) : [],
-      services: professional ? (data.servicesText || '').split(',').map((item) => item.trim()).filter(Boolean) : []
+      })),
+      services: toList(data.services)
     }
     delete payload.servicesText
     try {
@@ -2257,10 +2275,11 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     }
   }
 
-  async function toggleEmployee(employee) {
+  async function deactivateEmployee(employee) {
     if (!canManage) return
+    if (!employee.active) return
     try {
-      const saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, employee.id, { active: !employee.active }))
+      const saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, employee.id, { active: false }))
       setEmployees((current) => current.map((item) => item.id === employee.id ? saved : item))
     } catch (error) {
       handleDataActionError(error, notify)
@@ -2346,45 +2365,10 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
             </button>
             <span className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs font-bold ${item.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{item.active ? 'Ativo' : 'Inativo'}</span>
           </div>
-          <p className="min-w-0 text-sm text-gray-500">{item.role} · {item.phone}</p>
-          <p className="min-w-0 text-sm font-semibold text-gray-600">Tipo: {isProfessional(item) ? 'Profissional' : 'Caixa/Recepção'}</p>
-          <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong>{item.accessEmail ? ` · ${item.accessEmail}` : ''}</p>
-          <div>
-            <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-3 py-1 text-xs font-bold ${employeeStatusStyles[item.workStatus] ?? employeeStatusStyles.Ativo}`}>
-              {item.workStatus}
-            </span>
-          </div>
-          {isProfessional(item) && <p className="min-w-0 text-sm">Comissão padrão: <strong>{item.commission}%</strong></p>}
-          {isProfessional(item) && <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-pearl p-5 dark:border-white/10 dark:bg-[#221c34]">
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="min-w-0 text-sm font-bold dark:text-white">Comissões por Serviço</p>
-              {canManage && <button onClick={() => openEdit(item)} className="w-fit max-w-full rounded-xl border border-blush bg-white px-4 py-2 text-left text-xs font-semibold whitespace-normal hover:bg-pearl dark:border-white/10 dark:bg-black/40 dark:text-white/80 dark:hover:bg-black/60">Adicionar comissão por serviço</button>}
-            </div>
-            <div className="mt-4 space-y-3">
-              {(item.serviceCommissions ?? []).length ? item.serviceCommissions.map((rule) => (
-                <div key={rule.id} className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm dark:border-white/5 dark:bg-[#181424] lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <p className="min-w-0 break-words font-bold text-graphite dark:text-white">{rule.service}</p>
-                    <p className="min-w-0 break-words"><span className="text-gray-500 dark:text-white/60">{rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'}</span> <span className="font-bold text-emerald-700 dark:text-green-400">· {formatCommissionRule(rule)}</span></p>
-                  </div>
-                  {canManage && (
-                    <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-                      <button onClick={() => openEdit(item)} className="rounded-xl bg-blue-500/20 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-500/30 dark:text-blue-300">Editar comissão</button>
-                      <button onClick={() => setEmployees((current) => current.map((employee) => employee.id === item.id ? { ...employee, serviceCommissions: (employee.serviceCommissions ?? []).filter((currentRule) => currentRule.id !== rule.id) } : employee))} className="rounded-xl bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/30 dark:text-red-400">Remover comissão</button>
-                    </div>
-                  )}
-                </div>
-              )) : <p className="min-w-0 text-sm text-gray-500">Sem comissão específica. Usa a comissão padrão.</p>}
-            </div>
-          </div>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Serviços: {formatServices(item.services || '')}</p>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">
-            Expediente: <strong>{item.workStart} às {item.workEnd}</strong>
-            {item.breakStart && item.breakEnd ? ` · intervalo ${item.breakStart} às ${item.breakEnd}` : ''}
-          </p>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Duração padrão: {item.defaultDuration} min</p>}
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Intervalo da agenda: {item.scheduleInterval} min</p>}
-          {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button><button onClick={() => toggleEmployee(item)} className={buttonSecondary}>{item.active ? 'Desativar' : 'Ativar'}</button><button onClick={() => removeEmployee(item)} className={buttonDanger}>Remover</button></div>}
+          <p className="min-w-0 text-sm text-gray-500">{item.phone}</p>
+          <p className="min-w-0 text-sm text-gray-600">Funções: <strong>{formatEmployeeFunctions(item.role) || 'Não informado'}</strong></p>
+          <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong></p>
+          {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button><button onClick={() => deactivateEmployee(item)} disabled={!item.active} className={buttonSecondary}>Desativar</button><button onClick={() => removeEmployee(item)} className={buttonDanger}>Remover</button></div>}
         </div>
       )} />
       {modalOpen && <EmployeeModal employee={editing} salonSettings={salonSettings} onClose={() => setModalOpen(false)} onSave={saveEmployee} />}
@@ -2393,14 +2377,14 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 }
 
 function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
-  const defaultEmployeeType = employee?.employeeType ?? 'professional'
-  const defaultAccessEmail = employee?.accessEmail ?? getSuggestedAccessEmail({ name: employee?.name, employeeType: defaultEmployeeType, salonSettings })
+  const defaultAccessEmail = employee?.accessEmail ?? getSuggestedAccessEmail({ name: employee?.name, employeeType: 'professional', salonSettings })
   const [form, setForm] = useState(employee ? {
     ...employee,
-    employeeType: defaultEmployeeType,
+    employeeType: 'professional',
+    role: formatEmployeeFunctions(employee.role),
     workStatus: employee.workStatus ?? 'Ativo',
-    workStart: employee.workStart ?? (employee.employeeType === 'cashier' ? '' : '09:00'),
-    workEnd: employee.workEnd ?? (employee.employeeType === 'cashier' ? '' : '18:00'),
+    workStart: employee.workStart ?? '09:00',
+    workEnd: employee.workEnd ?? '18:00',
     breakStart: employee.breakStart ?? '',
     breakEnd: employee.breakEnd ?? '',
     accessEmail: defaultAccessEmail,
@@ -2409,61 +2393,38 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     defaultDuration: employee.defaultDuration ?? 60,
     scheduleInterval: employee.scheduleInterval ?? employee.defaultDuration ?? 60,
     serviceCommissions: toObjectList(employee.serviceCommissions),
-    servicesText: formatServices(employee.services || '')
-  } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: getSuggestedAccessEmail({ employeeType: 'professional', salonSettings }), temporaryPassword: '', loginActive: false, commission: 30, serviceCommissions: [], servicesText: '', active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
-  const professional = form.employeeType === 'professional'
-  const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
+    services: toList(employee.services)
+  } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: getSuggestedAccessEmail({ employeeType: 'professional', salonSettings }), temporaryPassword: '', loginActive: true, commission: 0, serviceCommissions: [], services: [], active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
+  const selectedFunctions = toList(form.role)
+  const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: 'professional', salonSettings })
 
   function updateName(name) {
-    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
+    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: 'professional', salonSettings })
     setForm((current) => ({
       ...current,
       name,
       accessEmail: !current.accessEmail || current.accessEmail === previousSuggestion
-        ? getSuggestedAccessEmail({ name, employeeType: current.employeeType, salonSettings })
+        ? getSuggestedAccessEmail({ name, employeeType: 'professional', salonSettings })
         : current.accessEmail
     }))
   }
 
-  function updateEmployeeType(employeeType) {
-    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
-    setForm((current) => ({
-      ...current,
-      employeeType,
-      role: employeeType === 'cashier' ? 'Caixa/Recepção' : current.role,
-      accessEmail: !current.accessEmail || current.accessEmail === previousSuggestion
-        ? getSuggestedAccessEmail({ name: current.name, employeeType, salonSettings })
-        : current.accessEmail
-    }))
+  function toggleFunction(option) {
+    setForm((current) => {
+      const currentFunctions = toList(current.role)
+      const nextFunctions = currentFunctions.includes(option)
+        ? currentFunctions.filter((item) => item !== option)
+        : [...currentFunctions, option]
+      return { ...current, role: nextFunctions.join(', ') }
+    })
   }
 
   function generateLogin() {
     setForm((current) => ({
       ...current,
-      accessEmail: getSuggestedAccessEmail({ name: current.name, employeeType: current.employeeType, salonSettings }),
+      accessEmail: getSuggestedAccessEmail({ name: current.name, employeeType: 'professional', salonSettings }),
       temporaryPassword: current.temporaryPassword || String(Math.floor(100000 + Math.random() * 900000)),
       loginActive: true
-    }))
-  }
-
-  function addServiceCommission() {
-    setForm((current) => ({
-      ...current,
-      serviceCommissions: [...(current.serviceCommissions ?? []), { id: Date.now(), service: services[0]?.name ?? '', type: 'percentage', value: 0 }]
-    }))
-  }
-
-  function updateServiceCommission(id, changes) {
-    setForm((current) => ({
-      ...current,
-      serviceCommissions: (current.serviceCommissions ?? []).map((item) => item.id === id ? { ...item, ...changes } : item)
-    }))
-  }
-
-  function removeServiceCommission(id) {
-    setForm((current) => ({
-      ...current,
-      serviceCommissions: (current.serviceCommissions ?? []).filter((item) => item.id !== id)
     }))
   }
 
@@ -2472,8 +2433,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <Field label="Nome" value={form.name} onChange={updateName} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
-        <Field label="Cargo" value={form.role} onChange={(value) => setForm({ ...form, role: value })} required />
-        <Select label="Tipo de Funcionário" value={form.employeeType} onChange={updateEmployeeType} options={['Profissional', 'Caixa/Recepção']} values={['professional', 'cashier']} />
+        <CheckboxGroup label="Função" options={employeeFunctionOptions} selected={selectedFunctions} onToggle={toggleFunction} />
         <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -2483,47 +2443,13 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
             <button type="button" onClick={generateLogin} className={buttonSecondary}>Usar sugestão</button>
           </div>
           <div className="mt-4">
-            <Toggle label="Criar login para este funcionário" checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
+            <Toggle label="Login do funcionário" checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Field label="E-mail de acesso" value={form.accessEmail ?? ''} onChange={(value) => setForm({ ...form, accessEmail: value })} type="email" />
-            <Field label="Senha temporária" value={form.temporaryPassword ?? ''} onChange={(value) => setForm({ ...form, temporaryPassword: value })} />
+            <Field label="Senha" value={form.temporaryPassword ?? ''} onChange={(value) => setForm({ ...form, temporaryPassword: value })} />
           </div>
         </section>
-        {professional && <Field label="Comissão padrão (%)" type="number" value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} />}
-        {professional && <Field label="Serviços que realiza" value={form.servicesText} onChange={(value) => setForm({ ...form, servicesText: value })} placeholder="Separar por vírgula" />}
-        {professional && <section className="rounded-2xl border border-gray-200 bg-pearl p-5 dark:border-white/10 dark:bg-[#221c34]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h4 className="font-bold dark:text-white">Comissões por Serviço</h4>
-              <p className="text-sm text-gray-500 dark:text-white/60">Quando não houver regra específica, o sistema usa a comissão padrão.</p>
-            </div>
-            <button type="button" onClick={addServiceCommission} className="rounded-xl border border-blush bg-white px-4 py-2 text-sm font-semibold hover:bg-pearl dark:border-white/10 dark:bg-black/40 dark:text-white/80 dark:hover:bg-black/60">Adicionar comissão por serviço</button>
-          </div>
-          <div className="mt-5 space-y-4">
-            {(form.serviceCommissions ?? []).map((rule) => (
-              <div key={rule.id} className="grid gap-4 rounded-2xl border border-gray-100 bg-white p-4 dark:border-white/5 dark:bg-[#181424] md:grid-cols-[1.2fr_0.8fr_0.7fr_auto]">
-                <Select label="Serviço" value={rule.service} onChange={(value) => updateServiceCommission(rule.id, { service: value })} options={services.map((item) => item.name)} />
-                <Select label="Tipo de comissão" value={rule.type} onChange={(value) => updateServiceCommission(rule.id, { type: value })} options={['Porcentagem', 'Valor fixo']} values={['percentage', 'fixed']} />
-                <Field label={rule.type === 'fixed' ? 'Valor fixo' : 'Porcentagem'} type="number" value={rule.value} onChange={(value) => updateServiceCommission(rule.id, { value })} />
-                <div className="flex items-end">
-                  <button type="button" onClick={() => removeServiceCommission(rule.id)} className="w-full rounded-xl bg-red-500/20 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-500/30 dark:text-red-400">Remover comissão</button>
-                </div>
-              </div>
-            ))}
-            {(form.serviceCommissions ?? []).length === 0 && <p className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm font-semibold text-gray-500 dark:border-white/5 dark:bg-[#181424] dark:text-white/60">Nenhuma comissão específica cadastrada.</p>}
-          </div>
-        </section>}
-        {professional && <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Horário de início" type="time" value={form.workStart} onChange={(value) => setForm({ ...form, workStart: value })} />
-          <Field label="Horário de fim" type="time" value={form.workEnd} onChange={(value) => setForm({ ...form, workEnd: value })} />
-          <Field label="Início do intervalo" type="time" value={form.breakStart} onChange={(value) => setForm({ ...form, breakStart: value })} />
-          <Field label="Fim do intervalo" type="time" value={form.breakEnd} onChange={(value) => setForm({ ...form, breakEnd: value })} />
-        </div>}
-        {professional && <Field label="Duração padrão dos serviços (min)" type="number" value={form.defaultDuration} onChange={(value) => setForm({ ...form, defaultDuration: value })} />}
-        {professional && <Field label="Intervalo da agenda (min)" type="number" value={form.scheduleInterval} onChange={(value) => setForm({ ...form, scheduleInterval: value })} />}
-        <Select label="Status atual" value={form.workStatus} onChange={(value) => setForm({ ...form, workStatus: value })} options={employeeStatuses} />
-        <Toggle label="Status ativo" checked={form.active} onChange={(checked) => setForm({ ...form, active: checked })} />
         <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button><button className={buttonPrimary}>Salvar</button></div>
       </form>
     </Modal>
@@ -3253,6 +3179,27 @@ function Select({ label, value, onChange, options, values, disabled = false }) {
         {(options || []).map((option, index) => <option key={values?.[index] ?? option} value={values?.[index] ?? option}>{option}</option>)}
       </select>
     </label>
+  )
+}
+
+function CheckboxGroup({ label, options, selected, onToggle }) {
+  return (
+    <fieldset className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+      <legend className="px-1 text-sm font-semibold text-gray-600 dark:text-gray-300">{label}</legend>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {(options || []).map((option) => (
+          <label key={option} className="flex min-w-0 items-start gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm font-semibold text-graphite dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100">
+            <input
+              type="checkbox"
+              checked={(selected || []).includes(option)}
+              onChange={() => onToggle(option)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#c9a85d]"
+            />
+            <span className="min-w-0 break-words">{option}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   )
 }
 
