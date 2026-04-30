@@ -381,6 +381,7 @@ function normalizeEmployeeRecord(row) {
     scheduleInterval: field(row, 'scheduleInterval', 'schedule_interval') ?? field(row, 'defaultDuration', 'default_duration') ?? 60,
     serviceCommissions: professional ? toObjectList(field(row, 'serviceCommissions', 'service_commissions')) : [],
     services: professional ? toList(field(row, 'services') || '') : [],
+    userId: field(row, 'userId', 'user_id') ?? '',
     accessEmail: field(row, 'accessEmail', 'access_email') ?? field(row, 'login_email') ?? '',
     temporaryPassword: field(row, 'temporaryPassword', 'temporary_password') ?? '',
     loginStatus,
@@ -2298,9 +2299,31 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     }
 
     try {
+      const loginUserId = employee.userId ?? employee.user_id ?? ''
+      const loginEmail = employee.accessEmail ?? employee.login_email ?? ''
+      const hasLogin = Boolean(loginUserId || loginEmail)
+
+      if (hasLogin) {
+        const response = await fetch('/api/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: loginUserId,
+            email: loginEmail
+          })
+        })
+
+        const result = await response.json()
+
+        if (!response.ok) {
+          console.error('Erro API delete-user:', result)
+          throw new Error(result.error || 'Erro ao remover login')
+        }
+      }
+
       await deleteEmployeeRecord(salonId, employee.id)
       setEmployees((current) => current.filter((item) => item.id !== employee.id))
-      notify?.('Funcionário removido com sucesso')
+      notify?.(hasLogin ? 'Funcionário e login removidos com sucesso.' : 'Funcionário removido com sucesso')
     } catch (error) {
       handleDataActionError(error, notify)
     }
