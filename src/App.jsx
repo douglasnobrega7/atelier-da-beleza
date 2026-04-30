@@ -48,18 +48,6 @@ const employeeFunctionOptions = [
   'Barbeiro/Barbeira',
   'Técnico de Alongamento de Cílios'
 ]
-const commissionRoleKeys = {
-  'Cabeleireiro/Cabeleireira': 'cabeleireiro',
-  Colorista: 'colorista',
-  'Manicure e Pedicure': 'manicure',
-  Esteticista: 'esteticista',
-  'Maquiador/Maquiadora': 'maquiador',
-  'Designer de Sobrancelhas / Micropigmentador': 'designer_de_sobrancelhas',
-  'Depilador/Depiladora': 'depilador',
-  'Barbeiro/Barbeira': 'barbeiro',
-  'Técnico de Alongamento de Cílios': 'tecnico_de_alongamento_de_cilios'
-}
-
 function getTodayIso() {
   const now = new Date()
   const offset = now.getTimezoneOffset()
@@ -275,8 +263,8 @@ function calculateCommission(appointment, employees) {
 }
 
 function getCommissionRule(appointment, employee) {
-  const specific = employee?.serviceCommissions?.find((item) => item.service === appointment.service)
-  if (specific) return { type: specific.type, value: Number(specific.value) || 0, source: 'service' }
+  const service = services.find((item) => item.name === appointment.service)
+  if (service) return { type: 'percentage', value: Number(service.commission_percent ?? service.commissionPercent ?? 0) || 0, source: 'service' }
   return { type: 'percentage', value: Number(employee?.commission) || 0, source: 'default' }
 }
 
@@ -435,26 +423,6 @@ function formatServiceFunctions(category) {
   return toList(category).join(', ')
 }
 
-function getCommissionRoleKey(role) {
-  return commissionRoleKeys[role] ?? String(role ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\/.*$/, '')
-    .replace(/\s+e\s+.*$/, '')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-}
-
-function sanitizeCommissionByRole(selectedFunctions, commissionByRole = {}) {
-  return Object.fromEntries(selectedFunctions.map((role) => {
-    const key = getCommissionRoleKey(role)
-    const rawValue = commissionByRole[key]
-    const value = rawValue === '' || rawValue === null || rawValue === undefined ? 0 : Number(rawValue)
-    return [key, Number.isFinite(value) ? value : 0]
-  }))
-}
-
 function getCompatibleServicesForProfessional(professional, serviceItems = services) {
   if (!professional) return []
 
@@ -524,6 +492,7 @@ function normalizeEmployeeRecord(row) {
 }
 
 function normalizeServiceRecord(row) {
+  const commissionPercent = Number(field(row, 'commissionPercent', 'commission_percent') ?? field(row, 'commission') ?? 0)
   return {
     ...row,
     name: field(row, 'name') ?? '',
@@ -532,7 +501,8 @@ function normalizeServiceRecord(row) {
     durationMinutes: field(row, 'durationMinutes', 'duration_minutes'),
     professional: field(row, 'professional') ?? field(row, 'responsible') ?? '',
     category: field(row, 'category') ?? '',
-    commissionByRole: field(row, 'commissionByRole', 'commission_by_role') ?? {}
+    commission_percent: commissionPercent,
+    commissionPercent
   }
 }
 
@@ -844,6 +814,8 @@ function App() {
       }
 
       const normalizedEmployees = (employeeRows ?? []).map(normalizeEmployeeRecord)
+      const normalizedServices = (serviceRows ?? []).map(normalizeServiceRecord)
+      services = normalizedServices
       const normalizedAppointments = (appointmentRows ?? []).map((appointment) => normalizeAppointmentRecord(appointment, normalizedEmployees))
       const normalizedAdvances = (advanceRows ?? []).map(normalizeAdvanceRecord)
       const advanceCashEntries = normalizedAdvances.map((advance) => createAdvanceCashEntry(advance))
@@ -851,7 +823,7 @@ function App() {
       setSalonSettings(normalizeSalonSettings(salonRow ?? {}))
       setClients((clientRows ?? []).map(normalizeClientRecord))
       setEmployees(normalizedEmployees)
-      setServiceItems((serviceRows ?? []).map(normalizeServiceRecord))
+      setServiceItems(normalizedServices)
       setAppointments(normalizedAppointments)
       setCashEntries([...(cashMovementRows ?? []).map(normalizeCashMovementRecord), ...advanceCashEntries])
       setAdvances(normalizedAdvances)
@@ -2228,7 +2200,7 @@ function Services({ salonId, user, services, setServices, notify }) {
       name: data.name.trim(),
       price: Number(data.price) || 0,
       category: selectedFunctions.join(', '),
-      commissionByRole: sanitizeCommissionByRole(selectedFunctions, data.commissionByRole),
+      commissionPercent: Number(data.commissionPercent ?? data.commission_percent ?? 0) || 0,
       professional: ''
     }
     if (!payload.name) {
@@ -2281,6 +2253,7 @@ function Services({ salonId, user, services, setServices, notify }) {
             <p className="min-w-0 break-words text-lg font-bold">{item.name}</p>
             <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-100 px-4 py-2 text-base font-bold text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300">{money.format(item.price)}</span>
           </div>
+          <p className="mt-2 text-sm text-gray-600">Comissão: <strong>{Number(item.commission_percent ?? item.commissionPercent ?? 0)}%</strong></p>
           <p className="mt-2 text-sm text-gray-600">Duração: <strong>{item.duration}</strong></p>
           <p className="mt-3 text-sm">Funções que realizam: <strong>{formatServiceFunctions(item.category) || 'Não informado'}</strong></p>
           {canManage && (
@@ -2302,8 +2275,8 @@ function ServiceModal({ service, onClose, onSave }) {
     price: service.price,
     duration: service.duration,
     category: service.category,
-    commissionByRole: service.commissionByRole ?? service.commission_by_role ?? {}
-  } : { name: '', price: 0, duration: '1h', category: '', commissionByRole: {} })
+    commissionPercent: service.commissionPercent ?? service.commission_percent ?? 0
+  } : { name: '', price: 0, duration: '1h', category: '', commissionPercent: 0 })
   const selectedFunctions = toList(form.category).filter((option) => employeeFunctionOptions.includes(option))
 
   function toggleFunction(option) {
@@ -2314,18 +2287,9 @@ function ServiceModal({ service, onClose, onSave }) {
         : [...currentFunctions, option]
       return {
         ...current,
-        category: nextFunctions.join(', '),
-        commissionByRole: sanitizeCommissionByRole(nextFunctions, current.commissionByRole)
+        category: nextFunctions.join(', ')
       }
     })
-  }
-
-  function updateRoleCommission(option, value) {
-    const key = getCommissionRoleKey(option)
-    setForm((current) => ({
-      ...current,
-      commissionByRole: { ...(current.commissionByRole ?? {}), [key]: value }
-    }))
   }
 
   return (
@@ -2336,13 +2300,12 @@ function ServiceModal({ service, onClose, onSave }) {
           <Field label="Valor" type="number" min="0" value={form.price} onChange={(value) => setForm({ ...form, price: value })} required />
           <Field label="Duração" value={form.duration} onChange={(value) => setForm({ ...form, duration: value })} placeholder="Ex.: 1h 30min" required />
         </div>
-        <ServiceFunctionCommissionGroup
+        <Field label="Comissão do profissional (%)" type="number" min="0" max="100" step="0.01" value={form.commissionPercent} onChange={(value) => setForm({ ...form, commissionPercent: value })} />
+        <CheckboxGroup
           label="Função que realiza"
           options={employeeFunctionOptions}
           selected={selectedFunctions}
-          commissionByRole={form.commissionByRole}
           onToggle={toggleFunction}
-          onCommissionChange={updateRoleCommission}
         />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
@@ -3460,47 +3423,6 @@ function Select({ label, value, onChange, options, values, disabled = false }) {
         {(options || []).map((option, index) => <option key={values?.[index] ?? option} value={values?.[index] ?? option}>{option}</option>)}
       </select>
     </label>
-  )
-}
-
-function ServiceFunctionCommissionGroup({ label, options, selected, commissionByRole, onToggle, onCommissionChange }) {
-  return (
-    <fieldset className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
-      <legend className="px-1 text-sm font-semibold text-gray-600 dark:text-gray-300">{label}</legend>
-      <div className="mt-3 grid gap-2">
-        {(options || []).map((option) => {
-          const checked = (selected || []).includes(option)
-          const key = getCommissionRoleKey(option)
-          return (
-            <div key={option} className="grid min-w-0 gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm font-semibold text-graphite dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100 sm:grid-cols-[minmax(0,1fr)_8rem] sm:items-center">
-              <label className="flex min-w-0 items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => onToggle(option)}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#c9a85d]"
-                />
-                <span className="min-w-0 break-words">{option}</span>
-              </label>
-              <label className="relative block">
-                <span className="sr-only">Comissão de {option}</span>
-                <input
-                  className={`${inputBase} pr-9 text-right`}
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={checked ? commissionByRole?.[key] ?? 0 : 0}
-                  onChange={(event) => onCommissionChange(option, event.target.value)}
-                  disabled={!checked}
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">%</span>
-              </label>
-            </div>
-          )
-        })}
-      </div>
-    </fieldset>
   )
 }
 

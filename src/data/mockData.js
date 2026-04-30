@@ -7,14 +7,14 @@
 ]
 
 export const services = [
-  { id: 1, name: 'Corte feminino', price: 90, duration: '50 min', professional: '', category: 'Cabeleireiro/Cabeleireira, Barbeiro/Barbeira' },
-  { id: 2, name: 'Escova modelada', price: 75, duration: '45 min', professional: '', category: 'Cabeleireiro/Cabeleireira' },
-  { id: 3, name: 'Coloração', price: 220, duration: '2h 30min', professional: '', category: 'Colorista' },
-  { id: 4, name: 'Manicure gel', price: 70, duration: '1h', professional: '', category: 'Manicure e Pedicure' },
-  { id: 5, name: 'Pedicure spa', price: 85, duration: '1h 10min', professional: '', category: 'Manicure e Pedicure' },
-  { id: 6, name: 'Design de sobrancelhas', price: 55, duration: '35 min', professional: '', category: 'Designer de Sobrancelhas / Micropigmentador' },
-  { id: 7, name: 'Limpeza de pele', price: 160, duration: '1h 20min', professional: '', category: 'Esteticista' },
-  { id: 8, name: 'Maquiagem social', price: 180, duration: '1h 30min', professional: '', category: 'Maquiador/Maquiadora' }
+  { id: 1, name: 'Corte feminino', price: 90, duration: '50 min', commission_percent: 40, professional: '', category: 'Cabeleireiro/Cabeleireira, Barbeiro/Barbeira' },
+  { id: 2, name: 'Escova modelada', price: 75, duration: '45 min', commission_percent: 40, professional: '', category: 'Cabeleireiro/Cabeleireira' },
+  { id: 3, name: 'Coloração', price: 220, duration: '2h 30min', commission_percent: 35, professional: '', category: 'Colorista' },
+  { id: 4, name: 'Manicure gel', price: 70, duration: '1h', commission_percent: 50, professional: '', category: 'Manicure e Pedicure' },
+  { id: 5, name: 'Pedicure spa', price: 85, duration: '1h 10min', commission_percent: 45, professional: '', category: 'Manicure e Pedicure' },
+  { id: 6, name: 'Design de sobrancelhas', price: 55, duration: '35 min', commission_percent: 40, professional: '', category: 'Designer de Sobrancelhas / Micropigmentador' },
+  { id: 7, name: 'Limpeza de pele', price: 160, duration: '1h 20min', commission_percent: 38, professional: '', category: 'Esteticista' },
+  { id: 8, name: 'Maquiagem social', price: 180, duration: '1h 30min', commission_percent: 42, professional: '', category: 'Maquiador/Maquiadora' }
 ]
 
 export const clients = [
