@@ -72,7 +72,7 @@ const weekDayOptions = [
 const defaultWorkingDays = weekDayOptions.map((day) => day.id)
 const defaultOpeningHours = Object.fromEntries(weekDayOptions.map((day) => [day.id, { open: '09:00', close: '18:00' }]))
 const appointmentSlotInterval = 15
-const paymentMethodOptions = ['PIX', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']
+const paymentMethodOptions = ['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente / pagar depois']
 const paymentMethodValues = ['pix', 'dinheiro', 'debito', 'credito', 'pendente']
 const appointmentPaymentOptions = ['Sem pagamento', 'PIX', 'Dinheiro', 'Débito', 'Crédito']
 const appointmentPaymentValues = ['', 'pix', 'dinheiro', 'debito', 'credito']
@@ -90,7 +90,7 @@ function normalizeAppointmentPaymentMethod(value) {
 }
 
 function cashPaymentMethodLabel(value) {
-  const labels = { dinheiro: 'Dinheiro', pix: 'Pix', cartao: 'Cartão' }
+  const labels = { dinheiro: 'Dinheiro', pix: 'Pix', debito: 'Débito', credito: 'Crédito', pendente: 'Pendente' }
   return labels[normalizeAppointmentPaymentMethod(value)] ?? 'Pendente'
 }
 
@@ -485,6 +485,8 @@ function normalizeAppointmentStatus(status) {
 
   if (normalized === 'agendado' || normalized === 'aguardando') return 'agendado'
   if (normalized === 'confirmado') return 'confirmado'
+  if (normalized === 'em_atendimento' || normalized === 'ematendimento' || normalized === 'em atendimento') return 'em_atendimento'
+  if (normalized === 'aguardando_pagamento' || normalized === 'aguardandopagamento' || normalized === 'aguardando pagamento') return 'aguardando_pagamento'
   if (normalized === 'concluido') return 'concluido'
   if (normalized === 'cancelado') return 'cancelado'
   return 'agendado'
@@ -493,6 +495,8 @@ function normalizeAppointmentStatus(status) {
 const appointmentStatusOptions = [
   { value: 'agendado', label: 'Agendado' },
   { value: 'confirmado', label: 'Confirmado' },
+  { value: 'em_atendimento', label: 'Em atendimento' },
+  { value: 'aguardando_pagamento', label: 'Aguardando pagamento' },
   { value: 'concluido', label: 'Concluído' },
   { value: 'cancelado', label: 'Cancelado' }
 ]
@@ -500,6 +504,8 @@ const appointmentStatusOptions = [
 const appointmentStatusLabels = {
   agendado: 'Agendado',
   confirmado: 'Confirmado',
+  em_atendimento: 'Em atendimento',
+  aguardando_pagamento: 'Aguardando pagamento',
   concluido: 'Concluído',
   cancelado: 'Cancelado'
 }
@@ -921,6 +927,8 @@ const professionalMenu = [
 const statusStyles = {
   agendado: 'border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-400/30 dark:bg-orange-500/15 dark:text-orange-200',
   confirmado: 'border-violet-100 bg-lilacSoft/40 text-violet-800 dark:border-violet-300/30 dark:bg-violet-500/20 dark:text-violet-100',
+  em_atendimento: 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-500/15 dark:text-cyan-200',
+  aguardando_pagamento: 'border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-400/30 dark:bg-yellow-500/15 dark:text-yellow-200',
   concluido: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200',
   cancelado: 'border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-500/15 dark:text-red-200'
 }
@@ -928,6 +936,8 @@ const statusStyles = {
 const appointmentStatusCardStyles = {
   agendado: 'border-orange-300 bg-orange-50/85 text-orange-950 dark:border-orange-400/45 dark:bg-orange-500/15 dark:text-orange-50',
   confirmado: 'border-violet-300 bg-violet-50/85 text-violet-950 dark:border-violet-300/45 dark:bg-violet-500/15 dark:text-violet-50',
+  em_atendimento: 'border-cyan-300 bg-cyan-50/85 text-cyan-950 dark:border-cyan-400/45 dark:bg-cyan-500/15 dark:text-cyan-50',
+  aguardando_pagamento: 'border-yellow-300 bg-yellow-50/85 text-yellow-950 dark:border-yellow-400/45 dark:bg-yellow-500/15 dark:text-yellow-50',
   concluido: 'border-emerald-300 bg-emerald-50/85 text-emerald-950 dark:border-emerald-400/45 dark:bg-emerald-500/15 dark:text-emerald-50',
   cancelado: 'border-red-300 bg-red-50/85 text-red-950 dark:border-red-400/45 dark:bg-red-500/15 dark:text-red-50'
 }
@@ -935,6 +945,8 @@ const appointmentStatusCardStyles = {
 const appointmentStatusDetailStyles = {
   agendado: 'text-orange-700 dark:text-orange-200',
   confirmado: 'text-violet-700 dark:text-violet-200',
+  em_atendimento: 'text-cyan-700 dark:text-cyan-200',
+  aguardando_pagamento: 'text-yellow-700 dark:text-yellow-200',
   concluido: 'text-emerald-700 dark:text-emerald-200',
   cancelado: 'text-red-700 dark:text-red-200'
 }
@@ -942,6 +954,8 @@ const appointmentStatusDetailStyles = {
 const appointmentStatusTextStyles = {
   agendado: 'text-[#f59e0b]',
   confirmado: 'text-[#8b5cf6]',
+  em_atendimento: 'text-[#06b6d4]',
+  aguardando_pagamento: 'text-[#eab308]',
   concluido: 'text-[#22c55e]',
   cancelado: 'text-[#ef4444]'
 }
@@ -2238,9 +2252,9 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
                 <AppointmentStatusSelect
                   value={selectedItem.status}
                   roundedClass="rounded-xl"
-                  onChange={(status) => {
-                    onStatusChange(selectedItem.id, status)
-                    setSelectedItem({ ...selectedItem, status })
+                  onChange={async (status) => {
+                    const changed = await onStatusChange(selectedItem.id, status)
+                    if (changed) setSelectedItem({ ...selectedItem, status })
                   }}
                 />
               )}
@@ -3028,22 +3042,29 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
   const salonProfit = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
   const byMethod = (methods) => {
     const methodList = Array.isArray(methods) ? methods : [methods]
-    const aliases = methodList.some((method) => String(method).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === 'cartao')
-      ? [...methodList, 'Débito', 'Crédito', 'debito', 'credito']
-      : methodList
+    const aliases = methodList.flatMap((method) => [method, paymentMethodLabel(method), normalizeAppointmentPaymentMethod(method)]).filter(Boolean)
     return paidIncomeEntries.filter((item) => aliases.includes(cashMethod(item))).reduce((sum, item) => sum + cashValue(item), 0)
   }
   const pendingTotal = pendingIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
-  const unpaidConfirmedAppointments = appointments.filter((item) => {
+  const awaitingPaymentAppointments = appointments.filter((item) => {
     const entry = entries.find((cashEntry) => String(cashAppointmentId(cashEntry) ?? '') === String(item.id))
-    return normalizeAppointmentStatus(item.status) === 'confirmado' && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && cashStatus(entry) !== 'pago'
+    return normalizeAppointmentStatus(item.status) === 'em_atendimento' && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && !entry
   })
   const pendingPayments = entries.filter((item) => cashType(item) === 'entrada' && cashStatus(item) === 'pendente')
+  const employeeCommissions = Object.values(paidIncomeEntries.filter(isAppointmentCashEntry).reduce((acc, item) => {
+    const key = String(field(item, 'employeeId', 'employee_id') ?? cashEmployeeName(item) ?? 'sem-profissional')
+    const name = cashEmployeeName(item) || employees.find((employee) => String(employee.id) === key)?.name || 'Sem profissional'
+    acc[key] = acc[key] ?? { name, value: 0, count: 0 }
+    acc[key].value += cashCommissionValue(item)
+    acc[key].count += isAppointmentCashEntry(item) ? 1 : 0
+    return acc
+  }, {})).sort((a, b) => b.value - a.value)
   const alreadyClosed = closures.some((item) => item.date === todayIso)
 
   async function receiveAppointmentPayment(appointment, paymentMethod) {
     const normalizedMethod = normalizeAppointmentPaymentMethod(paymentMethod) ?? 'pendente'
     const paymentStatus = normalizedMethod === 'pendente' ? 'pendente' : 'pago'
+    const appointmentStatus = paymentStatus === 'pago' ? 'concluido' : 'aguardando_pagamento'
     const payload = createCompletedAppointmentCashEntry({
       ...appointment,
       paymentMethod: normalizedMethod,
@@ -3051,9 +3072,13 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       paymentStatus,
       payment_status: paymentStatus
     }, employees, serviceItems)
-    const existingEntry = entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
 
     try {
+      const remoteEntry = entries.some((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
+        ? null
+        : await fetchCashMovementByAppointmentFromSupabase(salonId, appointment.id)
+      const existingEntry = entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
+        ?? (remoteEntry ? normalizeCashMovementRecord(remoteEntry) : null)
       const savedEntry = normalizeCashMovementRecord(existingEntry?.id
         ? await updateCashMovementRecord(salonId, existingEntry.id, payload)
         : await createCashMovementRecord(salonId, payload))
@@ -3063,7 +3088,8 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
           paymentMethod: normalizedMethod,
           payment_method: normalizedMethod,
           paymentStatus,
-          payment_status: paymentStatus
+          payment_status: paymentStatus,
+          status: appointmentStatus
         }))
       }, employees)
 
@@ -3077,6 +3103,51 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       setPaymentAppointment(null)
       notify?.(paymentStatus === 'pago' ? 'Pagamento recebido.' : 'Pagamento marcado como pendente.')
     } catch (error) {
+      if (error?.code === '23505') {
+        try {
+          const duplicateRow = await fetchCashMovementByAppointmentFromSupabase(salonId, appointment.id)
+          const duplicate = duplicateRow ? normalizeCashMovementRecord(duplicateRow) : null
+          if (duplicate?.id) {
+            setEntries((current) => current.some((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
+              ? current.map((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id) ? duplicate : entry)
+              : [...current, duplicate])
+            notify?.('Movimento financeiro existente reaproveitado.')
+            return
+          }
+        } catch (duplicateError) {
+          handleDataActionError(duplicateError, notify)
+          return
+        }
+      }
+      handleDataActionError(error, notify)
+    }
+  }
+
+  async function markPendingAsPaid(entry) {
+    const appointmentId = cashAppointmentId(entry)
+    const appointment = appointments.find((item) => String(item.id) === String(appointmentId))
+    const normalizedMethod = normalizeAppointmentPaymentMethod(cashMethod(entry)) ?? 'pix'
+    const payload = { ...entry, status: 'pago', paymentMethod: normalizedMethod, payment_method: normalizedMethod, method: paymentMethodLabel(normalizedMethod), forma_pagamento: paymentMethodLabel(normalizedMethod) }
+    const sameEntry = (item) => (entry.id !== undefined && item.id === entry.id) || (appointmentId && String(cashAppointmentId(item) ?? '') === String(appointmentId))
+
+    try {
+      const savedEntry = entry.id ? normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, payload)) : normalizeCashMovementRecord(payload)
+      setEntries((current) => current.map((item) => sameEntry(item) ? savedEntry : item))
+      if (appointment?.id) {
+        const updatedAppointment = normalizeAppointmentRecord({
+          ...appointment,
+          ...(await updateAppointmentRecord(salonId, appointment.id, {
+            paymentMethod: normalizedMethod,
+            payment_method: normalizedMethod,
+            paymentStatus: 'pago',
+            payment_status: 'pago',
+            status: 'concluido'
+          }))
+        }, employees)
+        setAppointments?.((current) => current.map((item) => String(item.id) === String(appointment.id) ? updatedAppointment : item))
+      }
+      notify?.('Pagamento pendente marcado como pago.')
+    } catch (error) {
       handleDataActionError(error, notify)
     }
   }
@@ -3087,7 +3158,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     notify?.('Caixa do dia fechado com sucesso.')
   }
 
-  function saveCashEntry(data) {
+  async function saveCashEntry(data) {
     const value = Number(data.value) || 0
     if (!data.description.trim() || value <= 0) {
       notify?.('Erro ao salvar: informe descrição e valor maior que zero.', 'error')
@@ -3095,7 +3166,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     }
     const selectedMethod = normalizeAppointmentPaymentMethod(data.method) ?? 'pendente'
     const paymentStatus = selectedMethod === 'pendente' ? 'pendente' : 'pago'
-    setEntries((current) => [...current, {
+    const payload = {
       id: Date.now(),
       type: data.type,
       tipo: data.type.toLowerCase(),
@@ -3111,74 +3182,131 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       value,
       valor: value,
       date: data.date
-    }])
-    setModalOpen(false)
-    notify?.('Movimentação salva com sucesso.')
+    }
+    try {
+      const savedEntry = normalizeCashMovementRecord(await createCashMovementRecord(salonId, payload))
+      setEntries((current) => [...current, savedEntry])
+      setModalOpen(false)
+      notify?.('Movimentação salva com sucesso.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric title="Total do dia" value={money.format(income)} detail="Entradas" />
-        <Metric title="Comissão paga" value={money.format(commissionPaid)} detail="Atendimentos" />
-        <Metric title="Lucro do salão" value={money.format(salonProfit)} detail="Entradas - comissões" />
-        <Metric title="PIX" value={money.format(byMethod(['PIX', 'Pix', 'pix']))} detail="Recebido hoje" />
+    <div className="space-y-6">
+      <section className="rounded-[1.75rem] border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#c9a85d]">Centro financeiro</p>
+            <h2 className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">Caixa e PDV</h2>
+            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Recebimentos, pendências, comissões e fechamento diário em um só painel.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl dark:border-white/10 dark:hover:bg-white/10">Nova movimentação</button>
+            <button onClick={closeDay} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Fechar caixa do dia</button>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Metric title="Total recebido hoje" value={money.format(income)} detail="Entradas pagas" />
+        <Metric title="Pix" value={money.format(byMethod(['PIX', 'Pix', 'pix']))} detail="Recebido hoje" />
         <Metric title="Dinheiro" value={money.format(byMethod(['Dinheiro', 'dinheiro']))} detail="Recebido hoje" />
-        <Metric title="Cartão" value={money.format(byMethod('Cartão'))} detail="Recebido hoje" />
-        <Metric title="Pendentes" value={money.format(pendingTotal)} detail="A receber" />
-        <Metric title="Saídas" value={money.format(outcome)} detail="Hoje" />
-        <Metric title="Saldo final" value={money.format(income - outcome)} detail="Entradas - saídas" />
+        <Metric title="Débito" value={money.format(byMethod(['Débito', 'debito']))} detail="Recebido hoje" />
+        <Metric title="Crédito" value={money.format(byMethod(['Crédito', 'credito']))} detail="Recebido hoje" />
+        <Metric title="Pagamentos pendentes" value={money.format(pendingTotal)} detail="A receber" />
+        <Metric title="Comissão dos profissionais" value={money.format(commissionPaid)} detail="Sobre recebidos" />
+        <Metric title="Lucro líquido do salão" value={money.format(salonProfit)} detail="Recebido - comissões" />
+        <Metric title="Saídas" value={money.format(outcome)} detail="Despesas do dia" />
+        <Metric title="Saldo final" value={money.format(income - outcome)} detail="Recebido - saídas" />
       </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl">Nova movimentação</button>
-        <button onClick={closeDay} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Fechar caixa do dia</button>
-      </div>
-      <Panel title="Receber pagamentos">
+
+      <Panel title="Receber pagamento">
         <div className="space-y-3">
-          {unpaidConfirmedAppointments.map((item) => {
-            const existingEntry = entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(item.id))
-            const pending = cashStatus(existingEntry) === 'pendente' || normalizePaymentStatus(item.paymentStatus ?? item.payment_status) === 'pendente'
+          {awaitingPaymentAppointments.map((item) => {
+            const employee = employees.find((employeeItem) => isAppointmentForEmployee(item, employeeItem))
+            const { comissaoCalculada } = calculateCommissionDetails(item, employee)
+            const value = Number(item.value ?? item.valor ?? 0)
+            const salonValue = value - comissaoCalculada
             return (
               <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date)} · {item.time} · {item.client}</p>
-                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{item.service} com {getAppointmentEmployeeName(item, employees)} · {money.format(Number(item.value ?? item.valor ?? 0))}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                    <StatusBadge tone="cyan">Em atendimento</StatusBadge>
+                  </div>
+                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{item.service} com {getAppointmentEmployeeName(item, employees)}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-gray-500 dark:text-gray-400">
+                    <span>Valor: {money.format(value)}</span>
+                    <span>Comissão: {money.format(comissaoCalculada)}</span>
+                    <span>Salão: {money.format(salonValue)}</span>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full px-3 py-1 text-xs font-black ${pending ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{pending ? 'Pendente' : 'Pago'}</span>
-                  <button type="button" onClick={() => setPaymentAppointment(item)} className={`${pending ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'} focus-ring rounded-2xl px-4 py-2 text-sm font-bold text-white shadow-sm transition`}>
+                  <button type="button" onClick={() => setPaymentAppointment(item)} className="focus-ring rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">
                     Receber pagamento
                   </button>
                 </div>
               </div>
             )
           })}
-          {unpaidConfirmedAppointments.length === 0 && (
+          {awaitingPaymentAppointments.length === 0 && (
             <div className="rounded-2xl border border-gray-100 bg-pearl px-4 py-5 text-sm font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
-              Nenhum agendamento confirmado aguardando pagamento.
+              Nenhum atendimento em aberto para receber.
             </div>
           )}
         </div>
       </Panel>
       <Panel title="Pagamentos pendentes">
-        <CompactList items={pendingPayments.length ? pendingPayments.map((item) => `${formatDate(item.date ?? item.data)} · ${cashClientName(item) || cashDescription(item)} · ${cashServiceName(item) || cashCategory(item)} · ${money.format(cashValue(item))}`) : ['Nenhum pagamento pendente']} />
+        <div className="space-y-3">
+          {pendingPayments.map((item) => {
+            const appointment = appointments.find((appointmentItem) => String(appointmentItem.id) === String(cashAppointmentId(item)))
+            return (
+              <div key={item.id ?? `${cashDescription(item)}-${cashValue(item)}`} className="flex flex-col gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-sm dark:border-amber-400/20 dark:bg-amber-500/10 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date ?? item.data)} · {cashClientName(item) || cashDescription(item)}</p>
+                    <StatusBadge tone="amber">Pendente</StatusBadge>
+                  </div>
+                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{cashServiceName(item) || cashCategory(item)} · {cashEmployeeName(item) || 'Sem profissional'} · {money.format(cashValue(item))}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {appointment && <button type="button" onClick={() => setPaymentAppointment(appointment)} className={buttonSecondary}>Receber pagamento</button>}
+                  <button type="button" onClick={() => markPendingAsPaid(item)} className="focus-ring rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">Marcar como pago</button>
+                  <button type="button" className="focus-ring rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-sm font-bold text-amber-800 transition hover:bg-amber-50 dark:border-amber-400/30 dark:bg-[#24202c] dark:text-amber-200">Manter pendente</button>
+                </div>
+              </div>
+            )
+          })}
+          {pendingPayments.length === 0 && <EmptyState>Nenhum pagamento pendente.</EmptyState>}
+        </div>
       </Panel>
       <Panel title="Movimentações do caixa">
         <Table
           rows={todayEntries}
-          columns={['date', 'client', 'service', 'employee', 'value', 'commission', 'salon']}
-          labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Valor total', 'Comissão', 'Salão']}
+          columns={['date', 'client', 'service', 'employee', 'method', 'status', 'value', 'commission', 'salon']}
+          labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Forma', 'Status', 'Valor total', 'Comissão', 'Salão']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
             if (key === 'client') return cashClientName(row) || cashDescription(row) || '-'
             if (key === 'service') return cashServiceName(row) || cashCategory(row) || '-'
             if (key === 'employee') return cashEmployeeName(row) || '-'
+            if (key === 'method') return paymentMethodLabel(cashMethod(row))
+            if (key === 'status') return <StatusBadge tone={cashStatus(row) === 'pago' ? 'green' : 'amber'}>{cashStatus(row) === 'pago' ? 'Pago' : 'Pendente'}</StatusBadge>
             if (key === 'value') return money.format(cashValue(row))
             if (key === 'commission') return isAppointmentCashEntry(row) ? money.format(cashCommissionValue(row)) : '-'
             if (key === 'salon') return isAppointmentCashEntry(row) ? money.format(cashSalonValue(row)) : '-'
             return value
           }}
         />
+        {todayEntries.length === 0 && <div className="mt-3"><EmptyState>Nenhuma movimentação registrada hoje.</EmptyState></div>}
+      </Panel>
+      <Panel title="Comissões por profissional">
+        <div className="space-y-3">
+          {employeeCommissions.map((item) => <LineItem key={item.name} label={`${item.name} · ${item.count} atendimento(s)`} value={money.format(item.value)} positive />)}
+          {employeeCommissions.length === 0 && <EmptyState>Nenhuma comissão calculada hoje.</EmptyState>}
+        </div>
       </Panel>
       <Panel title="Fechamentos registrados">
         <CompactList items={closures.length ? closures.map((item) => `${formatDate(item.date)} · saldo ${money.format(item.balance)}`) : ['Nenhum fechamento registrado']} />
@@ -3204,13 +3332,16 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
     <Modal title="Receber pagamento" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onConfirm(appointment, paymentMethod) }} className="space-y-4">
         <div className="rounded-2xl border border-blush bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
-          <p>{appointment.client} · {appointment.service}</p>
-          <p className="mt-1">{employee?.name ?? getAppointmentEmployeeName(appointment, employees)}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div><p className="text-xs font-black uppercase text-gray-400">Cliente</p><p className="mt-1 text-graphite dark:text-gray-100">{appointment.client}</p></div>
+            <div><p className="text-xs font-black uppercase text-gray-400">Serviço</p><p className="mt-1 text-graphite dark:text-gray-100">{service?.name ?? appointment.service}</p></div>
+            <div><p className="text-xs font-black uppercase text-gray-400">Profissional</p><p className="mt-1 text-graphite dark:text-gray-100">{employee?.name ?? getAppointmentEmployeeName(appointment, employees)}</p></div>
+          </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Metric title="Valor do serviço" value={money.format(serviceValue)} detail={service?.name ?? appointment.service} />
-          <Metric title="Comissão" value={money.format(commissionValue)} detail={`${commissionPercent}%`} />
-          <Metric title="Salão" value={money.format(salonValue)} detail="Valor líquido" />
+          <Metric title="Valor total" value={money.format(serviceValue)} detail="Valor do serviço" />
+          <Metric title="Comissão do profissional" value={money.format(commissionValue)} detail={`${commissionPercent}%`} />
+          <Metric title="Lucro do salão" value={money.format(salonValue)} detail="Valor líquido" />
         </div>
         <fieldset className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
           <legend className="px-1 text-sm font-semibold text-gray-600 dark:text-gray-300">Forma de pagamento</legend>
@@ -3229,8 +3360,11 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
         </fieldset>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button type="button" onClick={() => onConfirm(appointment, 'pendente')} className="focus-ring inline-flex min-h-10 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
+            Manter pendente
+          </button>
           <button className={`${paymentStatus === 'pago' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-500 hover:bg-amber-600'} focus-ring inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition`}>
-            {paymentStatus === 'pago' ? 'Pago' : 'Pendente'}
+            {paymentStatus === 'pago' ? 'Marcar como pago' : 'Pendente / pagar depois'}
           </button>
         </div>
       </form>
@@ -3247,7 +3381,7 @@ function CashEntryModal({ onClose, onSave }) {
         <Field label="Descrição" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Select label="Forma de pagamento" value={form.method} onChange={(value) => setForm({ ...form, method: value })} options={['Pix', 'Dinheiro', 'Cartão', 'Pendente']} />
+          <Select label="Forma de pagamento" value={form.method} onChange={(value) => setForm({ ...form, method: value })} options={['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} />
           <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
         </div>
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
@@ -3975,6 +4109,26 @@ function Panel({ title, children }) {
   )
 }
 
+function StatusBadge({ tone = 'gray', children }) {
+  const tones = {
+    green: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300',
+    amber: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200',
+    cyan: 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-500/15 dark:text-cyan-200',
+    yellow: 'border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-400/30 dark:bg-yellow-500/15 dark:text-yellow-200',
+    rose: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300',
+    gray: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-white/10 dark:text-gray-200'
+  }
+  return <span className={`${badgeBase} ${tones[tone] ?? tones.gray}`}>{children}</span>
+}
+
+function EmptyState({ children }) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-pearl px-4 py-5 text-sm font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+      {children}
+    </div>
+  )
+}
+
 function Select({ label, value, onChange, options, values, disabled = false }) {
   return (
     <label className="block">
@@ -4000,9 +4154,9 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
 
-      const menuWidth = Math.max(180, rect.width)
+      const menuWidth = Math.max(220, rect.width)
       const viewportPadding = 8
-      const estimatedMenuHeight = 194
+      const estimatedMenuHeight = 292
       const hasRoomBelow = window.innerHeight - rect.bottom >= estimatedMenuHeight + viewportPadding
       const top = hasRoomBelow ? rect.bottom + 8 : Math.max(viewportPadding, rect.top - estimatedMenuHeight - 8)
       const left = Math.min(
@@ -4045,7 +4199,7 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
   }
 
   return (
-    <div ref={containerRef} className="relative min-w-[150px] flex-shrink-0">
+    <div ref={containerRef} className="relative min-w-[190px] flex-shrink-0">
       <button
         type="button"
         aria-haspopup="listbox"

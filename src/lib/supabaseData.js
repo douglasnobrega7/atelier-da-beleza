@@ -153,6 +153,8 @@ function normalizeAppointmentStatus(status) {
 
   if (normalized === 'agendado' || normalized === 'aguardando') return 'agendado'
   if (normalized === 'confirmado') return 'confirmado'
+  if (normalized === 'em_atendimento' || normalized === 'ematendimento' || normalized === 'em atendimento') return 'em_atendimento'
+  if (normalized === 'aguardando_pagamento' || normalized === 'aguardandopagamento' || normalized === 'aguardando pagamento') return 'aguardando_pagamento'
   if (normalized === 'concluido') return 'concluido'
   if (normalized === 'cancelado') return 'cancelado'
   return 'agendado'
