@@ -1,4 +1,5 @@
 import { Component, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from './lib/supabase'
 import {
   createAppointment as createAppointmentRecord,
@@ -2078,7 +2079,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           </div>
           {agendaView === 'week' && <WeeklyAgenda weekDates={weekDates} appointments={visibleAppointments} blocks={visibleBlocks} employees={employees} user={user} onStatusChange={updateStatus} onSendConfirmation={sendConfirmation} onDeleteAppointment={deleteAppointment} />}
           {agendaView === 'day' && (
-          <div className="simple-scrollbar max-h-[720px] space-y-3 overflow-auto pr-1">
+          <div className="simple-scrollbar h-[clamp(500px,75vh,880px)] space-y-3 overflow-y-auto overflow-x-visible scroll-smooth pr-2">
             {visibleBlocks.map((block) => (
               <div key={block.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                 <p className="text-lg font-bold">{block.start} às {block.end} · Horário bloqueado</p>
@@ -3793,25 +3794,54 @@ function Select({ label, value, onChange, options, values, disabled = false }) {
 
 function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' }) {
   const [open, setOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState(null)
   const containerRef = useRef(null)
+  const menuRef = useRef(null)
   const normalizedValue = normalizeAppointmentStatus(value)
 
   useEffect(() => {
     if (!open) return undefined
 
+    function updateMenuPosition() {
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const menuWidth = Math.max(180, rect.width)
+      const viewportPadding = 8
+      const estimatedMenuHeight = 194
+      const hasRoomBelow = window.innerHeight - rect.bottom >= estimatedMenuHeight + viewportPadding
+      const top = hasRoomBelow ? rect.bottom + 8 : Math.max(viewportPadding, rect.top - estimatedMenuHeight - 8)
+      const left = Math.min(
+        Math.max(viewportPadding, rect.right - menuWidth),
+        window.innerWidth - menuWidth - viewportPadding
+      )
+
+      setMenuPosition({ top, left, width: menuWidth })
+    }
+
     function handlePointerDown(event) {
-      if (!containerRef.current?.contains(event.target)) setOpen(false)
+      if (
+        !containerRef.current?.contains(event.target) &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setOpen(false)
+      }
     }
 
     function handleKeyDown(event) {
       if (event.key === 'Escape') setOpen(false)
     }
 
+    updateMenuPosition()
     document.addEventListener('pointerdown', handlePointerDown)
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', updateMenuPosition)
+    window.addEventListener('scroll', updateMenuPosition, true)
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown)
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', updateMenuPosition)
+      window.removeEventListener('scroll', updateMenuPosition, true)
     }
   }, [open])
 
@@ -3833,11 +3863,13 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
         <span className="text-xs opacity-80" aria-hidden="true">▾</span>
       </button>
 
-      {open && (
+      {open && menuPosition && createPortal(
         <div
+          ref={menuRef}
           role="listbox"
           aria-label="Status do agendamento"
-          className="absolute right-0 z-30 mt-2 w-full min-w-[180px] overflow-hidden rounded-xl border border-white/10 bg-[#1e1e2f] p-1 text-white shadow-2xl"
+          className="fixed z-50 overflow-hidden rounded-xl border border-white/10 bg-[#1e1e2f] p-1 text-white shadow-2xl"
+          style={{ top: menuPosition.top, left: menuPosition.left, width: menuPosition.width }}
         >
           {appointmentStatusOptions.map(({ value: status, label }) => {
             const selected = status === normalizedValue
@@ -3855,7 +3887,8 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
