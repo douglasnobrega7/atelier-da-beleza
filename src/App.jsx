@@ -67,6 +67,7 @@ const weekDayOptions = [
 ]
 const defaultWorkingDays = weekDayOptions.map((day) => day.id)
 const defaultOpeningHours = Object.fromEntries(weekDayOptions.map((day) => [day.id, { open: '09:00', close: '18:00' }]))
+const appointmentSlotInterval = 15
 
 function timeToMinutes(time) {
   const [hoursValue, minutesValue] = String(time ?? '').split(':').map(Number)
@@ -163,10 +164,9 @@ function getAvailableSlots({ employee, date, service, appointments, blockedSlots
   const salonHours = getSalonHoursForDate(salonSettings, date)
   if (!salonHours) return []
 
-  const start = Math.max(timeToMinutes(employee.workStart), salonHours.openMinutes)
-  const end = Math.min(timeToMinutes(employee.workEnd), salonHours.closeMinutes)
+  const start = salonHours.openMinutes
+  const end = salonHours.closeMinutes
   const duration = serviceDurationToMinutes(service?.duration, Number(employee.defaultDuration) || 60)
-  const scheduleInterval = Math.max(5, Number(employee.scheduleInterval) || duration)
   const breakStart = employee.breakStart ? timeToMinutes(employee.breakStart) : null
   const breakEnd = employee.breakEnd ? timeToMinutes(employee.breakEnd) : null
   const booked = appointments.filter((appointment) => (
@@ -177,7 +177,7 @@ function getAvailableSlots({ employee, date, service, appointments, blockedSlots
   const blocked = blockedSlots.filter((block) => block.professional === employee.name && block.date === date)
 
   const slots = []
-  for (let current = start; current + duration <= end; current += scheduleInterval) {
+  for (let current = start; current + duration <= end; current += appointmentSlotInterval) {
     const candidateEnd = current + duration
     const isBreak = breakStart !== null && breakEnd !== null && intervalsOverlap(current, candidateEnd, breakStart, breakEnd)
     const isBooked = booked.some((appointment) => {
@@ -1708,8 +1708,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           <DatePickerBar value={form.date} onChange={(value) => setForm({ ...form, date: value, time: '' })} />
           {selectedProfessional && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
-              Salão: {formatSalonHoursForDate(salonSettings, form.date)}<br />
-              Expediente: {selectedProfessional.workStart} às {selectedProfessional.workEnd}
+              Expediente: {formatSalonHoursForDate(salonSettings, form.date)}
               {selectedProfessional.breakStart && selectedProfessional.breakEnd ? ` · intervalo ${selectedProfessional.breakStart} às ${selectedProfessional.breakEnd}` : ''}
             </div>
           )}
