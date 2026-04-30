@@ -375,8 +375,8 @@ export async function seedSalonData(salonId) {
         name: 'Corte exemplo',
         price: 50,
         duration: '30 min',
-        responsible: 'Profissional Inicial',
-        category: 'Exemplo'
+        responsible: '',
+        category: 'Cabeleireiro/Cabeleireira, Barbeiro/Barbeira'
       }, salonId, true))
   )
 
@@ -434,9 +434,9 @@ export async function seedInitialSalonData(salonId) {
       supabase
         .from(TABLES.services)
         .insert([
-          servicePayload({ name: 'Corte feminino', price: 90, duration: '50 min', responsible: 'Profissional Exemplo', category: 'Cabelo' }, salonId, true),
-          servicePayload({ name: 'Escova modelada', price: 75, duration: '45 min', responsible: 'Profissional Exemplo', category: 'Cabelo' }, salonId, true),
-          servicePayload({ name: 'Manicure gel', price: 70, duration: '60 min', responsible: 'Profissional Exemplo', category: 'Unhas' }, salonId, true)
+          servicePayload({ name: 'Corte feminino', price: 90, duration: '50 min', responsible: '', category: 'Cabeleireiro/Cabeleireira, Barbeiro/Barbeira' }, salonId, true),
+          servicePayload({ name: 'Escova modelada', price: 75, duration: '45 min', responsible: '', category: 'Cabeleireiro/Cabeleireira' }, salonId, true),
+          servicePayload({ name: 'Manicure gel', price: 70, duration: '60 min', responsible: '', category: 'Manicure e Pedicure' }, salonId, true)
         ])
     ),
     runQuery(

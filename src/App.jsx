@@ -351,6 +351,10 @@ function formatEmployeeFunctions(role) {
   return toList(role).join(', ')
 }
 
+function formatServiceFunctions(category) {
+  return toList(category).join(', ')
+}
+
 function toObjectList(value) {
   return Array.isArray(value) ? value : []
 }
@@ -2068,13 +2072,20 @@ function Services({ salonId, user, services, setServices, notify }) {
   }
 
   async function saveService(data) {
+    const selectedFunctions = toList(data.category).filter((option) => employeeFunctionOptions.includes(option))
     const payload = {
       ...data,
       name: data.name.trim(),
-      price: Number(data.price) || 0
+      price: Number(data.price) || 0,
+      category: selectedFunctions.join(', '),
+      professional: ''
     }
     if (!payload.name) {
       notify?.('Erro ao salvar: informe o nome do serviço.', 'error')
+      return
+    }
+    if (!payload.category) {
+      notify?.('Erro ao salvar: selecione a função que realiza o serviço.', 'error')
       return
     }
     try {
@@ -2119,8 +2130,8 @@ function Services({ salonId, user, services, setServices, notify }) {
             <p className="min-w-0 break-words text-lg font-bold">{item.name}</p>
             <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-100 px-4 py-2 text-base font-bold text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300">{money.format(item.price)}</span>
           </div>
-          <p className="mt-2 text-sm text-gray-600">{item.duration} · {item.category}</p>
-          <p className="mt-3 text-sm">Responsável: <strong>{item.professional || 'A definir'}</strong></p>
+          <p className="mt-2 text-sm text-gray-600">Duração: <strong>{item.duration}</strong></p>
+          <p className="mt-3 text-sm">Funções que realizam: <strong>{formatServiceFunctions(item.category) || 'Não informado'}</strong></p>
           {canManage && (
             <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
@@ -2139,9 +2150,19 @@ function ServiceModal({ service, onClose, onSave }) {
     name: service.name,
     price: service.price,
     duration: service.duration,
-    professional: service.professional,
     category: service.category
-  } : { name: '', price: 0, duration: '1h', professional: '', category: '' })
+  } : { name: '', price: 0, duration: '1h', category: '' })
+  const selectedFunctions = toList(form.category).filter((option) => employeeFunctionOptions.includes(option))
+
+  function toggleFunction(option) {
+    setForm((current) => {
+      const currentFunctions = toList(current.category).filter((item) => employeeFunctionOptions.includes(item))
+      const nextFunctions = currentFunctions.includes(option)
+        ? currentFunctions.filter((item) => item !== option)
+        : [...currentFunctions, option]
+      return { ...current, category: nextFunctions.join(', ') }
+    })
+  }
 
   return (
     <Modal title={service ? 'Editar serviço' : 'Novo serviço'} onClose={onClose}>
@@ -2151,8 +2172,7 @@ function ServiceModal({ service, onClose, onSave }) {
           <Field label="Valor" type="number" min="0" value={form.price} onChange={(value) => setForm({ ...form, price: value })} required />
           <Field label="Duração" value={form.duration} onChange={(value) => setForm({ ...form, duration: value })} placeholder="Ex.: 1h 30min" required />
         </div>
-        <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} required />
-        <Field label="Responsável padrão" value={form.professional} onChange={(value) => setForm({ ...form, professional: value })} />
+        <CheckboxGroup label="Função que realiza" options={employeeFunctionOptions} selected={selectedFunctions} onToggle={toggleFunction} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
           <button className={buttonPrimary}>Salvar</button>
