@@ -2237,11 +2237,14 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 
   async function saveEmployee(data) {
     const employeeType = 'professional'
+    const selectedFunctions = toList(data.selectedFunctions ?? data.role)
+      .filter((option) => employeeFunctionOptions.includes(option))
+    const employeeFunctions = selectedFunctions.join(', ')
     const wantsLogin = Boolean(data.loginActive)
     const loginEmail = data.accessEmail?.trim().toLowerCase() ?? ''
     const temporaryPassword = data.temporaryPassword?.trim() ?? ''
     const employeeName = data.name.trim()
-    if (!data.name.trim() || !data.phone.trim() || !data.role.trim()) {
+    if (!data.name.trim() || !data.phone.trim() || !employeeFunctions) {
       notify?.('Erro ao salvar: informe nome, telefone e função.', 'error')
       return
     }
@@ -2262,6 +2265,8 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     const payload = {
       ...data,
       employeeType,
+      role: employeeFunctions,
+      position: employeeFunctions,
       commission: Number(data.commission) || 0,
       defaultDuration: Number(data.defaultDuration) || 60,
       scheduleInterval: Number(data.scheduleInterval) || Number(data.defaultDuration) || 60,
@@ -2279,12 +2284,12 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
       })),
       services: toList(data.services)
     }
+    delete payload.selectedFunctions
     delete payload.servicesText
     try {
       let saved
       if (editing) {
         saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, editing.id, payload))
-        setEmployees((current) => current.map((employee) => employee.id === editing.id ? saved : employee))
       } else {
         saved = normalizeEmployeeRecord(await createEmployeeRecord(salonId, payload))
         setEmployees((current) => [...current, saved])
@@ -2324,8 +2329,13 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
         setEmployees((current) => current.map((employee) => employee.id === saved.id ? savedWithLogin : employee))
       }
 
+      if (editing) {
+        const employeeRows = await fetchEmployeesFromSupabase(salonId)
+        setEmployees((employeeRows ?? []).map(normalizeEmployeeRecord))
+      }
+
       setModalOpen(false)
-      notify?.(shouldCreateLogin ? 'Funcionário e login criados com sucesso' : 'Funcionário salvo com sucesso')
+      notify?.(editing ? 'Funcionário atualizado com sucesso.' : shouldCreateLogin ? 'Funcionário e login criados com sucesso' : 'Funcionário salvo com sucesso')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -2451,7 +2461,9 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     serviceCommissions: toObjectList(employee.serviceCommissions),
     services: toList(employee.services)
   } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: getSuggestedAccessEmail({ employeeType: 'professional', salonSettings }), temporaryPassword: '', loginActive: true, commission: 0, serviceCommissions: [], services: [], active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
-  const selectedFunctions = toList(form.role)
+  const [selectedFunctions, setSelectedFunctions] = useState(() => (
+    toList(employee ? employee.role : '').filter((option) => employeeFunctionOptions.includes(option))
+  ))
   const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: 'professional', salonSettings })
 
   function updateName(name) {
@@ -2466,13 +2478,11 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
   }
 
   function toggleFunction(option) {
-    setForm((current) => {
-      const currentFunctions = toList(current.role)
-      const nextFunctions = currentFunctions.includes(option)
-        ? currentFunctions.filter((item) => item !== option)
-        : [...currentFunctions, option]
-      return { ...current, role: nextFunctions.join(', ') }
-    })
+    const nextFunctions = selectedFunctions.includes(option)
+      ? selectedFunctions.filter((item) => item !== option)
+      : [...selectedFunctions, option]
+    setSelectedFunctions(nextFunctions)
+    setForm((current) => ({ ...current, role: nextFunctions.join(', ') }))
   }
 
   function generateLogin() {
@@ -2486,7 +2496,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
 
   return (
     <Modal title={employee ? 'Editar Funcionário' : 'Novo Funcionário'} onClose={onClose}>
-      <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
+      <form onSubmit={(event) => { event.preventDefault(); onSave({ ...form, selectedFunctions }) }} className="space-y-3">
         <Field label="Nome" value={form.name} onChange={updateName} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
         <CheckboxGroup label="Função" options={employeeFunctionOptions} selected={selectedFunctions} onToggle={toggleFunction} />
