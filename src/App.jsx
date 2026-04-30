@@ -806,6 +806,16 @@ function handleDataActionError(error, notify) {
   return true
 }
 
+function getDataActionErrorMessage(error) {
+  return error?.original?.message || error?.message || 'Nao foi possivel salvar no banco de dados.'
+}
+
+function handleAgendaDataActionError(error, notify) {
+  console.error('Erro Agenda Supabase/API:', error?.original ?? error)
+  notify?.(getDataActionErrorMessage(error), 'error')
+  return true
+}
+
 function ErrorCard({ message }) {
   return (
     <Panel title="Erro ao carregar esta tela">
@@ -1769,26 +1779,40 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
 
   async function updateStatus(id, status) {
     const appointment = appointments.find((item) => item.id === id)
-    if (!appointment) return
-    if (user.role !== 'admin' && user.role !== 'cashier' && getAppointmentEmployeeName(appointment, allEmployees) !== user.name) return
+    if (!appointment) return false
+    if (user.role !== 'admin' && user.role !== 'cashier' && getAppointmentEmployeeName(appointment, allEmployees) !== user.name) return false
     const normalizedStatus = normalizeAppointmentStatus(status)
     const optimistic = normalizeAppointmentRecord({ ...appointment, status: normalizedStatus }, allEmployees)
     setAppointments((current) => current.map((item) => item.id === id ? optimistic : item))
     const selectedPaymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod)
     const updatePayload = isCompletedStatus(normalizedStatus) ? { status: normalizedStatus, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null } : { status: normalizedStatus }
+    let saved = optimistic
     try {
-      const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, updatePayload)) }, allEmployees)
-      if (isCompletedStatus(normalizedStatus)) {
-        await ensureCashMovementForCompletedAppointment(saved)
-      }
+      saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, updatePayload)) }, allEmployees)
       setAppointments((current) => current.map((item) => item.id === id ? saved : item))
-      const refreshedRows = await fetchAppointmentsFromSupabase(salonId)
-      setAppointments((refreshedRows ?? []).map((item) => normalizeAppointmentRecord(item, allEmployees)))
-      if (isCompletedStatus(normalizedStatus)) notify?.('Comissão calculada e lançada no caixa.')
     } catch (error) {
       setAppointments((current) => current.map((item) => item.id === id ? appointment : item))
-      handleDataActionError(error, notify)
+      handleAgendaDataActionError(error, notify)
+      return false
     }
+
+    try {
+      if (isCompletedStatus(normalizedStatus)) {
+        await ensureCashMovementForCompletedAppointment(saved)
+        notify?.('Comissão calculada e lançada no caixa.')
+      }
+    } catch (error) {
+      handleAgendaDataActionError(error, notify)
+    }
+
+    try {
+      const refreshedRows = await fetchAppointmentsFromSupabase(salonId)
+      setAppointments((refreshedRows ?? []).map((item) => normalizeAppointmentRecord(item, allEmployees)))
+    } catch (error) {
+      handleAgendaDataActionError(error, notify)
+      return false
+    }
+    return true
   }
 
   async function deleteAppointment(appointment) {
@@ -1802,7 +1826,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
         notify?.('Agendamento cancelado com sucesso')
         return true
       } catch (error) {
-        handleDataActionError(error, notify)
+        handleAgendaDataActionError(error, notify)
         return false
       }
     }
@@ -1814,7 +1838,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       notify?.('Agendamento excluído com sucesso')
       return true
     } catch (error) {
-      handleDataActionError(error, notify)
+      handleAgendaDataActionError(error, notify)
       return false
     }
   }
@@ -1881,7 +1905,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       setQuickModalOpen(false)
       notify?.('Atendimento rápido concluído.')
     } catch (error) {
-      handleDataActionError(error, notify)
+      handleAgendaDataActionError(error, notify)
     }
   }
 
@@ -1953,7 +1977,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       setFormMessage({ type: 'success', text: 'Agendamento criado com sucesso!' })
       notify?.('Agendamento criado.')
     } catch (error) {
-      handleDataActionError(error, notify)
+      handleAgendaDataActionError(error, notify)
     }
   }
 
