@@ -185,15 +185,14 @@ function normalizePaymentStatus(value) {
 function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
   const type = String(payload.type ?? payload.tipo ?? 'entrada').toLowerCase()
   const value = Number(payload.value ?? payload.valor ?? payload.serviceValue ?? payload.service_value ?? 0)
-  const paymentMethod = payload.paymentMethod ?? payload.payment_method ?? payload.method ?? payload.forma_pagamento ?? ''
+  const paymentMethod = payload.paymentMethod ?? payload.payment_method ?? payload.method ?? ''
   const paymentStatus = normalizePaymentStatus(payload.paymentStatus ?? payload.payment_status ?? payload.status)
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     type,
     description: includeSalon || hasField(payload, 'description') || hasField(payload, 'descricao') ? payload.description ?? payload.descricao ?? '' : undefined,
     category: includeSalon || hasField(payload, 'category') || hasField(payload, 'categoria') ? payload.category ?? payload.categoria ?? '' : undefined,
-    method: includeSalon || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? paymentMethod : undefined,
-    payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') || hasField(payload, 'method') || hasField(payload, 'forma_pagamento') ? paymentMethod : undefined,
+    payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') || hasField(payload, 'method') ? paymentMethod : undefined,
     value: includeSalon || hasField(payload, 'value') || hasField(payload, 'valor') || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? value : undefined,
     date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
     status: includeSalon || hasField(payload, 'status') || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') ? paymentStatus : undefined,

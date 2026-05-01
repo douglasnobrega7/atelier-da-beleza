@@ -479,23 +479,24 @@ function topEntries(counts, limit = 4) {
 }
 
 function cashType(entry) {
-  return (entry.tipo ?? entry.type ?? '').toLowerCase()
+  return (entry?.tipo ?? entry?.type ?? '').toLowerCase()
 }
 
 function cashValue(entry) {
-  return Number(entry.valor ?? entry.value ?? 0)
+  return Number(entry?.valor ?? entry?.value ?? 0)
 }
 
-function cashMethod(entry) {
-  return field(entry, 'paymentMethod', 'payment_method') ?? entry.forma_pagamento ?? entry.method ?? ''
+function cashMethod(movimento) {
+  if (!movimento) return 'Não informado'
+  return movimento?.payment_method ?? movimento?.paymentMethod ?? movimento?.method ?? 'Não informado'
 }
 
 function cashDescription(entry) {
-  return entry.descricao ?? entry.description ?? ''
+  return entry?.descricao ?? entry?.description ?? ''
 }
 
 function cashCategory(entry) {
-  return entry.categoria ?? entry.category ?? ''
+  return entry?.categoria ?? entry?.category ?? ''
 }
 
 function cashStatus(entry) {
@@ -606,7 +607,6 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     description: `Atendimento - ${appointment.client}`,
     descricao: `Atendimento - ${appointment.client}`,
     method: methodLabel,
-    forma_pagamento: methodLabel,
     paymentMethod,
     payment_method: paymentMethod,
     paymentStatus,
@@ -658,8 +658,9 @@ function createAdvanceCashEntry(advance) {
     value: Number(advance.value) || 0,
     data: advance.date,
     date: advance.date,
-    forma_pagamento: 'Dinheiro',
     method: 'Dinheiro',
+    paymentMethod: 'dinheiro',
+    payment_method: 'dinheiro',
     referenciaId: advance.id,
     referenciaTipo: 'vale'
   }
@@ -806,8 +807,11 @@ function normalizeAppointmentRecord(row, employees = []) {
 }
 
 function normalizeCashMovementRecord(row) {
+  if (!row) return null
   const serviceValue = Number(field(row, 'serviceValue', 'service_value') ?? field(row, 'value') ?? field(row, 'valor') ?? 0)
   const commissionValue = Number(field(row, 'commissionValue', 'commission_value') ?? 0)
+  const rawPaymentMethod = field(row, 'paymentMethod', 'payment_method') ?? field(row, 'method') ?? null
+  const normalizedPaymentMethod = normalizeAppointmentPaymentMethod(rawPaymentMethod)
   return {
     ...row,
     type: field(row, 'type') ?? field(row, 'tipo') ?? 'Entrada',
@@ -816,10 +820,9 @@ function normalizeCashMovementRecord(row) {
     descricao: field(row, 'descricao') ?? field(row, 'description') ?? '',
     category: field(row, 'category') ?? field(row, 'categoria') ?? '',
     categoria: field(row, 'categoria') ?? field(row, 'category') ?? '',
-    method: field(row, 'method') ?? field(row, 'forma_pagamento') ?? paymentMethodLabel(field(row, 'paymentMethod', 'payment_method')) ?? '',
-    forma_pagamento: field(row, 'forma_pagamento') ?? field(row, 'method') ?? paymentMethodLabel(field(row, 'paymentMethod', 'payment_method')) ?? '',
-    paymentMethod: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method') ?? field(row, 'method') ?? field(row, 'forma_pagamento')),
-    payment_method: normalizeAppointmentPaymentMethod(field(row, 'paymentMethod', 'payment_method') ?? field(row, 'method') ?? field(row, 'forma_pagamento')),
+    method: normalizedPaymentMethod ? paymentMethodLabel(normalizedPaymentMethod) : 'Não informado',
+    paymentMethod: normalizedPaymentMethod,
+    payment_method: normalizedPaymentMethod,
     value: Number(field(row, 'value') ?? field(row, 'valor') ?? 0),
     valor: Number(field(row, 'valor') ?? field(row, 'value') ?? 0),
     date: field(row, 'date') ?? field(row, 'data') ?? todayIso,
@@ -3141,7 +3144,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     const appointmentId = cashAppointmentId(entry)
     const appointment = appointments.find((item) => String(item.id) === String(appointmentId))
     const normalizedMethod = normalizeAppointmentPaymentMethod(cashMethod(entry)) ?? 'pix'
-    const payload = { ...entry, status: 'pago', paymentStatus: 'pago', payment_status: 'pago', paymentMethod: normalizedMethod, payment_method: normalizedMethod, method: paymentMethodLabel(normalizedMethod), forma_pagamento: paymentMethodLabel(normalizedMethod) }
+    const payload = { ...entry, status: 'pago', paymentStatus: 'pago', payment_status: 'pago', paymentMethod: normalizedMethod, payment_method: normalizedMethod, method: paymentMethodLabel(normalizedMethod) }
     const sameEntry = (item) => (entry.id !== undefined && item.id === entry.id) || (appointmentId && String(cashAppointmentId(item) ?? '') === String(appointmentId))
 
     try {
@@ -3189,7 +3192,6 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       category: data.category.trim() || 'Operacional',
       categoria: data.category.trim() || 'Operacional',
       method: data.method,
-      forma_pagamento: data.method,
       paymentMethod: selectedMethod,
       payment_method: selectedMethod,
       status: paymentStatus,
@@ -3308,7 +3310,10 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
             if (key === 'client') return cashClientName(row) || cashDescription(row) || '-'
             if (key === 'service') return cashServiceName(row) || cashCategory(row) || '-'
             if (key === 'employee') return cashEmployeeName(row) || '-'
-            if (key === 'method') return paymentMethodLabel(cashMethod(row))
+            if (key === 'method') {
+              const method = cashMethod(row)
+              return method === 'Não informado' ? method : paymentMethodLabel(method)
+            }
             if (key === 'status') return <StatusBadge tone={cashStatus(row) === 'pago' ? 'green' : 'amber'}>{cashStatus(row) === 'pago' ? 'Pago' : 'Pendente'}</StatusBadge>
             if (key === 'value') return money.format(cashValue(row))
             if (key === 'commission') return isAppointmentCashEntry(row) ? money.format(cashCommissionValue(row)) : '-'
@@ -4435,11 +4440,14 @@ function Table({ rows, columns, labels, formatValue }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className="border-b border-gray-50 dark:border-white/5">
-              {columns.map((column) => <td key={column} className="px-3 py-3 font-medium text-gray-700 dark:text-gray-200">{formatValue(column, row[column], row)}</td>)}
-            </tr>
-          ))}
+          {rows.map((row, index) => {
+            if (!row) return null
+            return (
+              <tr key={row.id ?? index} className="border-b border-gray-50 dark:border-white/5">
+                {columns.map((column) => <td key={column} className="px-3 py-3 font-medium text-gray-700 dark:text-gray-200">{formatValue(column, row[column], row)}</td>)}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
