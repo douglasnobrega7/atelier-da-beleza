@@ -479,16 +479,28 @@ function topEntries(counts, limit = 4) {
 }
 
 function cashType(entry) {
-  return (entry?.tipo ?? entry?.type ?? '').toLowerCase()
+  return String(entry?.tipo ?? entry?.type ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
 }
 
 function cashValue(entry) {
   return Number(entry?.valor ?? entry?.value ?? 0)
 }
 
+function cashDate(entry) {
+  return field(entry, 'date', 'data') ?? todayIso
+}
+
+function cashServiceValue(entry) {
+  return Number(field(entry, 'serviceValue', 'service_value') ?? cashValue(entry))
+}
+
 function cashMethod(movimento) {
-  if (!movimento) return 'Não informado'
-  return movimento?.payment_method ?? movimento?.paymentMethod ?? movimento?.method ?? 'Não informado'
+  if (!movimento) return null
+  return normalizeAppointmentPaymentMethod(movimento?.payment_method ?? movimento?.paymentMethod ?? movimento?.method)
 }
 
 function cashDescription(entry) {
@@ -569,7 +581,7 @@ function cashCommissionValue(entry) {
 }
 
 function cashSalonValue(entry) {
-  return Number(field(entry, 'salonValue', 'salon_value') ?? cashValue(entry))
+  return Number(field(entry, 'salonValue', 'salon_value') ?? (cashServiceValue(entry) - cashCommissionValue(entry)))
 }
 
 function cashClientName(entry) {
@@ -589,10 +601,10 @@ function isAppointmentCashEntry(entry) {
 }
 
 function createCompletedAppointmentCashEntry(appointment, employees = [], serviceItems = services) {
-  const service = serviceItems.find((item) => item.name === appointment.service)
+  const service = serviceItems.find((item) => String(item.id) === String(appointment.serviceId ?? appointment.service_id) || item.name === appointment.service)
   const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
   const serviceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
-  const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? 0) || 0
+  const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? employee?.commission ?? employee?.commission_percent ?? 0) || 0
   const commissionValue = (serviceValue * commissionPercent) / 100
   const salonValue = serviceValue - commissionValue
   const paymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod ?? appointment.payment_method ?? appointment.method) ?? 'pendente'
@@ -1705,48 +1717,41 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const paidIncomeEntries = cashEntries.filter(isPaidIncomeCashEntry)
   const paidAppointmentEntries = paidIncomeEntries.filter(isAppointmentCashEntry)
   const currentMonth = todayIso.slice(0, 7)
-  const dayPaidIncomeEntries = paidIncomeEntries.filter((item) => (item.date ?? item.data) === todayIso)
-  const monthPaidIncomeEntries = paidIncomeEntries.filter((item) => String(item.date ?? item.data ?? '').startsWith(currentMonth))
-  const dayRevenue = dayPaidIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
-  const monthRevenue = monthPaidIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const dayPaidIncomeEntries = paidIncomeEntries.filter((item) => cashDate(item) === todayIso)
+  const monthPaidIncomeEntries = paidIncomeEntries.filter((item) => String(cashDate(item)).startsWith(currentMonth))
+  const dayRevenue = dayPaidIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
+  const monthRevenue = monthPaidIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
   const commissions = professionals.map((employee) => ({ name: employee.name, value: paidAppointmentEntries.filter((item) => String(field(item, 'employeeId', 'employee_id') ?? '') === String(employee.id) || cashEmployeeName(item) === employee.name).reduce((sum, item) => sum + cashCommissionValue(item), 0) }))
-  const todayPaidAppointmentEntries = paidAppointmentEntries.filter((item) => (item.date ?? item.data) === todayIso)
+  const todayPaidAppointmentEntries = paidAppointmentEntries.filter((item) => cashDate(item) === todayIso)
   const dayCommissions = todayPaidAppointmentEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
-  const monthCommissions = paidAppointmentEntries.filter((item) => String(item.date ?? item.data ?? '').startsWith(currentMonth)).reduce((sum, item) => sum + cashCommissionValue(item), 0)
+  const monthCommissions = paidAppointmentEntries.filter((item) => String(cashDate(item)).startsWith(currentMonth)).reduce((sum, item) => sum + cashCommissionValue(item), 0)
   const topClient = topEntries(countBy(paidAppointmentEntries, (item) => cashClientName(item)), 1)[0]
   const busyHours = topEntries(countBy(appointments.filter((item) => !isCancelledStatus(item.status)), (item) => item.time?.slice(0, 2) + ':00'))
-  const bestWeekday = topEntries(paidIncomeEntries.reduce((acc, item) => ({ ...acc, [getWeekdayLabel(item.date ?? item.data)]: (acc[getWeekdayLabel(item.date ?? item.data)] || 0) + cashValue(item) }), {}), 1)[0]
-  const serviceRevenue = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'ServiÃ§o']: (acc[cashServiceName(item) || 'ServiÃ§o'] || 0) + cashValue(item) }), {}))
+  const bestWeekday = topEntries(paidIncomeEntries.reduce((acc, item) => ({ ...acc, [getWeekdayLabel(cashDate(item))]: (acc[getWeekdayLabel(cashDate(item))] || 0) + cashServiceValue(item) }), {}), 1)[0]
+  const serviceRevenue = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashServiceValue(item) }), {}))
   const serviceSales = topEntries(countBy(paidAppointmentEntries, (item) => cashServiceName(item) || 'ServiÃ§o'))
-  const serviceCommissions = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'ServiÃ§o']: (acc[cashServiceName(item) || 'ServiÃ§o'] || 0) + cashCommissionValue(item) }), {}))
-  const dayAdvances = advances.filter((item) => item.date === todayIso).reduce((sum, item) => sum + Number(item.value ?? 0), 0)
-  const monthAdvances = advances.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
-  const pendingAdvances = advances.filter((item) => item.status !== 'Descontado').reduce((sum, item) => sum + Number(item.value ?? 0), 0)
-  const dayCashEntries = cashEntries.filter((item) => (item.date ?? item.data) === todayIso || (!item.date && !item.data))
-  const paidDayIncomeEntries = dayCashEntries.filter(isPaidIncomeCashEntry)
-  const pendingDayIncomeEntries = dayCashEntries.filter(isPendingIncomeCashEntry)
-  const cashIncome = paidDayIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
-  const dashboardByMethod = (methods) => paidDayIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashValue(item), 0)
-  const pendingPaymentsTotal = pendingDayIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
-  const cashOutcome = dayCashEntries.filter((item) => cashType(item) === 'saída' || cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
+  const serviceCommissions = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}))
+  const cashIncome = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
+  const dashboardByMethod = (methods) => paidIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
+  const pendingPaymentsTotal = cashEntries.filter(isPendingIncomeCashEntry).reduce((sum, item) => sum + cashServiceValue(item), 0)
+  const cashOutcome = cashEntries.filter((item) => cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
 
   return (
     <div className="space-y-5">
+      <div>
+        <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo financeiro</h3>
+        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Valores financeiros lidos apenas de cash_movements pagos.</p>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric title="Faturamento do dia" value={money.format(dayRevenue)} detail="Concluídos hoje" />
-        <Metric title="Faturamento do mês" value={money.format(monthRevenue)} detail="Abril de 2026" />
-        <Metric title="Agendamentos de hoje" value={appointments.filter((item) => item.date === todayIso).length} detail="Conforme expediente da equipe" />
-        <Metric title="Clientes atendidos" value={paidAppointmentEntries.length} detail="Pagos no caixa" />
-        <Metric title="Comissões do dia" value={money.format(dayCommissions)} detail="Atendimentos concluídos" />
-        <Metric title="Comissões do mês" value={money.format(monthCommissions)} detail="Total calculado" />
-        <Metric title="Vales do dia" value={money.format(dayAdvances)} detail="Saídas no caixa" />
-        <Metric title="Vales do mês" value={money.format(monthAdvances)} detail="Total registrado" />
-        <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Ainda não descontados" />
-        <Metric title="Saldo líquido do dia" value={money.format(cashIncome - cashOutcome)} detail="Caixa com saídas" />
+        <Metric title="Faturamento do dia" value={money.format(dayRevenue)} detail="service_value pago hoje" />
+        <Metric title="Faturamento do mês" value={money.format(monthRevenue)} detail="service_value pago no mês" />
+        <Metric title="Comissões do dia" value={money.format(dayCommissions)} detail="commission_value pago hoje" />
+        <Metric title="Comissões do mês" value={money.format(monthCommissions)} detail="commission_value pago no mês" />
         <Metric title="PIX" value={money.format(dashboardByMethod(['PIX', 'Pix', 'pix']))} detail="Pagamentos pagos" />
         <Metric title="Dinheiro" value={money.format(dashboardByMethod(['Dinheiro', 'dinheiro']))} detail="Pagamentos pagos" />
-        <Metric title="Cartão" value={money.format(dashboardByMethod(['Débito', 'Crédito', 'Cartão', 'Cartao', 'debito', 'credito']))} detail="Débito + crédito" />
-        <Metric title="Pendentes" value={money.format(pendingPaymentsTotal)} detail="Não pagos" />
+        <Metric title="Cartão" value={money.format(dashboardByMethod(['debito', 'credito']))} detail="Débito + crédito pagos" />
+        <Metric title="Pendentes" value={money.format(pendingPaymentsTotal)} detail="Entradas pendentes" />
+        <Metric title="Saldo líquido" value={money.format(cashIncome - cashOutcome)} detail="salon_value pago - saídas" />
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Faturamento semanal">
@@ -1801,11 +1806,11 @@ function WeeklyRevenueChart({ cashEntries }) {
   const [tooltip, setTooltip] = useState(null)
   const weekDates = getWeekDates(todayIso).slice(1).concat(getWeekDates(todayIso).slice(0, 1))
   const chartData = weekDates.map((date) => {
-    const paidEntries = cashEntries.filter((item) => (item.date ?? item.data) === date && isPaidIncomeCashEntry(item))
+    const paidEntries = cashEntries.filter((item) => cashDate(item) === date && isPaidIncomeCashEntry(item))
     return {
       date,
       day: getWeekdayLabel(date).replace('.', ''),
-      value: paidEntries.reduce((sum, item) => sum + cashValue(item), 0),
+      value: paidEntries.reduce((sum, item) => sum + cashServiceValue(item), 0),
       appointments: paidEntries.filter(isAppointmentCashEntry).length
     }
   })
@@ -3043,21 +3048,21 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
 function CashRegister({ salonId, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], serviceItems = services, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [paymentAppointment, setPaymentAppointment] = useState(null)
-  const todayEntries = entries.filter((item) => !(item.date ?? item.data) || (item.date ?? item.data) === todayIso)
+  const todayEntries = entries.filter((item) => cashDate(item) === todayIso)
   const incomeEntries = todayEntries.filter((item) => cashType(item) === 'entrada')
   const paidIncomeEntries = incomeEntries.filter(isPaidIncomeCashEntry)
   const pendingIncomeEntries = incomeEntries.filter(isPendingIncomeCashEntry)
-  const outcomeEntries = todayEntries.filter((item) => cashType(item) === 'saída' || cashType(item) === 'saida')
-  const income = paidIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const outcomeEntries = todayEntries.filter((item) => cashType(item) === 'saida')
+  const income = paidIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
   const outcome = outcomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
   const commissionPaid = paidIncomeEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
   const salonProfit = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
   const byMethod = (methods) => {
     const methodList = Array.isArray(methods) ? methods : [methods]
-    const aliases = methodList.flatMap((method) => [method, paymentMethodLabel(method), normalizeAppointmentPaymentMethod(method)]).filter(Boolean)
-    return paidIncomeEntries.filter((item) => aliases.includes(cashMethod(item))).reduce((sum, item) => sum + cashValue(item), 0)
+    const aliases = methodList.map((method) => normalizeAppointmentPaymentMethod(method)).filter(Boolean)
+    return paidIncomeEntries.filter((item) => aliases.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
   }
-  const pendingTotal = pendingIncomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const pendingTotal = pendingIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
   const awaitingPaymentAppointments = appointments.filter((item) => {
     const entry = entries.find((cashEntry) => String(cashAppointmentId(cashEntry) ?? '') === String(item.id))
     return normalizeAppointmentStatus(item.status) === 'em_atendimento' && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && !entry
@@ -3091,11 +3096,6 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
         : await fetchCashMovementByAppointmentFromSupabase(salonId, appointment.id)
       const existingEntry = entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
         ?? (remoteEntry ? normalizeCashMovementRecord(remoteEntry) : null)
-      if (existingEntry && cashStatus(existingEntry) === 'pago') {
-        setPaymentAppointment(null)
-        notify?.('Movimento financeiro existente reaproveitado.')
-        return
-      }
       const savedEntry = normalizeCashMovementRecord(existingEntry?.id
         ? await updateCashMovementRecord(salonId, existingEntry.id, payload)
         : await createCashMovementRecord(salonId, payload))
@@ -3125,10 +3125,23 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
           const duplicateRow = await fetchCashMovementByAppointmentFromSupabase(salonId, appointment.id)
           const duplicate = duplicateRow ? normalizeCashMovementRecord(duplicateRow) : null
           if (duplicate?.id) {
+            const updatedDuplicate = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, duplicate.id, payload))
+            const updatedAppointment = normalizeAppointmentRecord({
+              ...appointment,
+              ...(await updateAppointmentRecord(salonId, appointment.id, {
+                paymentMethod: normalizedMethod,
+                payment_method: normalizedMethod,
+                paymentStatus,
+                payment_status: paymentStatus,
+                status: appointmentStatus
+              }))
+            }, employees)
             setEntries((current) => current.some((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
-              ? current.map((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id) ? duplicate : entry)
-              : [...current, duplicate])
-            notify?.('Movimento financeiro existente reaproveitado.')
+              ? current.map((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id) ? updatedDuplicate : entry)
+              : [...current, updatedDuplicate])
+            setAppointments?.((current) => current.map((item) => String(item.id) === String(appointment.id) ? updatedAppointment : item))
+            setPaymentAppointment(null)
+            notify?.('Movimento financeiro existente atualizado.')
             return
           }
         } catch (duplicateError) {
@@ -3227,8 +3240,13 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
         </div>
       </section>
 
+      <section className="space-y-3">
+      <div>
+        <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo do dia</h3>
+        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Somente cash_movements com type entrada e payment_status pago entram nos recebidos.</p>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Metric title="Total recebido hoje" value={money.format(income)} detail="Entradas pagas" />
+        <Metric title="Total recebido hoje" value={money.format(income)} detail="service_value pago hoje" />
         <Metric title="Pix" value={money.format(byMethod(['PIX', 'Pix', 'pix']))} detail="Recebido hoje" />
         <Metric title="Dinheiro" value={money.format(byMethod(['Dinheiro', 'dinheiro']))} detail="Recebido hoje" />
         <Metric title="Débito" value={money.format(byMethod(['Débito', 'debito']))} detail="Recebido hoje" />
@@ -3239,6 +3257,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
         <Metric title="Saídas" value={money.format(outcome)} detail="Despesas do dia" />
         <Metric title="Saldo final" value={money.format(income - outcome)} detail="Recebido - saídas" />
       </div>
+      </section>
 
       <Panel title="Receber pagamento">
         <div className="space-y-3">
@@ -3287,7 +3306,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
                     <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date ?? item.data)} · {cashClientName(item) || cashDescription(item)}</p>
                     <StatusBadge tone="amber">Pendente</StatusBadge>
                   </div>
-                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{cashServiceName(item) || cashCategory(item)} · {cashEmployeeName(item) || 'Sem profissional'} · {money.format(cashValue(item))}</p>
+                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{cashServiceName(item) || cashCategory(item)} · {cashEmployeeName(item) || 'Sem profissional'} · {money.format(cashServiceValue(item))}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {appointment && <button type="button" onClick={() => setPaymentAppointment(appointment)} className={buttonSecondary}>Receber pagamento</button>}
@@ -3312,10 +3331,10 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
             if (key === 'employee') return cashEmployeeName(row) || '-'
             if (key === 'method') {
               const method = cashMethod(row)
-              return method === 'Não informado' ? method : paymentMethodLabel(method)
+              return method ? <PaymentMethodBadge method={method} /> : '-'
             }
             if (key === 'status') return <StatusBadge tone={cashStatus(row) === 'pago' ? 'green' : 'amber'}>{cashStatus(row) === 'pago' ? 'Pago' : 'Pendente'}</StatusBadge>
-            if (key === 'value') return money.format(cashValue(row))
+            if (key === 'value') return money.format(cashType(row) === 'entrada' ? cashServiceValue(row) : cashValue(row))
             if (key === 'commission') return isAppointmentCashEntry(row) ? money.format(cashCommissionValue(row)) : '-'
             if (key === 'salon') return isAppointmentCashEntry(row) ? money.format(cashSalonValue(row)) : '-'
             return value
@@ -3344,7 +3363,7 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
   const service = serviceItems.find((item) => String(item.id) === String(appointment.serviceId ?? appointment.service_id) || item.name === appointment.service)
   const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
   const serviceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
-  const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? 0) || 0
+  const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? employee?.commission ?? employee?.commission_percent ?? 0) || 0
   const commissionValue = serviceValue * (commissionPercent / 100)
   const salonValue = serviceValue - commissionValue
   const paymentStatus = paymentMethod === 'pendente' ? 'pendente' : 'pago'
@@ -3719,35 +3738,20 @@ function Reports({ appointments, employees, cashEntries = [], user }) {
   const appointmentEntries = cashEntries.filter((item) => isAppointmentCashEntry(item) && isPaidIncomeCashEntry(item))
   const completed = appointmentEntries
   const pendingReportEntries = cashEntries.filter(isPendingIncomeCashEntry)
-  const commissions = appointmentEntries.length
-    ? appointmentEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
-    : completed.reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0)
-  const employeeCommissions = appointmentEntries.length
-    ? Object.values(appointmentEntries.reduce((acc, item) => {
-      const key = String(field(item, 'employeeId', 'employee_id') ?? cashEmployeeName(item) ?? '')
-      if (!key) return acc
-      const employee = employees.find((current) => String(current.id) === key || current.name === cashEmployeeName(item))
-      acc[key] = acc[key] ?? { name: employee?.name ?? cashEmployeeName(item), value: 0, count: 0 }
-      acc[key].value += cashCommissionValue(item)
-      acc[key].count += 1
-      return acc
-    }, {})).filter((item) => item.count > 0)
-    : getProfessionals(employees)
-      .map((employee) => ({
-        name: employee.name,
-        value: completed.filter((item) => isAppointmentForEmployee(item, employee)).reduce((sum, item) => sum + getAppointmentCommission(item, employees), 0),
-        count: completed.filter((item) => isAppointmentForEmployee(item, employee)).length
-      }))
-      .filter((item) => item.count > 0)
-  const serviceCommissions = appointmentEntries.length
-    ? topEntries(appointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}), 8)
-    : topEntries(completed.reduce((acc, item) => ({ ...acc, [item.service]: (acc[item.service] || 0) + getAppointmentCommission(item, employees) }), {}), 8)
-  const serviceSales = appointmentEntries.length
-    ? topEntries(countBy(appointmentEntries, (item) => cashServiceName(item) || 'Serviço'))
-    : topEntries(countBy(completed, (item) => item.service))
-  const revenue = appointmentEntries.length
-    ? appointmentEntries.reduce((sum, item) => sum + cashValue(item), 0)
-    : completed.reduce((sum, item) => sum + Number(item.value ?? 0), 0)
+  const commissions = appointmentEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
+  const employeeCommissions = Object.values(appointmentEntries.reduce((acc, item) => {
+    const key = String(field(item, 'employeeId', 'employee_id') ?? cashEmployeeName(item) ?? '')
+    if (!key) return acc
+    const employee = employees.find((current) => String(current.id) === key || current.name === cashEmployeeName(item))
+    acc[key] = acc[key] ?? { name: employee?.name ?? cashEmployeeName(item), value: 0, count: 0 }
+    acc[key].value += cashCommissionValue(item)
+    acc[key].count += 1
+    return acc
+  }, {})).filter((item) => item.count > 0)
+  const serviceCommissions = topEntries(appointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}), 8)
+  const serviceSales = topEntries(countBy(appointmentEntries, (item) => cashServiceName(item) || 'Serviço'))
+  const frequentClients = topEntries(countBy(appointmentEntries, (item) => cashClientName(item) || 'Cliente'), 5)
+  const revenue = appointmentEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
   return (
     <div className="space-y-5">
       {user.role === 'admin' && (
@@ -3767,8 +3771,8 @@ function Reports({ appointments, employees, cashEntries = [], user }) {
       <Panel title="Comissão por funcionário"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissões calculadas']} /></Panel>
       <Panel title="Comissão por serviço"><CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissões calculadas']} /></Panel>
       <Panel title="Serviços mais vendidos"><CompactList items={serviceSales.length ? serviceSales.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
-      <Panel title="Clientes mais frequentes"><CompactList items={['Juliana Nunes', 'Ana Paula Martins', 'Patricia Souza']} /></Panel>
-      {user.role === 'admin' && <Panel title="Pagamentos pendentes"><CompactList items={pendingReportEntries.length ? pendingReportEntries.map((item) => `${cashClientName(item) || cashDescription(item)}: ${money.format(cashValue(item))}`) : ['Sem pagamentos pendentes']} /></Panel>}
+      <Panel title="Clientes mais frequentes"><CompactList items={frequentClients.length ? frequentClients.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
+      {user.role === 'admin' && <Panel title="Pagamentos pendentes"><CompactList items={pendingReportEntries.length ? pendingReportEntries.map((item) => `${cashClientName(item) || cashDescription(item)}: ${money.format(cashServiceValue(item))}`) : ['Sem pagamentos pendentes']} /></Panel>}
       </div>
     </div>
   )
@@ -3779,12 +3783,12 @@ function EmployeeResultsReport({ cashEntries, employees, periodType, startDate, 
   const startDateTime = parseDateStart(startDate)
   const endDateTime = parseDateEnd(endDate)
   const resultEntries = (cashEntries || []).filter((entry) => {
-    const createdAt = parseCashCreatedAt(entry)
-    return createdAt &&
+    const entryDate = parseDateStart(cashDate(entry))
+    return entryDate &&
       startDateTime &&
       endDateTime &&
-      createdAt >= startDateTime &&
-      createdAt <= endDateTime &&
+      entryDate >= startDateTime &&
+      entryDate <= endDateTime &&
       isPaidIncomeCashEntry(entry)
   })
   const rows = Object.values(resultEntries.reduce((acc, entry) => {
@@ -3801,7 +3805,7 @@ function EmployeeResultsReport({ cashEntries, employees, periodType, startDate, 
       salonProfit: 0
     }
     acc[key].appointments += 1
-    acc[key].revenue += cashValue(entry)
+    acc[key].revenue += cashServiceValue(entry)
     acc[key].commission += cashCommissionValue(entry)
     acc[key].salonProfit += cashSalonValue(entry)
     return acc
@@ -4253,6 +4257,18 @@ function StatusBadge({ tone = 'gray', children }) {
     gray: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-white/10 dark:text-gray-200'
   }
   return <span className={`${badgeBase} ${tones[tone] ?? tones.gray}`}>{children}</span>
+}
+
+function PaymentMethodBadge({ method }) {
+  const normalizedMethod = normalizeAppointmentPaymentMethod(method)
+  const tones = {
+    pix: 'cyan',
+    dinheiro: 'green',
+    debito: 'gray',
+    credito: 'rose',
+    pendente: 'amber'
+  }
+  return <StatusBadge tone={tones[normalizedMethod] ?? 'gray'}>{paymentMethodLabel(normalizedMethod)}</StatusBadge>
 }
 
 function EmptyState({ children }) {
