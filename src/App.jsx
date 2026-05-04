@@ -870,6 +870,7 @@ function normalizeClientRecord(row) {
 
 function normalizeEmployeeRecord(row) {
   const rawRole = field(row, 'role')
+  const rawFunctions = field(row, 'functions') ?? field(row, 'position') ?? rawRole ?? ''
   const employeeType = field(row, 'employeeType', 'employee_type') ?? (['cashier', 'caixa'].includes(rawRole) ? 'cashier' : 'professional')
   const professional = employeeType === 'professional'
   const status = field(row, 'status') || 'ativo'
@@ -877,11 +878,16 @@ function normalizeEmployeeRecord(row) {
   const commissionPercent = Number(field(row, 'commission_percent') ?? field(row, 'commission') ?? 0)
   return {
     ...row,
-    name: field(row, 'name') ?? '',
+    salon_id: field(row, 'salon_id') ?? field(row, 'salonId'),
+    salonId: field(row, 'salonId', 'salon_id'),
+    name: field(row, 'name') ?? field(row, 'employeeName', 'employee_name') ?? '',
+    employeeName: field(row, 'employeeName', 'employee_name') ?? field(row, 'name') ?? '',
+    employee_name: field(row, 'employee_name') ?? field(row, 'employeeName') ?? field(row, 'name') ?? '',
     phone: field(row, 'phone') ?? '',
     status,
-    position: field(row, 'position') || '',
-    role: field(row, 'position') || rawRole || '',
+    position: field(row, 'position') || rawFunctions,
+    role: rawFunctions,
+    functions: field(row, 'functions') ?? rawFunctions,
     active: field(row, 'active') ?? status.toLowerCase() !== 'inativo',
     commission_percent: commissionPercent,
     commission: Number(field(row, 'commission') ?? commissionPercent ?? 0),
@@ -1114,21 +1120,27 @@ function normalizeAuditLogRecord(row) {
 async function recordAuditLog({ salonId, user, action, entityType, entityId, oldData, newData, reason, onCreated }) {
   const trimmedReason = String(reason ?? '').trim()
   if (!trimmedReason) {
-    throw new Error('Motivo da alteração é obrigatório.')
+    console.warn('Auditoria ignorada: motivo ausente.', { salonId, action, entityType, entityId })
+    return null
   }
-  const savedLog = normalizeAuditLogRecord(await createAuditLogRecord(salonId, {
-    userId: user?.id ?? null,
-    userName: user?.name ?? user?.email ?? 'Usuário',
-    action,
-    entityType,
-    entityId: entityId === undefined || entityId === null ? null : String(entityId),
-    oldData: oldData ?? null,
-    newData: newData ?? null,
-    reason: trimmedReason,
-    createdAt: new Date().toISOString()
-  }))
-  onCreated?.(savedLog)
-  return savedLog
+  try {
+    const savedLog = normalizeAuditLogRecord(await createAuditLogRecord(salonId, {
+      userId: user?.id ?? null,
+      userName: user?.name ?? user?.email ?? 'Usuário',
+      action,
+      entityType,
+      entityId: entityId === undefined || entityId === null ? null : String(entityId),
+      oldData: oldData ?? null,
+      newData: newData ?? null,
+      reason: trimmedReason,
+      createdAt: new Date().toISOString()
+    }))
+    onCreated?.(savedLog)
+    return savedLog
+  } catch (error) {
+    console.error('Erro audit_logs Supabase:', error?.original ?? error)
+    return null
+  }
 }
 
 function normalizeStockItemRecord(row) {
@@ -1399,6 +1411,7 @@ function App() {
       return
     }
 
+    console.log('salon_id usado nas buscas:', salonId)
     setDataLoading(true)
     try {
       let [
@@ -1427,6 +1440,9 @@ function App() {
         fetchStockItemsFromSupabase(salonId)
       ])
 
+      console.log('salon atual carregado:', salonRow)
+      console.log('resultado de employees:', employeeRows)
+
       if ((employeeRows?.length ?? 0) === 0) {
         try {
           const seedResult = await seedSalonData(salonId)
@@ -1443,6 +1459,7 @@ function App() {
             employeeRows = seededEmployeeRows
             serviceRows = seededServiceRows
             appointmentRows = seededAppointmentRows
+            console.log('resultado de employees apos seed:', employeeRows)
             notify('Sistema preparado para este salão')
           }
         } catch (seedError) {
@@ -1470,6 +1487,7 @@ function App() {
       setInventoryItems((stockRows ?? []).map(normalizeStockItemRecord))
       setDatabaseStatus({ notConfigured: false, message: '' })
     } catch (error) {
+      console.error('erro real do Supabase:', error?.original ?? error)
       if (isMissingTableError(error?.original ?? error)) {
         setDatabaseStatus({ notConfigured: true, message: databaseNotConfiguredMessage })
         return
@@ -5490,10 +5508,12 @@ function Settings({ salonId, settings, setSettings, notify }) {
 
     setSaving(true)
     try {
+      console.log('salon_id usado para salvar configuracoes:', salonId)
       const saved = normalizeSalonSettings(await updateSalonRecord(salonId, payload))
       setSettings((current) => ({ ...current, ...saved }))
       notify?.('Salvo com sucesso')
     } catch (error) {
+      console.error('erro real do Supabase:', error?.original ?? error)
       handleDataActionError(error, notify)
     } finally {
       setSaving(false)

@@ -91,19 +91,21 @@ function clientPayload(payload = {}, salonId, includeSalon = false) {
 }
 
 function employeePayload(payload = {}, salonId, includeSalon = false) {
-  const employeeType = payload.employeeType ?? payload.role ?? 'professional'
+  const rawRole = String(payload.role ?? '').trim().toLowerCase()
+  const employeeType = payload.employeeType ?? (rawRole === 'cashier' || rawRole === 'caixa' ? 'cashier' : 'professional')
+  const employeeFunctions = payload.functions ?? payload.role ?? payload.position ?? ''
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     name: includeSalon || hasField(payload, 'name') ? payload.name : undefined,
     phone: includeSalon || hasField(payload, 'phone') ? payload.phone : undefined,
-    role: includeSalon || hasField(payload, 'employeeType') ? employeeType : undefined,
+    role: includeSalon || hasField(payload, 'role') || hasField(payload, 'functions') || hasField(payload, 'position') ? employeeFunctions : undefined,
     status: includeSalon || hasField(payload, 'status') || hasField(payload, 'workStatus') || hasField(payload, 'active')
       ? payload.status ?? payload.workStatus ?? (payload.active === false ? 'Inativo' : 'Ativo')
       : undefined,
     commission_percent: includeSalon || hasField(payload, 'commissionPercent') || hasField(payload, 'commission')
       ? Number(payload.commissionPercent ?? payload.commission ?? 0)
       : undefined,
-    position: includeSalon || hasField(payload, 'position') || hasField(payload, 'role') ? payload.position ?? payload.role ?? '' : undefined,
+    position: includeSalon || hasField(payload, 'position') || hasField(payload, 'role') || hasField(payload, 'functions') ? payload.position ?? employeeFunctions : undefined,
     services: includeSalon || hasField(payload, 'services') ? payload.services ?? [] : undefined,
     login_email: includeSalon || hasField(payload, 'loginEmail') || hasField(payload, 'accessEmail') || hasField(payload, 'login_email') ? payload.loginEmail ?? payload.accessEmail ?? payload.login_email ?? '' : undefined,
     login_status: hasField(payload, 'loginStatus') || hasField(payload, 'login_status') ? payload.loginStatus ?? payload.login_status : undefined
@@ -471,6 +473,7 @@ export async function fetchSalon(salonId) {
 
 export async function updateSalon(salonId, payload) {
   requireSalonId(salonId)
+  console.log('salon atual carregado para update:', { id: salonId, payload })
   const data = await runQuery(
     supabase
       .from(TABLES.salons)
@@ -499,13 +502,32 @@ export async function deleteClient(salonId, id) {
 }
 
 export async function fetchEmployees(salonId) {
+  console.log('salon_id usado nas buscas:', salonId)
   try {
     const data = await runQuery(bySalon(TABLES.employees, salonId).order('name', { ascending: true }))
+    console.log('resultado de employees:', data)
     return Array.isArray(data) ? data : []
   } catch (error) {
-    console.error('Erro Supabase:', error)
+    console.error('erro real do Supabase:', error?.original ?? error)
     if (isMissingTableError(error?.original ?? error)) throw error
-    return []
+    const message = String(error?.original?.message ?? error?.message ?? '').toLowerCase()
+    if (message.includes('name')) {
+      try {
+        const fallbackData = await runQuery(
+          supabase
+            .from(TABLES.employees)
+            .select('*')
+            .eq('salon_id', salonId)
+            .order('employee_name', { ascending: true })
+        )
+        console.log('resultado de employees:', fallbackData)
+        return Array.isArray(fallbackData) ? fallbackData : []
+      } catch (fallbackError) {
+        console.error('erro real do Supabase:', fallbackError?.original ?? fallbackError)
+        if (isMissingTableError(fallbackError?.original ?? fallbackError)) throw fallbackError
+      }
+    }
+    throw error
   }
 }
 
