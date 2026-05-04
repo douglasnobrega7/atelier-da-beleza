@@ -253,12 +253,46 @@ function commissionPaymentPayload(payload = {}, salonId, includeSalon = false) {
     employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
     employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? payload.employeeName ?? payload.employee_name ?? '' : undefined,
     amount: includeSalon || hasField(payload, 'amount') || hasField(payload, 'value') ? Number(payload.amount ?? payload.value ?? 0) : undefined,
+    commission_gross: includeSalon || hasField(payload, 'commissionGross') || hasField(payload, 'commission_gross') ? Number(payload.commissionGross ?? payload.commission_gross ?? 0) : undefined,
+    advances_total: includeSalon || hasField(payload, 'advancesTotal') || hasField(payload, 'advances_total') ? Number(payload.advancesTotal ?? payload.advances_total ?? 0) : undefined,
     payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? payload.paymentMethod ?? payload.payment_method ?? '' : undefined,
     notes: includeSalon || hasField(payload, 'notes') ? payload.notes ?? '' : undefined,
     period_start: includeSalon || hasField(payload, 'periodStart') || hasField(payload, 'period_start') ? payload.periodStart ?? payload.period_start : undefined,
     period_end: includeSalon || hasField(payload, 'periodEnd') || hasField(payload, 'period_end') ? payload.periodEnd ?? payload.period_end : undefined,
     paid_at: includeSalon || hasField(payload, 'paidAt') || hasField(payload, 'paid_at') ? payload.paidAt ?? payload.paid_at : undefined,
-    cash_movement_ids: includeSalon || hasField(payload, 'cashMovementIds') || hasField(payload, 'cash_movement_ids') ? payload.cashMovementIds ?? payload.cash_movement_ids ?? [] : undefined
+    cash_movement_ids: includeSalon || hasField(payload, 'cashMovementIds') || hasField(payload, 'cash_movement_ids') ? payload.cashMovementIds ?? payload.cash_movement_ids ?? [] : undefined,
+    advance_ids: includeSalon || hasField(payload, 'advanceIds') || hasField(payload, 'advance_ids') ? payload.advanceIds ?? payload.advance_ids ?? [] : undefined
+  })
+}
+
+function normalizeAdvanceStatusValue(status) {
+  const normalized = String(status ?? 'pendente')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (normalized === 'descontado') return 'descontado'
+  if (normalized === 'cancelado' || normalized === 'excluido') return 'cancelado'
+  return 'pendente'
+}
+
+function advancePayload(payload = {}, salonId, includeSalon = false) {
+  const employeeName = payload.employeeName ?? payload.employee_name ?? payload.employee ?? ''
+  const createdAt = payload.createdAt ?? payload.created_at ?? payload.date
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
+    employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') || hasField(payload, 'employee') ? employeeName : undefined,
+    employee: includeSalon || hasField(payload, 'employee') || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? employeeName : undefined,
+    value: includeSalon || hasField(payload, 'value') ? Number(payload.value ?? 0) : undefined,
+    status: includeSalon || hasField(payload, 'status') ? normalizeAdvanceStatusValue(payload.status) : undefined,
+    date: includeSalon || hasField(payload, 'date') || hasField(payload, 'createdAt') || hasField(payload, 'created_at') ? String(createdAt ?? '').slice(0, 10) : undefined,
+    created_at: includeSalon || hasField(payload, 'createdAt') || hasField(payload, 'created_at') || hasField(payload, 'date') ? createdAt : undefined,
+    paid_at: includeSalon || hasField(payload, 'paidAt') || hasField(payload, 'paid_at') ? payload.paidAt ?? payload.paid_at ?? null : undefined,
+    discounted_at: includeSalon || hasField(payload, 'discountedAt') || hasField(payload, 'discounted_at') ? payload.discountedAt ?? payload.discounted_at ?? null : undefined,
+    notes: includeSalon || hasField(payload, 'notes') || hasField(payload, 'reason') ? payload.notes ?? payload.reason ?? '' : undefined,
+    reason: includeSalon || hasField(payload, 'reason') || hasField(payload, 'notes') ? payload.reason ?? payload.notes ?? '' : undefined
   })
 }
 
@@ -736,6 +770,14 @@ export async function updateCashMovement(salonId, id, payload) {
 
 export async function fetchAdvances(salonId) {
   return runQuery(bySalon(TABLES.advances, salonId).order('date', { ascending: false }))
+}
+
+export async function createAdvance(salonId, payload) {
+  return insertRow(TABLES.advances, salonId, payload, advancePayload)
+}
+
+export async function updateAdvance(salonId, id, payload) {
+  return updateRow(TABLES.advances, salonId, id, payload, advancePayload)
 }
 
 export async function fetchStockItems(salonId) {

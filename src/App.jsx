@@ -6,6 +6,7 @@ import {
   createCashClosure as createCashClosureRecord,
   createCashMovement as createCashMovementRecord,
   createCommissionPayment as createCommissionPaymentRecord,
+  createAdvance as createAdvanceRecord,
   createClient as createClientRecord,
   createEmployee as createEmployeeRecord,
   createService as createServiceRecord,
@@ -28,6 +29,7 @@ import {
   isMissingTableError,
   seedSalonData,
   updateAppointment as updateAppointmentRecord,
+  updateAdvance as updateAdvanceRecord,
   updateCashMovement as updateCashMovementRecord,
   updateClient as updateClientRecord,
   updateEmployee as updateEmployeeRecord,
@@ -634,6 +636,72 @@ function cashEmployeeName(entry) {
   return field(entry, 'employeeName', 'employee_name') ?? ''
 }
 
+function normalizeAdvanceStatus(status) {
+  const normalized = String(status ?? 'pendente')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (normalized === 'descontado') return 'descontado'
+  if (normalized === 'cancelado' || normalized === 'excluido') return 'cancelado'
+  return 'pendente'
+}
+
+function advanceEmployeeId(advance) {
+  return field(advance, 'employeeId', 'employee_id')
+}
+
+function advanceEmployeeName(advance) {
+  return field(advance, 'employeeName', 'employee_name') ?? advance?.employee ?? ''
+}
+
+function advanceValue(advance) {
+  return Number(field(advance, 'value') ?? 0)
+}
+
+function advanceCreatedDate(advance) {
+  return String(field(advance, 'createdAt', 'created_at') ?? advance?.date ?? todayIso).slice(0, 10)
+}
+
+function advanceStatus(advance) {
+  return normalizeAdvanceStatus(field(advance, 'status'))
+}
+
+function advanceDiscountedDate(advance) {
+  return String(field(advance, 'discountedAt', 'discounted_at') ?? field(advance, 'paidAt', 'paid_at') ?? '').slice(0, 10)
+}
+
+function isActiveAdvance(advance) {
+  return advanceStatus(advance) !== 'cancelado'
+}
+
+function isAdvanceForEmployee(advance, employeeId, employeeName) {
+  return (employeeId && String(advanceEmployeeId(advance) ?? '') === String(employeeId)) ||
+    (employeeName && advanceEmployeeName(advance) === employeeName)
+}
+
+function advanceInPeriod(advance, startDate, endDate) {
+  const created = parseDateStart(advanceCreatedDate(advance))
+  const start = parseDateStart(startDate)
+  const end = parseDateEnd(endDate)
+  return created && start && end && created >= start && created <= end
+}
+
+function advanceStatusLabel(status) {
+  const normalized = normalizeAdvanceStatus(status)
+  if (normalized === 'descontado') return 'Descontado'
+  if (normalized === 'cancelado') return 'Cancelado'
+  return 'Pendente'
+}
+
+function advanceStatusTone(status) {
+  const normalized = normalizeAdvanceStatus(status)
+  if (normalized === 'descontado') return 'green'
+  if (normalized === 'cancelado') return 'rose'
+  return 'amber'
+}
+
 function isAppointmentCashEntry(entry) {
   return cashType(entry) === 'entrada' && Boolean(cashAppointmentId(entry))
 }
@@ -696,23 +764,31 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
 }
 
 function createAdvanceCashEntry(advance) {
+  const employeeName = advanceEmployeeName(advance)
+  const createdDate = advanceCreatedDate(advance)
   return {
     id: Date.now() + 1,
     tipo: 'saida',
     type: 'Saída',
     categoria: 'Vale',
     category: 'Vale',
-    descricao: `Vale - ${advance.employee}`,
-    description: `Vale - ${advance.employee}`,
-    valor: Number(advance.value) || 0,
-    value: Number(advance.value) || 0,
-    data: advance.date,
-    date: advance.date,
+    descricao: `Vale - ${employeeName}`,
+    description: `Vale - ${employeeName}`,
+    valor: advanceValue(advance),
+    value: advanceValue(advance),
+    data: createdDate,
+    date: createdDate,
     method: 'Dinheiro',
     paymentMethod: 'dinheiro',
     payment_method: 'dinheiro',
+    employeeId: advanceEmployeeId(advance),
+    employee_id: advanceEmployeeId(advance),
+    employeeName,
+    employee_name: employeeName,
     referenciaId: advance.id,
-    referenciaTipo: 'vale'
+    referencia_id: advance.id,
+    referenciaTipo: 'vale',
+    referencia_tipo: 'vale'
   }
 }
 
@@ -989,6 +1065,10 @@ function normalizeCommissionPaymentRecord(row) {
     employeeName: field(row, 'employeeName', 'employee_name') ?? '',
     employee_name: field(row, 'employee_name') ?? field(row, 'employeeName') ?? '',
     amount: Number(field(row, 'amount') ?? 0),
+    commissionGross: Number(field(row, 'commissionGross', 'commission_gross') ?? field(row, 'amount') ?? 0),
+    commission_gross: Number(field(row, 'commission_gross') ?? field(row, 'commissionGross') ?? field(row, 'amount') ?? 0),
+    advancesTotal: Number(field(row, 'advancesTotal', 'advances_total') ?? 0),
+    advances_total: Number(field(row, 'advances_total') ?? field(row, 'advancesTotal') ?? 0),
     paymentMethod: field(row, 'paymentMethod', 'payment_method') ?? '',
     payment_method: field(row, 'payment_method') ?? field(row, 'paymentMethod') ?? '',
     notes: field(row, 'notes') ?? '',
@@ -999,18 +1079,35 @@ function normalizeCommissionPaymentRecord(row) {
     paidAt: field(row, 'paidAt', 'paid_at'),
     paid_at: field(row, 'paid_at') ?? field(row, 'paidAt'),
     cashMovementIds: field(row, 'cashMovementIds', 'cash_movement_ids') ?? [],
-    cash_movement_ids: field(row, 'cash_movement_ids') ?? field(row, 'cashMovementIds') ?? []
+    cash_movement_ids: field(row, 'cash_movement_ids') ?? field(row, 'cashMovementIds') ?? [],
+    advanceIds: field(row, 'advanceIds', 'advance_ids') ?? [],
+    advance_ids: field(row, 'advance_ids') ?? field(row, 'advanceIds') ?? []
   }
 }
 
 function normalizeAdvanceRecord(row) {
+  const employeeName = field(row, 'employeeName', 'employee_name') ?? field(row, 'employee') ?? ''
+  const status = normalizeAdvanceStatus(field(row, 'status'))
+  const createdAt = field(row, 'createdAt', 'created_at') ?? field(row, 'date') ?? todayIso
+  const notes = field(row, 'notes') ?? field(row, 'reason') ?? ''
   return {
     ...row,
-    employee: field(row, 'employee') ?? '',
+    employeeId: field(row, 'employeeId', 'employee_id'),
+    employee_id: field(row, 'employee_id') ?? field(row, 'employeeId'),
+    employeeName,
+    employee_name: employeeName,
+    employee: employeeName,
     value: Number(field(row, 'value') ?? 0),
-    date: field(row, 'date') ?? todayIso,
-    status: field(row, 'status') ?? 'Aberto',
-    reason: field(row, 'reason') ?? ''
+    date: String(field(row, 'date') ?? createdAt ?? todayIso).slice(0, 10),
+    createdAt,
+    created_at: field(row, 'created_at') ?? field(row, 'createdAt') ?? createdAt,
+    status,
+    paidAt: field(row, 'paidAt', 'paid_at'),
+    paid_at: field(row, 'paid_at') ?? field(row, 'paidAt'),
+    discountedAt: field(row, 'discountedAt', 'discounted_at'),
+    discounted_at: field(row, 'discounted_at') ?? field(row, 'discountedAt'),
+    notes,
+    reason: notes
   }
 }
 
@@ -1842,10 +1939,10 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     clientes: <Clients salonId={salonId} user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
     servicos: <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} />,
     funcionarios: <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
-    caixa: <CashRegister salonId={salonId} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} serviceItems={services} notify={notify} />,
-    vales: user.role === 'admin' || user.role === 'cashier' ? <Advances user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
+    caixa: <CashRegister salonId={salonId} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} advances={advances} serviceItems={services} notify={notify} />,
+    vales: user.role === 'admin' || user.role === 'cashier' ? <Advances salonId={salonId} user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
-    relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} notify={notify} /> : <AccessDenied />,
+    relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} advances={advances} setAdvances={setAdvances} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} notify={notify} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
@@ -1877,6 +1974,10 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const dashboardByMethod = (methods) => paidIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
   const pendingPaymentsTotal = cashEntries.filter(isPendingIncomeCashEntry).reduce((sum, item) => sum + cashServiceValue(item), 0)
   const cashOutcome = cashEntries.filter((item) => isActiveCashEntry(item) && cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
+  const activeAdvances = advances.filter(isActiveAdvance)
+  const dayAdvances = activeAdvances.filter((item) => advanceCreatedDate(item) === todayIso).reduce((sum, item) => sum + advanceValue(item), 0)
+  const monthAdvances = activeAdvances.filter((item) => advanceCreatedDate(item).startsWith(currentMonth)).reduce((sum, item) => sum + advanceValue(item), 0)
+  const pendingAdvances = activeAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0)
 
   return (
     <div className="space-y-5">
@@ -1893,6 +1994,9 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
         <Metric title="Dinheiro" value={money.format(dashboardByMethod(['Dinheiro', 'dinheiro']))} detail="Pagamentos pagos" />
         <Metric title="Cartão" value={money.format(dashboardByMethod(['debito', 'credito']))} detail="Débito + crédito pagos" />
         <Metric title="Pendentes" value={money.format(pendingPaymentsTotal)} detail="Entradas pendentes" />
+        <Metric title="Vales do dia" value={money.format(dayAdvances)} detail="Adiantamentos criados hoje" />
+        <Metric title="Vales do mes" value={money.format(monthAdvances)} detail="Adiantamentos do mes" />
+        <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Adiantamentos pendentes" />
         <Metric title="Saldo líquido" value={money.format(cashIncome - cashOutcome)} detail="Lucro líquido após saídas" />
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
@@ -3187,7 +3291,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     </Modal>
   )
 }
-function CashRegister({ salonId, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], serviceItems = services, notify }) {
+function CashRegister({ salonId, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], advances = [], serviceItems = services, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [paymentAppointment, setPaymentAppointment] = useState(null)
   const [cashDateFilter, setCashDateFilter] = useState(todayIso)
@@ -3205,6 +3309,9 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
   const commissionPaid = summary.commission
   const salonProfit = summary.salonProfit
   const pendingTotal = summary.pending
+  const activeAdvances = advances.filter(isActiveAdvance)
+  const paidAdvancesToday = activeAdvances.filter((item) => advanceCreatedDate(item) === cashDateFilter).reduce((sum, item) => sum + advanceValue(item), 0)
+  const pendingAdvances = activeAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0)
   const awaitingPaymentAppointments = appointments.filter((item) => {
     const entry = entries.find((cashEntry) => String(cashAppointmentId(cashEntry) ?? '') === String(item.id))
     return normalizeAppointmentStatus(item.status) === 'em_atendimento' && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && !entry
@@ -3441,6 +3548,8 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
         <Metric title="Débito" value={money.format(byMethod(['Débito', 'debito']))} detail="Recebido hoje" />
         <Metric title="Crédito" value={money.format(byMethod(['Crédito', 'credito']))} detail="Recebido hoje" />
         <Metric title="Pagamentos pendentes" value={money.format(pendingTotal)} detail="A receber" />
+        <Metric title="Vales pagos hoje" value={money.format(paidAdvancesToday)} detail="Adiantamentos do dia" />
+        <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Adiantamentos pendentes" />
         <Metric title="Comissão dos profissionais" value={money.format(commissionPaid)} detail="Sobre recebidos" />
         <Metric title="Lucro líquido do salão" value={money.format(salonProfit)} detail="Recebido - comissões" />
         <Metric title="Saídas" value={money.format(outcome)} detail="Despesas do dia" />
@@ -3683,7 +3792,7 @@ function CashEntryModal({ onClose, onSave }) {
   )
 }
 
-function Advances({ user, employees, advances, setAdvances, setCashEntries, notify }) {
+function Advances({ salonId, user, employees, advances, setAdvances, setCashEntries, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [filters, setFilters] = useState({ employee: 'all', date: '', status: 'all' })
@@ -3693,9 +3802,9 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
   if (!canAccess) return <AccessDenied />
 
   const filteredAdvances = advances.filter((item) => (
-    (filters.employee === 'all' || item.employee === filters.employee) &&
-    (!filters.date || item.date === filters.date) &&
-    (filters.status === 'all' || item.status === filters.status)
+    (filters.employee === 'all' || String(advanceEmployeeId(item) ?? '') === filters.employee || advanceEmployeeName(item) === filters.employee) &&
+    (!filters.date || advanceCreatedDate(item) === filters.date) &&
+    (filters.status === 'all' || advanceStatus(item) === filters.status)
   ))
 
   function openNew() {
@@ -3708,44 +3817,74 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
     setModalOpen(true)
   }
 
-  function saveAdvance(data) {
-    const payload = { ...data, value: Number(data.value) || 0 }
-    if (!payload.employee || payload.value <= 0 || !payload.date || !payload.reason.trim()) {
+  async function saveAdvance(data) {
+    const employee = employees.find((item) => String(item.id) === String(data.employeeId)) ?? employees.find((item) => item.name === data.employeeName)
+    const payload = {
+      ...data,
+      employeeId: employee?.id ?? data.employeeId ?? null,
+      employee_id: employee?.id ?? data.employeeId ?? null,
+      employeeName: employee?.name ?? data.employeeName ?? '',
+      employee_name: employee?.name ?? data.employeeName ?? '',
+      employee: employee?.name ?? data.employeeName ?? '',
+      value: Number(data.value) || 0,
+      status: normalizeAdvanceStatus(data.status),
+      date: data.date,
+      createdAt: data.createdAt ?? data.date,
+      created_at: data.createdAt ?? data.date,
+      notes: data.notes ?? data.reason ?? '',
+      reason: data.notes ?? data.reason ?? ''
+    }
+    if (!payload.employeeName || payload.value <= 0 || !payload.date) {
       notify?.('Erro ao salvar: confira Funcionário, valor, data e motivo.', 'error')
       return
     }
+    try {
     if (editing) {
-      const updatedAdvance = { ...editing, ...payload }
+      const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, editing.id, payload))
       setAdvances((current) => current.map((item) => item.id === editing.id ? updatedAdvance : item))
       setCashEntries((current) => {
-        const exists = current.some((entry) => entry.referenciaTipo === 'vale' && entry.referenciaId === editing.id)
+        const exists = current.some((entry) => field(entry, 'referenciaTipo', 'referencia_tipo') === 'vale' && String(field(entry, 'referenciaId', 'referencia_id')) === String(editing.id))
         if (!exists) return [...current, createAdvanceCashEntry(updatedAdvance)]
         return current.map((entry) => (
-          entry.referenciaTipo === 'vale' && entry.referenciaId === editing.id
+          field(entry, 'referenciaTipo', 'referencia_tipo') === 'vale' && String(field(entry, 'referenciaId', 'referencia_id')) === String(editing.id)
             ? { ...entry, ...createAdvanceCashEntry(updatedAdvance), id: entry.id }
             : entry
         ))
       })
       notify?.('Vale atualizado.')
     } else {
-      const newAdvance = { ...payload, id: Date.now() }
+      const newAdvance = normalizeAdvanceRecord(await createAdvanceRecord(salonId, payload))
       setAdvances((current) => [...current, newAdvance])
       setCashEntries((current) => [...current, createAdvanceCashEntry(newAdvance)])
       notify?.('Vale criado e lançado no caixa.')
     }
     setModalOpen(false)
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
-  function markDiscounted(item) {
-    setAdvances((current) => current.map((advance) => advance.id === item.id ? { ...advance, status: 'Descontado' } : advance))
-    notify?.('Vale marcado como descontado.')
+  async function markDiscounted(item) {
+    const discountedAt = new Date().toISOString()
+    try {
+      const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'descontado', discountedAt, discounted_at: discountedAt }))
+      setAdvances((current) => current.map((advance) => advance.id === item.id ? updatedAdvance : advance))
+      notify?.('Vale marcado como descontado.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
-  function removeAdvance(item) {
-    if (!window.confirm(`Excluir o vale de ${item.employee}?`)) return
-    setAdvances((current) => current.filter((advance) => advance.id !== item.id))
-    setCashEntries((current) => current.filter((entry) => !(entry.referenciaTipo === 'vale' && entry.referenciaId === item.id)))
+  async function removeAdvance(item) {
+    if (!window.confirm(`Cancelar o vale de ${advanceEmployeeName(item)}?`)) return
+    try {
+    const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'cancelado' }))
+    setAdvances((current) => current.map((advance) => advance.id === item.id ? updatedAdvance : advance))
+    setCashEntries((current) => current.filter((entry) => !(field(entry, 'referenciaTipo', 'referencia_tipo') === 'vale' && String(field(entry, 'referenciaId', 'referencia_id')) === String(item.id))))
     notify?.('Vale excluído.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
   }
 
   return (
@@ -3762,7 +3901,7 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
         <div className="grid gap-3 md:grid-cols-3">
           <Select label="Funcionário" value={filters.employee} onChange={(value) => setFilters({ ...filters, employee: value })} options={['Todos', ...employees.map((item) => item.name)]} values={['all', ...employees.map((item) => item.name)]} />
           <Field label="Data" type="date" value={filters.date} onChange={(value) => setFilters({ ...filters, date: value })} />
-          <Select label="Status" value={filters.status} onChange={(value) => setFilters({ ...filters, status: value })} options={['Todos', 'Aberto', 'Descontado']} values={['all', 'Aberto', 'Descontado']} />
+          <Select label="Status" value={filters.status} onChange={(value) => setFilters({ ...filters, status: value })} options={['Todos', 'Pendente', 'Descontado', 'Cancelado']} values={['all', 'pendente', 'descontado', 'cancelado']} />
         </div>
       </Panel>
 
@@ -3770,17 +3909,18 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
         <>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-lg font-bold">{item.employee}</p>
-              <p className="mt-1 text-sm text-gray-500">{formatDate(item.date)}</p>
+              <p className="text-lg font-bold">{advanceEmployeeName(item)}</p>
+              <p className="mt-1 text-sm text-gray-500">{formatDate(advanceCreatedDate(item))}</p>
             </div>
-            <span className={`rounded-full px-3 py-1 text-xs font-bold ${item.status === 'Descontado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{item.status}</span>
+            <StatusBadge tone={advanceStatusTone(item.status)}>{advanceStatusLabel(item.status)}</StatusBadge>
           </div>
-          <p className="mt-4 text-2xl font-bold">{money.format(item.value)}</p>
-          <p className="mt-2 text-sm text-gray-600">Motivo: {item.reason}</p>
+          <p className="mt-4 text-2xl font-bold text-graphite dark:text-gray-100">{money.format(advanceValue(item))}</p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Observacao: {item.notes || item.reason || '-'}</p>
+          {advanceDiscountedDate(item) && <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Descontado em {formatDate(advanceDiscountedDate(item))}</p>}
           <div className="mt-4 flex flex-wrap gap-2">
             <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
-            {item.status !== 'Descontado' && <button onClick={() => markDiscounted(item)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">Marcar descontado</button>}
-            {canDelete && <button onClick={() => removeAdvance(item)} className={buttonDanger}>Excluir</button>}
+            {advanceStatus(item) === 'pendente' && <button onClick={() => markDiscounted(item)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">Marcar descontado</button>}
+            {canDelete && advanceStatus(item) !== 'cancelado' && <button onClick={() => removeAdvance(item)} className={buttonDanger}>Cancelar</button>}
           </div>
         </>
       )} />
@@ -3798,21 +3938,22 @@ function Advances({ user, employees, advances, setAdvances, setCashEntries, noti
 
 function AdvanceModal({ employees, advance, onClose, onSave }) {
   const [form, setForm] = useState(advance ? {
-    employee: advance.employee,
-    value: advance.value,
-    date: advance.date,
-    status: advance.status,
-    reason: advance.reason
-  } : { employee: employees[0]?.name ?? '', value: 0, date: todayIso, status: 'Aberto', reason: '' })
+    employeeId: advanceEmployeeId(advance) ?? '',
+    employeeName: advanceEmployeeName(advance),
+    value: advanceValue(advance),
+    date: advanceCreatedDate(advance),
+    status: advanceStatus(advance),
+    notes: advance.notes ?? advance.reason ?? ''
+  } : { employeeId: employees[0]?.id ?? '', employeeName: employees[0]?.name ?? '', value: 0, date: todayIso, status: 'pendente', notes: '' })
 
   return (
     <Modal title={advance ? 'Editar vale' : 'Novo vale'} onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Select label="Funcionário" value={form.employee} onChange={(value) => setForm({ ...form, employee: value })} options={employees.map((item) => item.name)} />
+        <Select label="Funcionario" value={form.employeeId} onChange={(value) => setForm({ ...form, employeeId: value, employeeName: employees.find((item) => String(item.id) === String(value))?.name ?? '' })} options={employees.map((item) => item.name)} values={employees.map((item) => String(item.id))} />
         <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
-        <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
-        <Select label="Status" value={form.status} onChange={(value) => setForm({ ...form, status: value })} options={['Aberto', 'Descontado']} />
-        <Field label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} required />
+        <Field label="Criado em" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
+        <Select label="Status" value={form.status} onChange={(value) => setForm({ ...form, status: value })} options={["Pendente", "Descontado", "Cancelado"]} values={["pendente", "descontado", "cancelado"]} />
+        <Field label="Observacoes" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
           <button className={buttonPrimary}>Salvar</button>
@@ -3981,13 +4122,14 @@ function InventoryModal({ product, onClose, onSave }) {
   )
 }
 
-function Reports({ salonId, appointments, employees, cashEntries = [], setCashEntries, commissionPayments = [], setCommissionPayments, user, salonSettings, notify }) {
+function Reports({ salonId, appointments, employees, cashEntries = [], setCashEntries, advances = [], setAdvances, commissionPayments = [], setCommissionPayments, user, salonSettings, notify }) {
   const [employeeResultPeriod, setEmployeeResultPeriod] = useState('semana')
   const [employeeResultStartDate, setEmployeeResultStartDate] = useState(todayIso)
   const [selectedReportEmployee, setSelectedReportEmployee] = useState('todos')
   const [exporting, setExporting] = useState(null)
   const reportData = buildFinancialReportData({
     cashEntries,
+    advances,
     employees,
     periodType: employeeResultPeriod,
     startDate: employeeResultStartDate,
@@ -4049,6 +4191,8 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
           salonId={salonId}
           cashEntries={cashEntries}
           setCashEntries={setCashEntries}
+          advances={advances}
+          setAdvances={setAdvances}
           employees={employees}
           periodType={employeeResultPeriod}
           startDate={employeeResultStartDate}
@@ -4065,11 +4209,22 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
       {user.role === 'admin' && <Panel title="Faturamento por período"><CompactList items={[`Mês atual: ${money.format(revenue)}`, `Ticket médio: ${money.format(completed.length ? revenue / completed.length : 0)}`]} /></Panel>}
       <Panel title={user.role === 'admin' ? 'Comissões gerais' : 'Minha Comissão'}><CompactList items={[money.format(commissions)]} /></Panel>
       <Panel title="Comissão por funcionário"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissões calculadas']} /></Panel>
+      <Panel title="Vales descontados"><CompactList items={[money.format(reportData.totals.advancesDiscounted)]} /></Panel>
+      <Panel title="Adiantamentos pendentes"><CompactList items={[money.format(reportData.totals.advancesPending)]} /></Panel>
+      <Panel title="Saldo líquido a pagar"><CompactList items={[money.format(reportData.totals.netCommission)]} /></Panel>
       <Panel title="Comissão por serviço"><CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissões calculadas']} /></Panel>
       <Panel title="Serviços mais vendidos"><CompactList items={serviceSales.length ? serviceSales.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
       <Panel title="Clientes mais frequentes"><CompactList items={frequentClients.length ? frequentClients.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
       {user.role === 'admin' && <Panel title="Pagamentos pendentes"><CompactList items={pendingReportEntries.length ? pendingReportEntries.map((item) => `${cashClientName(item) || cashDescription(item)}: ${money.format(cashServiceValue(item))}`) : ['Sem pagamentos pendentes']} /></Panel>}
       </div>
+      <Panel title="Vales por funcionário">
+        <Table
+          rows={reportData.employeeRows.filter((row) => row.advancesTotal > 0 || row.commission > 0)}
+          columns={['employeeName', 'advancesTotal', 'advancesPending', 'advancesDiscounted', 'netCommission']}
+          labels={['Funcionário', 'Total de vales no período', 'Vales pendentes', 'Vales descontados', 'Saldo líquido da comissão']}
+          formatValue={(key, value) => key === 'employeeName' ? value : money.format(Number(value) || 0)}
+        />
+      </Panel>
       <CommissionPaymentHistory payments={commissionPayments} />
     </div>
   )
@@ -4082,11 +4237,13 @@ function CommissionPaymentHistory({ payments = [] }) {
       {rows.length ? (
         <Table
           rows={rows}
-          columns={['paidAt', 'employeeName', 'amount', 'paymentMethod', 'notes', 'period']}
-          labels={['Data do pagamento', 'Funcionário', 'Valor pago', 'Forma de pagamento', 'Observação', 'Período referente']}
+          columns={['paidAt', 'employeeName', 'commissionGross', 'advancesTotal', 'amount', 'paymentMethod', 'notes', 'period']}
+          labels={['Data do pagamento', 'Funcionário', 'Comissão bruta', 'Vales descontados', 'Valor líquido pago', 'Forma de pagamento', 'Observação', 'Período referente']}
           formatValue={(key, value, row) => {
             if (key === 'paidAt') return formatDate(String(row.paidAt ?? row.paid_at ?? '').slice(0, 10))
             if (key === 'employeeName') return row.employeeName || row.employee_name || '-'
+            if (key === 'commissionGross') return money.format(Number(row.commissionGross ?? row.commission_gross ?? row.amount) || 0)
+            if (key === 'advancesTotal') return money.format(Number(row.advancesTotal ?? row.advances_total) || 0)
             if (key === 'amount') return money.format(Number(row.amount) || 0)
             if (key === 'paymentMethod') return <StatusBadge tone="cyan">{financialPaymentMethodLabel(row.paymentMethod ?? row.payment_method)}</StatusBadge>
             if (key === 'period') return `${formatDate(row.periodStart ?? row.period_start)} até ${formatDate(row.periodEnd ?? row.period_end)}`
@@ -4100,7 +4257,7 @@ function CommissionPaymentHistory({ payments = [] }) {
   )
 }
 
-function buildFinancialReportData({ cashEntries = [], employees = [], periodType = 'semana', startDate = todayIso, selectedEmployeeId = 'todos' }) {
+function buildFinancialReportData({ cashEntries = [], advances = [], employees = [], periodType = 'semana', startDate = todayIso, selectedEmployeeId = 'todos' }) {
   const endDate = getPeriodEndDate(startDate, periodType)
   const startDateTime = parseDateStart(startDate)
   const endDateTime = parseDateEnd(endDate)
@@ -4113,9 +4270,13 @@ function buildFinancialReportData({ cashEntries = [], employees = [], periodType
   const matchesEmployee = (entry) => employeeFilter === 'todos' ||
     String(field(entry, 'employeeId', 'employee_id') ?? '') === employeeFilter ||
     (selectedEmployee?.name && cashEmployeeName(entry) === selectedEmployee.name)
+  const matchesAdvanceEmployee = (advance) => employeeFilter === 'todos' ||
+    String(advanceEmployeeId(advance) ?? '') === employeeFilter ||
+    (selectedEmployee?.name && advanceEmployeeName(advance) === selectedEmployee.name)
   const periodEntries = (cashEntries || []).filter((entry) => isActiveCashEntry(entry) && inPeriod(entry) && matchesEmployee(entry))
   const appointmentEntries = periodEntries.filter((entry) => isAppointmentCashEntry(entry) && isPaidIncomeCashEntry(entry))
   const pendingEntries = periodEntries.filter(isPendingIncomeCashEntry)
+  const periodAdvances = (advances || []).filter((advance) => isActiveAdvance(advance) && advanceInPeriod(advance, startDate, endDate) && matchesAdvanceEmployee(advance))
   const employeeRows = Object.values(appointmentEntries.reduce((acc, entry) => {
     const employeeId = field(entry, 'employeeId', 'employee_id')
     const key = employeeId ? String(employeeId) : `name:${cashEmployeeName(entry) || 'sem-funcionario'}`
@@ -4129,6 +4290,10 @@ function buildFinancialReportData({ cashEntries = [], employees = [], periodType
       commission: 0,
       commissionPaid: 0,
       commissionPending: 0,
+      advancesTotal: 0,
+      advancesPending: 0,
+      advancesDiscounted: 0,
+      netCommission: 0,
       salonProfit: 0,
       entries: []
     }
@@ -4142,14 +4307,34 @@ function buildFinancialReportData({ cashEntries = [], employees = [], periodType
     acc[key].entries.push(entry)
     return acc
   }, {})).sort((a, b) => b.revenue - a.revenue)
+  periodAdvances.forEach((advance) => {
+    const employeeId = advanceEmployeeId(advance)
+    const key = employeeId ? String(employeeId) : `name:${advanceEmployeeName(advance) || 'sem-funcionario'}`
+    const employee = employees.find((item) => String(item.id) === String(employeeId) || item.name === advanceEmployeeName(advance))
+    let row = employeeRows.find((item) => item.id === key)
+    if (!row) {
+      row = { id: key, employeeId: employeeId ? String(employeeId) : '', employeeName: employee?.name ?? advanceEmployeeName(advance) ?? 'Funcionario', appointments: 0, revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, advancesTotal: 0, advancesPending: 0, advancesDiscounted: 0, netCommission: 0, salonProfit: 0, entries: [] }
+      employeeRows.push(row)
+    }
+    row.advancesTotal += advanceValue(advance)
+    if (advanceStatus(advance) === 'pendente') row.advancesPending += advanceValue(advance)
+    if (advanceStatus(advance) === 'descontado') row.advancesDiscounted += advanceValue(advance)
+  })
+  employeeRows.forEach((row) => {
+    row.netCommission = row.commission - row.advancesPending - row.advancesDiscounted
+  })
   const totals = employeeRows.reduce((acc, row) => ({
     revenue: acc.revenue + row.revenue,
     commission: acc.commission + row.commission,
     commissionPaid: acc.commissionPaid + row.commissionPaid,
     commissionPending: acc.commissionPending + row.commissionPending,
+    advancesTotal: acc.advancesTotal + row.advancesTotal,
+    advancesPending: acc.advancesPending + row.advancesPending,
+    advancesDiscounted: acc.advancesDiscounted + row.advancesDiscounted,
+    netCommission: acc.netCommission + row.netCommission,
     salonProfit: acc.salonProfit + row.salonProfit,
     appointments: acc.appointments + row.appointments
-  }), { revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, salonProfit: 0, appointments: 0 })
+  }), { revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, advancesTotal: 0, advancesPending: 0, advancesDiscounted: 0, netCommission: 0, salonProfit: 0, appointments: 0 })
 
   return {
     startDate,
@@ -4160,6 +4345,7 @@ function buildFinancialReportData({ cashEntries = [], employees = [], periodType
     periodEntries,
     appointmentEntries,
     pendingEntries,
+    periodAdvances,
     employeeRows,
     totals
   }
@@ -4178,13 +4364,13 @@ function movementExportRows(entries) {
     Data: formatDate(cashDate(entry)),
     Tipo: cashType(entry),
     Cliente: cashClientName(entry) || cashDescription(entry),
-    Serviço: cashServiceName(entry) || cashCategory(entry),
-    Funcionário: cashEmployeeName(entry),
+    'Servico': cashServiceName(entry) || cashCategory(entry),
+    'Funcionario': cashEmployeeName(entry),
     Forma: paymentMethodLabel(cashMethod(entry)),
     Status: cashStatus(entry),
     Valor: cashServiceValue(entry),
-    Comissão: cashCommissionValue(entry),
-    Salão: cashSalonValue(entry),
+    'Comissao': cashCommissionValue(entry),
+    'Salao': cashSalonValue(entry),
     'Comissão paga': cashCommissionPaid(entry) ? 'Sim' : 'Não',
     'Pago em': cashCommissionPaidAt(entry) ? formatDate(String(cashCommissionPaidAt(entry)).slice(0, 10)) : ''
   }))
@@ -4192,7 +4378,7 @@ function movementExportRows(entries) {
 
 function employeeExportRows(rows) {
   return (rows || []).map((row) => ({
-    Funcionário: row.employeeName,
+    'Funcionario': row.employeeName,
     Atendimentos: row.appointments,
     Faturamento: row.revenue,
     'Comissão total': row.commission,
@@ -4292,7 +4478,7 @@ async function exportReportsExcel(reportData, salonSettings) {
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Resumo')
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows)), 'Funcionários')
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows).map((row) => ({
-    Funcionário: row.Funcionário,
+    'Funcionario': row.Funcionario,
     'Comissão total': row['Comissão total'],
     'Comissão paga': row['Comissão paga'],
     'Comissão pendente': row['Comissão pendente']
@@ -4302,7 +4488,7 @@ async function exportReportsExcel(reportData, salonSettings) {
   XLSX.writeFile(workbook, `relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.xlsx`)
 }
 
-function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees, periodType, startDate, selectedEmployeeId, onPeriodTypeChange, onStartDateChange, onSelectedEmployeeChange, setCommissionPayments, notify }) {
+function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances = [], setAdvances, employees, periodType, startDate, selectedEmployeeId, onPeriodTypeChange, onStartDateChange, onSelectedEmployeeChange, setCommissionPayments, notify }) {
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [commissionStatusFilter, setCommissionStatusFilter] = useState('todos')
   const [paymentEmployee, setPaymentEmployee] = useState(null)
@@ -4335,6 +4521,10 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
       commission: 0,
       commissionPaid: 0,
       commissionPending: 0,
+      advancesTotal: 0,
+      advancesPending: 0,
+      advancesDiscounted: 0,
+      netCommission: 0,
       entries: [],
       salonProfit: 0
     }
@@ -4348,14 +4538,39 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
     acc[key].salonProfit += cashSalonValue(entry)
     return acc
   }, {})).sort((a, b) => b.revenue - a.revenue)
+  const resultAdvances = (advances || []).filter((advance) => isActiveAdvance(advance) && advanceInPeriod(advance, startDate, endDate) && (
+    String(selectedEmployeeId ?? 'todos') === 'todos' ||
+    String(advanceEmployeeId(advance) ?? '') === String(selectedEmployeeId) ||
+    (selectedEmployeeFilter?.name && advanceEmployeeName(advance) === selectedEmployeeFilter.name)
+  ))
+  resultAdvances.forEach((advance) => {
+    const employeeId = advanceEmployeeId(advance)
+    const key = employeeId ? String(employeeId) : `name:${advanceEmployeeName(advance) || 'sem-funcionario'}`
+    const employee = employees.find((item) => String(item.id) === String(employeeId) || item.name === advanceEmployeeName(advance))
+    let row = rows.find((item) => item.id === key)
+    if (!row) {
+      row = { id: key, employeeId: employeeId ? String(employeeId) : '', employeeName: employee?.name ?? advanceEmployeeName(advance) ?? 'Funcionario', appointments: 0, revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, advancesTotal: 0, advancesPending: 0, advancesDiscounted: 0, netCommission: 0, entries: [], salonProfit: 0 }
+      rows.push(row)
+    }
+    row.advancesTotal += advanceValue(advance)
+    if (advanceStatus(advance) === 'pendente') row.advancesPending += advanceValue(advance)
+    if (advanceStatus(advance) === 'descontado') row.advancesDiscounted += advanceValue(advance)
+  })
+  rows.forEach((row) => {
+    row.netCommission = row.commission - row.advancesPending - row.advancesDiscounted
+  })
   const totals = rows.reduce((acc, row) => ({
     revenue: acc.revenue + row.revenue,
     commission: acc.commission + row.commission,
     commissionPaid: acc.commissionPaid + row.commissionPaid,
     commissionPending: acc.commissionPending + row.commissionPending,
+    advancesTotal: acc.advancesTotal + row.advancesTotal,
+    advancesPending: acc.advancesPending + row.advancesPending,
+    advancesDiscounted: acc.advancesDiscounted + row.advancesDiscounted,
+    netCommission: acc.netCommission + row.netCommission,
     salonProfit: acc.salonProfit + row.salonProfit,
     appointments: acc.appointments + row.appointments
-  }), { revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, salonProfit: 0, appointments: 0 })
+  }), { revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, advancesTotal: 0, advancesPending: 0, advancesDiscounted: 0, netCommission: 0, salonProfit: 0, appointments: 0 })
   const receivableRows = rows.filter((row) => {
     if (commissionStatusFilter === 'pendente') return row.commissionPending > 0
     if (commissionStatusFilter === 'paga') return row.commissionPending <= 0 && row.commissionPaid > 0
@@ -4444,11 +4659,11 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
         {receivableRows.length ? (
           <Table
             rows={receivableRows}
-            columns={['employeeName', 'appointments', 'revenue', 'commission', 'commissionPaid', 'commissionPending', 'action']}
-            labels={['Nome', 'Atendimentos concluídos', 'Faturamento gerado', 'Comissão total a receber', 'Comissão já paga', 'Comissão pendente', 'Ação']}
+            columns={['employeeName', 'appointments', 'revenue', 'commission', 'advancesDiscounted', 'netCommission', 'commissionPaid', 'commissionPending', 'action']}
+            labels={['Nome', 'Atendimentos concluídos', 'Faturamento gerado', 'Comissão total', 'Vales descontados', 'Saldo líquido a pagar', 'Comissão já paga', 'Comissão pendente', 'Ação']}
             formatValue={(column, value, row) => {
               if (column === 'appointments') return <StatusBadge tone="gray">{value}</StatusBadge>
-              if (['revenue', 'commission', 'commissionPaid', 'commissionPending'].includes(column)) return money.format(value)
+              if (['revenue', 'commission', 'advancesDiscounted', 'netCommission', 'commissionPaid', 'commissionPending'].includes(column)) return money.format(value)
               if (column === 'action') return (
                 <button type="button" disabled={row.commissionPending <= 0} onClick={() => setPaymentEmployee(row)} className="focus-ring rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
                   Marcar comissão como paga
@@ -4476,10 +4691,12 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
           salonId={salonId}
           employee={paymentEmployee}
           entries={paymentEmployee.entries.filter((entry) => !cashCommissionPaid(entry))}
+          advances={resultAdvances.filter((advance) => advanceStatus(advance) === 'pendente' && isAdvanceForEmployee(advance, paymentEmployee.employeeId, paymentEmployee.employeeName))}
           periodStart={startDate}
           periodEnd={endDate}
           setCommissionPayments={setCommissionPayments}
           setCashEntries={setCashEntries}
+          setAdvances={setAdvances}
           onClose={() => setPaymentEmployee(null)}
           notify={notify}
         />
@@ -4488,10 +4705,13 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
   )
 }
 
-function CommissionPaymentModal({ salonId, employee, entries, periodStart, periodEnd, setCashEntries, setCommissionPayments, onClose, notify }) {
+function CommissionPaymentModal({ salonId, employee, entries, advances = [], periodStart, periodEnd, setCashEntries, setAdvances, setCommissionPayments, onClose, notify }) {
   const [form, setForm] = useState({ method: 'pix', notes: '' })
   const [saving, setSaving] = useState(false)
   const totalPending = entries.reduce((sum, entry) => sum + cashCommissionValue(entry), 0)
+  const advancesToDiscount = advances.filter((advance) => advanceStatus(advance) === 'pendente')
+  const advancesTotal = advancesToDiscount.reduce((sum, advance) => sum + advanceValue(advance), 0)
+  const netTotal = Math.max(totalPending - advancesTotal, 0)
 
   async function confirmPayment(event) {
     event.preventDefault()
@@ -4505,21 +4725,32 @@ function CommissionPaymentModal({ salonId, employee, entries, periodStart, perio
         commissionPaymentMethod: form.method,
         commissionNotes: form.notes
       })))
+      const discountedAt = paidAt
+      const updatedAdvances = await Promise.all(advancesToDiscount.map((advance) => updateAdvanceRecord(salonId, advance.id, {
+        status: 'descontado',
+        discountedAt,
+        discounted_at: discountedAt
+      })))
       const paymentRecord = normalizeCommissionPaymentRecord(await createCommissionPaymentRecord(salonId, {
         employeeId: employee.employeeId || null,
         employeeName: employee.employeeName,
-        amount: totalPending,
+        amount: netTotal,
+        commissionGross: totalPending,
+        advancesTotal,
         paymentMethod: form.method,
-        notes: form.notes,
+        notes: [form.notes, advancesTotal > 0 ? `Comissao bruta: ${money.format(totalPending)}. Vales descontados: ${money.format(advancesTotal)}. Valor liquido pago: ${money.format(netTotal)}.` : ''].filter(Boolean).join(' '),
         periodStart,
         periodEnd,
         paidAt,
-        cashMovementIds: entries.map((entry) => entry.id).filter(Boolean)
+        cashMovementIds: entries.map((entry) => entry.id).filter(Boolean),
+        advanceIds: advancesToDiscount.map((advance) => advance.id).filter(Boolean)
       }))
       const normalized = updatedEntries.map(normalizeCashMovementRecord)
+      const normalizedAdvances = updatedAdvances.map(normalizeAdvanceRecord)
       setCashEntries?.((current) => current.map((entry) => normalized.find((updated) => String(updated.id) === String(entry.id)) ?? entry))
+      setAdvances?.((current) => current.map((advance) => normalizedAdvances.find((updated) => String(updated.id) === String(advance.id)) ?? advance))
       setCommissionPayments?.((current) => [paymentRecord, ...(current || [])])
-      notify?.('Comissão marcada como paga.')
+      notify?.('Comissão marcada como paga com vales descontados.')
       onClose()
     } catch (error) {
       handleDataActionError(error, notify)
@@ -4539,6 +4770,14 @@ function CommissionPaymentModal({ salonId, employee, entries, periodStart, perio
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-500/10">
             <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Comissão pendente</p>
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(totalPending)}</p>
+          </div>
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
+            <p className="text-sm font-bold text-amber-800 dark:text-amber-200">Vales descontados</p>
+            <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(advancesTotal)}</p>
+          </div>
+          <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4 dark:border-cyan-400/20 dark:bg-cyan-500/10">
+            <p className="text-sm font-bold text-cyan-800 dark:text-cyan-200">Saldo líquido a pagar</p>
+            <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(netTotal)}</p>
           </div>
         </div>
         <Select label="Forma de pagamento" value={form.method} onChange={(method) => setForm((current) => ({ ...current, method }))} options={['Pix', 'Dinheiro', 'Transferência']} values={['pix', 'dinheiro', 'transferencia']} />
