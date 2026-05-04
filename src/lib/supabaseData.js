@@ -11,6 +11,7 @@ export const TABLES = {
   cashClosures: 'cash_closures',
   commissionPayments: 'commission_payments',
   advances: 'advances',
+  auditLogs: 'audit_logs',
   stockItems: 'stock_items'
 }
 
@@ -260,6 +261,21 @@ function commissionPaymentPayload(payload = {}, salonId, includeSalon = false) {
     paid_at: includeSalon || hasField(payload, 'paidAt') || hasField(payload, 'paid_at') ? payload.paidAt ?? payload.paid_at : undefined,
     cash_movement_ids: includeSalon || hasField(payload, 'cashMovementIds') || hasField(payload, 'cash_movement_ids') ? payload.cashMovementIds ?? payload.cash_movement_ids ?? [] : undefined,
     advance_ids: includeSalon || hasField(payload, 'advanceIds') || hasField(payload, 'advance_ids') ? payload.advanceIds ?? payload.advance_ids ?? [] : undefined
+  })
+}
+
+function auditLogPayload(payload = {}, salonId, includeSalon = false) {
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    user_id: includeSalon || hasField(payload, 'userId') || hasField(payload, 'user_id') ? payload.userId ?? payload.user_id ?? null : undefined,
+    user_name: includeSalon || hasField(payload, 'userName') || hasField(payload, 'user_name') ? payload.userName ?? payload.user_name ?? '' : undefined,
+    action: includeSalon || hasField(payload, 'action') ? payload.action ?? '' : undefined,
+    entity_type: includeSalon || hasField(payload, 'entityType') || hasField(payload, 'entity_type') ? payload.entityType ?? payload.entity_type ?? '' : undefined,
+    entity_id: includeSalon || hasField(payload, 'entityId') || hasField(payload, 'entity_id') ? payload.entityId ?? payload.entity_id ?? null : undefined,
+    old_data: includeSalon || hasField(payload, 'oldData') || hasField(payload, 'old_data') ? payload.oldData ?? payload.old_data ?? null : undefined,
+    new_data: includeSalon || hasField(payload, 'newData') || hasField(payload, 'new_data') ? payload.newData ?? payload.new_data ?? null : undefined,
+    reason: includeSalon || hasField(payload, 'reason') ? payload.reason ?? '' : undefined,
+    created_at: includeSalon || hasField(payload, 'createdAt') || hasField(payload, 'created_at') ? payload.createdAt ?? payload.created_at : undefined
   })
 }
 
@@ -739,6 +755,20 @@ export async function fetchCommissionPayments(salonId) {
 
 export async function createCommissionPayment(salonId, payload) {
   return insertRow(TABLES.commissionPayments, salonId, payload, commissionPaymentPayload)
+}
+
+export async function fetchAuditLogs(salonId) {
+  try {
+    const data = await runQuery(bySalon(TABLES.auditLogs, salonId).order('created_at', { ascending: false }))
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    if (isMissingTableError(error?.original ?? error)) return []
+    throw error
+  }
+}
+
+export async function createAuditLog(salonId, payload) {
+  return insertRow(TABLES.auditLogs, salonId, payload, auditLogPayload)
 }
 
 export async function fetchCashMovementByAppointment(salonId, appointmentId) {

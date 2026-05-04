@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from './lib/supabase'
 import {
   createAppointment as createAppointmentRecord,
+  createAuditLog as createAuditLogRecord,
   createCashClosure as createCashClosureRecord,
   createCashMovement as createCashMovementRecord,
   createCommissionPayment as createCommissionPaymentRecord,
@@ -16,6 +17,7 @@ import {
   deleteService as deleteServiceRecord,
   ensureAdminSalon,
   fetchAdvances as fetchAdvancesFromSupabase,
+  fetchAuditLogs as fetchAuditLogsFromSupabase,
   fetchAppointments as fetchAppointmentsFromSupabase,
   fetchCashClosures as fetchCashClosuresFromSupabase,
   fetchCashMovements as fetchCashMovementsFromSupabase,
@@ -1087,6 +1089,48 @@ function normalizeAdvanceRecord(row) {
   }
 }
 
+function normalizeAuditLogRecord(row) {
+  return {
+    ...row,
+    userId: field(row, 'userId', 'user_id'),
+    user_id: field(row, 'user_id') ?? field(row, 'userId'),
+    userName: field(row, 'userName', 'user_name') ?? '',
+    user_name: field(row, 'user_name') ?? field(row, 'userName') ?? '',
+    action: field(row, 'action') ?? '',
+    entityType: field(row, 'entityType', 'entity_type') ?? '',
+    entity_type: field(row, 'entity_type') ?? field(row, 'entityType') ?? '',
+    entityId: field(row, 'entityId', 'entity_id'),
+    entity_id: field(row, 'entity_id') ?? field(row, 'entityId'),
+    oldData: field(row, 'oldData', 'old_data'),
+    old_data: field(row, 'old_data') ?? field(row, 'oldData'),
+    newData: field(row, 'newData', 'new_data'),
+    new_data: field(row, 'new_data') ?? field(row, 'newData'),
+    reason: field(row, 'reason') ?? '',
+    createdAt: field(row, 'createdAt', 'created_at'),
+    created_at: field(row, 'created_at') ?? field(row, 'createdAt')
+  }
+}
+
+async function recordAuditLog({ salonId, user, action, entityType, entityId, oldData, newData, reason, onCreated }) {
+  const trimmedReason = String(reason ?? '').trim()
+  if (!trimmedReason) {
+    throw new Error('Motivo da alteração é obrigatório.')
+  }
+  const savedLog = normalizeAuditLogRecord(await createAuditLogRecord(salonId, {
+    userId: user?.id ?? null,
+    userName: user?.name ?? user?.email ?? 'Usuário',
+    action,
+    entityType,
+    entityId: entityId === undefined || entityId === null ? null : String(entityId),
+    oldData: oldData ?? null,
+    newData: newData ?? null,
+    reason: trimmedReason,
+    createdAt: new Date().toISOString()
+  }))
+  onCreated?.(savedLog)
+  return savedLog
+}
+
 function normalizeStockItemRecord(row) {
   return {
     ...row,
@@ -1177,6 +1221,7 @@ const adminMenu = [
   { id: 'vales', label: 'Vales' },
   { id: 'estoque', label: 'Estoque' },
   { id: 'relatorios', label: 'Relatórios' },
+  { id: 'auditoria', label: 'Auditoria' },
   { id: 'configuracoes', label: 'Configurações' }
 ]
 
@@ -1320,6 +1365,7 @@ function App() {
   const [cashEntries, setCashEntries] = useState([])
   const [cashClosures, setCashClosures] = useState([])
   const [commissionPayments, setCommissionPayments] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
   const [advances, setAdvances] = useState([])
   const [blockedSlots, setBlockedSlots] = useState([])
   const [salonSettings, setSalonSettings] = useState({ salonName: '', receptionWhatsapp: '', workingDays: defaultWorkingDays, openingHours: defaultOpeningHours })
@@ -1334,6 +1380,7 @@ function App() {
     setCashEntries([])
     setCashClosures([])
     setCommissionPayments([])
+    setAuditLogs([])
     setAdvances([])
     setBlockedSlots([])
     setSalonSettings({ salonName: '', receptionWhatsapp: '', workingDays: defaultWorkingDays, openingHours: defaultOpeningHours })
@@ -1363,6 +1410,7 @@ function App() {
         cashMovementRows,
         cashClosureRows,
         commissionPaymentRows,
+        auditLogRows,
         advanceRows,
         stockRows
       ] = await Promise.all([
@@ -1374,6 +1422,7 @@ function App() {
         fetchCashMovementsFromSupabase(salonId),
         fetchCashClosuresFromSupabase(salonId),
         fetchCommissionPaymentsFromSupabase(salonId),
+        fetchAuditLogsFromSupabase(salonId),
         fetchAdvancesFromSupabase(salonId),
         fetchStockItemsFromSupabase(salonId)
       ])
@@ -1416,6 +1465,7 @@ function App() {
       setCashEntries([...(cashMovementRows ?? []).map(normalizeCashMovementRecord), ...advanceCashEntries])
       setCashClosures((cashClosureRows ?? []).map(normalizeCashClosureRecord))
       setCommissionPayments((commissionPaymentRows ?? []).map(normalizeCommissionPaymentRecord))
+      setAuditLogs((auditLogRows ?? []).map(normalizeAuditLogRecord))
       setAdvances(normalizedAdvances)
       setInventoryItems((stockRows ?? []).map(normalizeStockItemRecord))
       setDatabaseStatus({ notConfigured: false, message: '' })
@@ -1642,6 +1692,8 @@ function App() {
                 setCashClosures={setCashClosures}
                 commissionPayments={commissionPayments}
                 setCommissionPayments={setCommissionPayments}
+                auditLogs={auditLogs}
+                setAuditLogs={setAuditLogs}
                 advances={advances}
                 setAdvances={setAdvances}
                 blockedSlots={blockedSlots}
@@ -1901,7 +1953,7 @@ function ThemeToggle({ theme, onChange }) {
   )
 }
 
-function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
+function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, auditLogs, setAuditLogs, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
   const employeeAppointments = appointments.filter((item) => getAppointmentEmployeeName(item, employees) === user.name)
   const visibleAppointments = appointments
   const activeClients = clients.filter((client) => client.active)
@@ -1915,10 +1967,11 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     clientes: <Clients salonId={salonId} user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
     servicos: <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} />,
     funcionarios: <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
-    caixa: <CashRegister salonId={salonId} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} advances={advances} serviceItems={services} notify={notify} />,
-    vales: user.role === 'admin' || user.role === 'cashier' ? <Advances salonId={salonId} user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
+    caixa: <CashRegister salonId={salonId} user={user} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} advances={advances} serviceItems={services} setAuditLogs={setAuditLogs} notify={notify} />,
+    vales: user.role === 'admin' || user.role === 'cashier' ? <Advances salonId={salonId} user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
-    relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} advances={advances} setAdvances={setAdvances} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} notify={notify} /> : <AccessDenied />,
+    relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} advances={advances} setAdvances={setAdvances} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
+    auditoria: user.role === 'admin' ? <AuditTrail auditLogs={auditLogs} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
@@ -3267,9 +3320,10 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     </Modal>
   )
 }
-function CashRegister({ salonId, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], advances = [], serviceItems = services, notify }) {
+function CashRegister({ salonId, user, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], advances = [], serviceItems = services, setAuditLogs, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [paymentAppointment, setPaymentAppointment] = useState(null)
+  const [pendingPaidTarget, setPendingPaidTarget] = useState(null)
   const [cashDateFilter, setCashDateFilter] = useState(todayIso)
   const [closureModalOpen, setClosureModalOpen] = useState(false)
   const summary = buildCashClosureSummary(entries, cashDateFilter)
@@ -3378,7 +3432,11 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     }
   }
 
-  async function markPendingAsPaid(entry) {
+  async function markPendingAsPaid(entry, reason) {
+    if (!String(reason ?? '').trim()) {
+      notify?.('Informe o motivo da alteração.', 'error')
+      return
+    }
     const appointmentId = cashAppointmentId(entry)
     const appointment = appointments.find((item) => String(item.id) === String(appointmentId))
     const normalizedMethod = normalizeAppointmentPaymentMethod(cashMethod(entry)) ?? 'pix'
@@ -3387,6 +3445,17 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
 
     try {
       const savedEntry = entry.id ? normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, payload)) : normalizeCashMovementRecord(payload)
+      await recordAuditLog({
+        salonId,
+        user,
+        action: 'edicao_lancamento_financeiro',
+        entityType: 'cash_movement',
+        entityId: savedEntry.id ?? entry.id,
+        oldData: entry,
+        newData: savedEntry,
+        reason,
+        onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+      })
       setEntries((current) => current.map((item) => sameEntry(item) ? savedEntry : item))
       if (appointment?.id) {
         const updatedAppointment = normalizeAppointmentRecord({
@@ -3401,6 +3470,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
         }, employees)
         setAppointments?.((current) => current.map((item) => String(item.id) === String(appointment.id) ? updatedAppointment : item))
       }
+      setPendingPaidTarget(null)
       notify?.('Pagamento pendente marcado como pago.')
     } catch (error) {
       handleDataActionError(error, notify)
@@ -3441,6 +3511,17 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
         balance: summary.balance,
         createdAt: new Date().toISOString()
       }))
+      await recordAuditLog({
+        salonId,
+        user,
+        action: 'fechamento_caixa',
+        entityType: 'cash_closure',
+        entityId: savedClosure.id,
+        oldData: null,
+        newData: savedClosure,
+        reason: `Fechamento de caixa de ${formatDate(cashDateFilter)}`,
+        onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+      })
       setClosures((current) => [savedClosure, ...current])
       setClosureModalOpen(false)
       notify?.('Caixa do dia fechado com sucesso.')
@@ -3482,6 +3563,19 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     }
     try {
       const savedEntry = normalizeCashMovementRecord(await createCashMovementRecord(salonId, payload))
+      if (ownerWithdrawal) {
+        await recordAuditLog({
+          salonId,
+          user,
+          action: 'retirada_dono',
+          entityType: 'cash_movement',
+          entityId: savedEntry.id,
+          oldData: null,
+          newData: savedEntry,
+          reason: `Retirada do dono: ${payload.description}`,
+          onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+        })
+      }
       setEntries((current) => [...current, savedEntry])
       setModalOpen(false)
       notify?.('Movimentação salva com sucesso.')
@@ -3583,7 +3677,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {appointment && <button type="button" onClick={() => setPaymentAppointment(appointment)} className={buttonSecondary}>Receber pagamento</button>}
-                  <button type="button" onClick={() => markPendingAsPaid(item)} className="focus-ring rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">Marcar como pago</button>
+                  <button type="button" onClick={() => setPendingPaidTarget(item)} className="focus-ring rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">Marcar como pago</button>
                   <button type="button" className="focus-ring rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-sm font-bold text-amber-800 transition hover:bg-amber-50 dark:border-amber-400/30 dark:bg-[#24202c] dark:text-amber-200">Manter pendente</button>
                 </div>
               </div>
@@ -3642,6 +3736,15 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       {modalOpen && <CashEntryModal onClose={() => setModalOpen(false)} onSave={saveCashEntry} />}
       {closureModalOpen && <CashClosureModal summary={summary} onClose={() => setClosureModalOpen(false)} onConfirm={confirmCloseDay} />}
       {paymentAppointment && <ReceivePaymentModal appointment={paymentAppointment} employees={employees} serviceItems={serviceItems} existingEntry={entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(paymentAppointment.id))} onClose={() => setPaymentAppointment(null)} onConfirm={receiveAppointmentPayment} />}
+      {pendingPaidTarget && (
+        <ReasonModal
+          title="Marcar pagamento como pago"
+          description="Informe o motivo para alterar o status financeiro deste lançamento."
+          confirmLabel="Marcar como pago"
+          onClose={() => setPendingPaidTarget(null)}
+          onConfirm={(reason) => markPendingAsPaid(pendingPaidTarget, reason)}
+        />
+      )}
     </div>
   )
 }
@@ -3767,9 +3870,11 @@ function CashEntryModal({ onClose, onSave }) {
   )
 }
 
-function Advances({ salonId, user, employees, advances, setAdvances, setCashEntries, notify }) {
+function Advances({ salonId, user, employees, advances, setAdvances, setCashEntries, setAuditLogs, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [discountTarget, setDiscountTarget] = useState(null)
   const [filters, setFilters] = useState({ employeeId: 'all', date: '', status: 'all' })
   const canAccess = user.role === 'admin' || user.role === 'cashier'
   const canDelete = user.role === 'admin'
@@ -3812,9 +3917,24 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       notify?.('Erro ao salvar: confira Funcionário, valor, data e motivo.', 'error')
       return
     }
+    if (editing && !String(data.reason ?? '').trim()) {
+      notify?.('Informe o motivo da alteração.', 'error')
+      return
+    }
     try {
     if (editing) {
       const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, editing.id, payload))
+      await recordAuditLog({
+        salonId,
+        user,
+        action: advanceStatus(editing) !== 'cancelado' && advanceStatus(updatedAdvance) === 'cancelado' ? 'cancelamento_vale' : 'edicao_vale',
+        entityType: 'advance',
+        entityId: editing.id,
+        oldData: editing,
+        newData: updatedAdvance,
+        reason: data.reason,
+        onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+      })
       setAdvances((current) => current.map((item) => item.id === editing.id ? updatedAdvance : item))
       setCashEntries((current) => {
         const exists = current.some((entry) => String(entry.id) === String(`advance-${editing.id}`))
@@ -3838,24 +3958,55 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
     }
   }
 
-  async function markDiscounted(item) {
+  async function markDiscounted(item, reason) {
+    if (!String(reason ?? '').trim()) {
+      notify?.('Informe o motivo da alteração.', 'error')
+      return
+    }
     const discountedAt = new Date().toISOString()
     try {
       const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'descontado', discountedAt, discounted_at: discountedAt }))
+      await recordAuditLog({
+        salonId,
+        user,
+        action: 'edicao_vale',
+        entityType: 'advance',
+        entityId: item.id,
+        oldData: item,
+        newData: updatedAdvance,
+        reason,
+        onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+      })
       setAdvances((current) => current.map((advance) => advance.id === item.id ? updatedAdvance : advance))
       notify?.('Vale marcado como descontado.')
+      setDiscountTarget(null)
     } catch (error) {
       handleDataActionError(error, notify)
     }
   }
 
-  async function removeAdvance(item) {
-    if (!window.confirm(`Cancelar o vale de ${advanceEmployeeName(item)}?`)) return
+  async function removeAdvance(item, reason) {
+    if (!String(reason ?? '').trim()) {
+      notify?.('Informe o motivo do cancelamento.', 'error')
+      return
+    }
     try {
     const cancelledAt = new Date().toISOString()
     const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'cancelado', cancelledAt, cancelled_at: cancelledAt }))
+    await recordAuditLog({
+      salonId,
+      user,
+      action: 'cancelamento_vale',
+      entityType: 'advance',
+      entityId: item.id,
+      oldData: item,
+      newData: updatedAdvance,
+      reason,
+      onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+    })
     setAdvances((current) => current.map((advance) => advance.id === item.id ? updatedAdvance : advance))
     setCashEntries((current) => current.filter((entry) => String(entry.id) !== String(`advance-${item.id}`)))
+    setCancelTarget(null)
     notify?.('Vale excluído.')
     } catch (error) {
       handleDataActionError(error, notify)
@@ -3894,8 +4045,8 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
           {advanceDiscountedDate(item) && <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Descontado em {formatDate(advanceDiscountedDate(item))}</p>}
           <div className="mt-4 flex flex-wrap gap-2">
             <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
-            {advanceStatus(item) === 'pendente' && <button onClick={() => markDiscounted(item)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">Marcar descontado</button>}
-            {canDelete && advanceStatus(item) !== 'cancelado' && <button onClick={() => removeAdvance(item)} className={buttonDanger}>Cancelar</button>}
+            {advanceStatus(item) === 'pendente' && <button onClick={() => setDiscountTarget(item)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">Marcar descontado</button>}
+            {canDelete && advanceStatus(item) !== 'cancelado' && <button onClick={() => setCancelTarget(item)} className={buttonDanger}>Cancelar</button>}
           </div>
         </>
       )} />
@@ -3907,6 +4058,25 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       )}
 
       {modalOpen && <AdvanceModal employees={employees} advance={editing} onClose={() => setModalOpen(false)} onSave={saveAdvance} />}
+      {cancelTarget && (
+        <ReasonModal
+          title="Cancelar vale"
+          description={`Informe o motivo para cancelar o vale de ${advanceEmployeeName(cancelTarget)}.`}
+          confirmLabel="Cancelar vale"
+          danger
+          onClose={() => setCancelTarget(null)}
+          onConfirm={(reason) => removeAdvance(cancelTarget, reason)}
+        />
+      )}
+      {discountTarget && (
+        <ReasonModal
+          title="Marcar vale como descontado"
+          description={`Informe o motivo para descontar o vale de ${advanceEmployeeName(discountTarget)}.`}
+          confirmLabel="Marcar descontado"
+          onClose={() => setDiscountTarget(null)}
+          onConfirm={(reason) => markDiscounted(discountTarget, reason)}
+        />
+      )}
     </div>
   )
 }
@@ -3918,7 +4088,8 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
     value: advanceValue(advance),
     createdAt: advanceCreatedDate(advance),
     status: advanceStatus(advance),
-    notes: advance.notes ?? ''
+    notes: advance.notes ?? '',
+    reason: ''
   } : { employeeId: employees[0]?.id ?? '', employeeName: employees[0]?.name ?? '', value: 0, createdAt: todayIso, status: 'pendente', notes: '' })
 
   return (
@@ -3929,6 +4100,12 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
         <Field label="Criado em" type="date" value={form.createdAt} onChange={(value) => setForm({ ...form, createdAt: value })} required />
         <Select label="Status" value={form.status} onChange={(value) => setForm({ ...form, status: value })} options={["Pendente", "Descontado", "Cancelado"]} values={["pendente", "descontado", "cancelado"]} />
         <Field label="Observacoes" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
+        {advance && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+            <textarea className={`${inputBase} min-h-24`} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} required />
+          </label>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
           <button className={buttonPrimary}>Salvar</button>
@@ -4097,7 +4274,111 @@ function InventoryModal({ product, onClose, onSave }) {
   )
 }
 
-function Reports({ salonId, appointments, employees, cashEntries = [], setCashEntries, advances = [], setAdvances, commissionPayments = [], setCommissionPayments, user, salonSettings, notify }) {
+function auditActionLabel(action) {
+  const labels = {
+    edicao_vale: 'Edição de vale',
+    cancelamento_vale: 'Cancelamento de vale',
+    edicao_lancamento_financeiro: 'Edição de lançamento financeiro',
+    cancelamento_lancamento_financeiro: 'Cancelamento de lançamento financeiro',
+    pagamento_comissao: 'Pagamento de comissão',
+    fechamento_caixa: 'Fechamento de caixa',
+    retirada_dono: 'Retirada do dono'
+  }
+  return labels[action] ?? action
+}
+
+function auditEntityLabel(type) {
+  const labels = {
+    advance: 'Vale',
+    cash_movement: 'Lançamento financeiro',
+    commission_payment: 'Pagamento de comissão',
+    cash_closure: 'Fechamento de caixa'
+  }
+  return labels[type] ?? type
+}
+
+function formatAuditDate(value) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString('pt-BR')
+}
+
+function AuditTrail({ auditLogs = [] }) {
+  const [selectedLog, setSelectedLog] = useState(null)
+  const rows = [...auditLogs].sort((a, b) => String(b.createdAt ?? b.created_at ?? '').localeCompare(String(a.createdAt ?? a.created_at ?? '')))
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-[#d9c17a]/70 bg-white p-5 shadow-soft dark:border-[#d9c17a]/30 dark:bg-[#1f1b26]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Controle profissional</p>
+            <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">Auditoria</h2>
+            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Histórico financeiro com motivo, usuário e comparação antes/depois.</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" disabled className="focus-ring rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#24202c]">Exportar PDF</button>
+            <button type="button" disabled className="focus-ring rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#24202c]">Exportar Excel</button>
+          </div>
+        </div>
+      </section>
+      <Panel title="Histórico de auditoria">
+        {rows.length ? (
+          <Table
+            rows={rows}
+            columns={['createdAt', 'userName', 'action', 'entityType', 'reason', 'details']}
+            labels={['Data', 'Usuário', 'Ação', 'Tipo', 'Motivo', 'Ver detalhes']}
+            formatValue={(key, value, row) => {
+              if (key === 'createdAt') return formatAuditDate(row.createdAt ?? row.created_at)
+              if (key === 'userName') return row.userName || row.user_name || '-'
+              if (key === 'action') return <StatusBadge tone="cyan">{auditActionLabel(row.action)}</StatusBadge>
+              if (key === 'entityType') return auditEntityLabel(row.entityType ?? row.entity_type)
+              if (key === 'reason') return row.reason || '-'
+              if (key === 'details') return <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedLog(row) }} className={buttonSecondary}>Ver detalhes</button>
+              return value
+            }}
+          />
+        ) : (
+          <EmptyState>Nenhum registro de auditoria encontrado.</EmptyState>
+        )}
+      </Panel>
+      {selectedLog && <AuditDetailsModal log={selectedLog} onClose={() => setSelectedLog(null)} />}
+    </div>
+  )
+}
+
+function AuditDetailsModal({ log, onClose }) {
+  const oldData = log.oldData ?? log.old_data
+  const newData = log.newData ?? log.new_data
+  return (
+    <Modal title="Detalhes da auditoria" onClose={onClose} maxWidth="max-w-5xl" zClass="z-50">
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Metric title="Ação" value={auditActionLabel(log.action)} detail={auditEntityLabel(log.entityType ?? log.entity_type)} />
+          <Metric title="Usuário" value={log.userName || log.user_name || '-'} detail={formatAuditDate(log.createdAt ?? log.created_at)} />
+          <Metric title="Motivo" value={log.reason || '-'} detail={`ID ${log.entityId ?? log.entity_id ?? '-'}`} />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <AuditJsonBlock title="Antes" data={oldData} />
+          <AuditJsonBlock title="Depois" data={newData} />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function AuditJsonBlock({ title, data }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
+      <p className="mb-3 text-sm font-black uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">{title}</p>
+      <pre className="simple-scrollbar max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white p-4 text-xs font-semibold text-gray-700 dark:bg-[#17141c] dark:text-gray-200">
+        {data ? JSON.stringify(data, null, 2) : 'Sem dados'}
+      </pre>
+    </div>
+  )
+}
+
+function Reports({ salonId, appointments, employees, cashEntries = [], setCashEntries, advances = [], setAdvances, commissionPayments = [], setCommissionPayments, user, salonSettings, setAuditLogs, notify }) {
   const [employeeResultPeriod, setEmployeeResultPeriod] = useState('semana')
   const [employeeResultStartDate, setEmployeeResultStartDate] = useState(todayIso)
   const [selectedReportEmployee, setSelectedReportEmployee] = useState('todos')
@@ -4176,6 +4457,8 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
           onStartDateChange={setEmployeeResultStartDate}
           onSelectedEmployeeChange={setSelectedReportEmployee}
           setCommissionPayments={setCommissionPayments}
+          user={user}
+          setAuditLogs={setAuditLogs}
           notify={notify}
         />
       )}
@@ -4463,7 +4746,7 @@ async function exportReportsExcel(reportData, salonSettings) {
   XLSX.writeFile(workbook, `relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.xlsx`)
 }
 
-function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances = [], setAdvances, employees, periodType, startDate, selectedEmployeeId, onPeriodTypeChange, onStartDateChange, onSelectedEmployeeChange, setCommissionPayments, notify }) {
+function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances = [], setAdvances, employees, periodType, startDate, selectedEmployeeId, onPeriodTypeChange, onStartDateChange, onSelectedEmployeeChange, setCommissionPayments, user, setAuditLogs, notify }) {
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [commissionStatusFilter, setCommissionStatusFilter] = useState('todos')
   const [paymentEmployee, setPaymentEmployee] = useState(null)
@@ -4657,6 +4940,8 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
           employee={selectedEmployee}
           entries={resultEntries.filter((entry) => String(field(entry, 'employeeId', 'employee_id')) === String(selectedEmployee.employeeId) || cashEmployeeName(entry) === selectedEmployee.employeeName)}
           setCashEntries={setCashEntries}
+          user={user}
+          setAuditLogs={setAuditLogs}
           onClose={() => setSelectedEmployee(null)}
           notify={notify}
         />
@@ -4672,6 +4957,8 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
           setCommissionPayments={setCommissionPayments}
           setCashEntries={setCashEntries}
           setAdvances={setAdvances}
+          user={user}
+          setAuditLogs={setAuditLogs}
           onClose={() => setPaymentEmployee(null)}
           notify={notify}
         />
@@ -4680,7 +4967,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
   )
 }
 
-function CommissionPaymentModal({ salonId, employee, entries, advances = [], periodStart, periodEnd, setCashEntries, setAdvances, setCommissionPayments, onClose, notify }) {
+function CommissionPaymentModal({ salonId, employee, entries, advances = [], periodStart, periodEnd, setCashEntries, setAdvances, setCommissionPayments, user, setAuditLogs, onClose, notify }) {
   const [form, setForm] = useState({ paymentMethod: 'pix', notes: '' })
   const [saving, setSaving] = useState(false)
   const totalPending = entries.reduce((sum, entry) => sum + cashCommissionValue(entry), 0)
@@ -4691,6 +4978,10 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
   async function confirmPayment(event) {
     event.preventDefault()
     if (totalPending <= 0) return
+    if (!String(form.notes ?? '').trim()) {
+      notify?.('Informe o motivo da alteração.', 'error')
+      return
+    }
     setSaving(true)
     const paidAt = new Date().toISOString()
     try {
@@ -4722,6 +5013,17 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
       }))
       const normalized = updatedEntries.map(normalizeCashMovementRecord)
       const normalizedAdvances = updatedAdvances.map(normalizeAdvanceRecord)
+      await recordAuditLog({
+        salonId,
+        user,
+        action: 'pagamento_comissao',
+        entityType: 'commission_payment',
+        entityId: paymentRecord.id,
+        oldData: { cashMovements: entries, advances: advancesToDiscount },
+        newData: { payment: paymentRecord, cashMovements: normalized, advances: normalizedAdvances },
+        reason: form.notes,
+        onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+      })
       setCashEntries?.((current) => current.map((entry) => normalized.find((updated) => String(updated.id) === String(entry.id)) ?? entry))
       setAdvances?.((current) => current.map((advance) => normalizedAdvances.find((updated) => String(updated.id) === String(advance.id)) ?? advance))
       setCommissionPayments?.((current) => [paymentRecord, ...(current || [])])
@@ -4757,8 +5059,8 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
         </div>
         <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(paymentMethod) => setForm((current) => ({ ...current, paymentMethod }))} options={['Pix', 'Dinheiro', 'Transferência']} values={['pix', 'dinheiro', 'transferencia']} />
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Observação</span>
-          <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+          <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} required />
         </label>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={saving} className={buttonSecondary}>Cancelar</button>
@@ -4769,7 +5071,7 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
   )
 }
 
-function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries, onClose, notify }) {
+function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries, user, setAuditLogs, onClose, notify }) {
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -4829,6 +5131,8 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
             replaceEntry(updatedEntry)
             setSelectedEntry(null)
           }}
+          user={user}
+          setAuditLogs={setAuditLogs}
           notify={notify}
         />
       )}
@@ -4836,12 +5140,13 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
   )
 }
 
-function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, notify }) {
+function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, user, setAuditLogs, notify }) {
   const [form, setForm] = useState({
     serviceValue: String(cashServiceValue(entry)),
     commissionPercent: String(field(entry, 'commissionPercent', 'commission_percent') ?? 0),
     paymentMethod: normalizeAppointmentPaymentMethod(cashMethod(entry)) ?? 'pix',
-    paymentStatus: cashStatus(entry)
+    paymentStatus: cashStatus(entry),
+    reason: ''
   })
   const [saving, setSaving] = useState(false)
   const [removing, setRemoving] = useState(false)
@@ -4862,10 +5167,25 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, no
       paymentStatus: form.paymentStatus,
       status: form.paymentStatus
     }
+    if (!String(form.reason ?? '').trim()) {
+      notify?.('Informe o motivo da alteração.', 'error')
+      return
+    }
 
     setSaving(true)
     try {
       const savedEntry = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, payload))
+      await recordAuditLog({
+        salonId,
+        user,
+        action: 'edicao_lancamento_financeiro',
+        entityType: 'cash_movement',
+        entityId: entry.id,
+        oldData: entry,
+        newData: savedEntry,
+        reason: form.reason,
+        onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+      })
       onSaved(savedEntry)
       notify?.('Atendimento atualizado com sucesso.')
     } catch (error) {
@@ -4876,10 +5196,24 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, no
   }
 
   async function removeEntry() {
-    if (!window.confirm('Remover este lançamento dos cálculos financeiros?')) return
+    if (!String(form.reason ?? '').trim()) {
+      notify?.('Informe o motivo da alteração.', 'error')
+      return
+    }
     setRemoving(true)
     try {
       const savedEntry = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, { cancelledAt: new Date().toISOString() }))
+      await recordAuditLog({
+        salonId,
+        user,
+        action: 'cancelamento_lancamento_financeiro',
+        entityType: 'cash_movement',
+        entityId: entry.id,
+        oldData: entry,
+        newData: savedEntry,
+        reason: form.reason,
+        onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
+      })
       onRemoved(savedEntry)
       notify?.('Lançamento removido dos cálculos.')
     } catch (error) {
@@ -4901,6 +5235,10 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, no
         <div className="rounded-2xl border border-gray-100 bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
           Comissão recalculada: {money.format(((Number(form.serviceValue) || 0) * (Number(form.commissionPercent) || 0)) / 100)}
         </div>
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+          <textarea className={`${inputBase} min-h-24`} value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} required />
+        </label>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <button type="button" onClick={removeEntry} disabled={saving || removing} className={buttonDanger}>{removing ? 'Removendo...' : 'Remover lançamento'}</button>
           <div className="flex justify-end gap-2">
@@ -5236,6 +5574,38 @@ function Modal({ title, children, onClose, maxWidth = 'max-w-xl', zClass = 'z-40
         {children}
       </div>
     </div>
+  )
+}
+
+function ReasonModal({ title = 'Motivo da alteração', description, confirmLabel = 'Confirmar', danger = false, onClose, onConfirm }) {
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!reason.trim()) return
+    setSaving(true)
+    try {
+      await onConfirm(reason.trim())
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title={title} onClose={onClose} maxWidth="max-w-lg" zClass="z-50">
+      <form onSubmit={submit} className="space-y-4">
+        {description && <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">{description}</p>}
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+          <textarea className={`${inputBase} min-h-28`} value={reason} onChange={(event) => setReason(event.target.value)} required />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={saving} className={buttonSecondary}>Cancelar</button>
+          <button type="submit" disabled={saving || !reason.trim()} className={danger ? buttonDanger : buttonPrimary}>{saving ? 'Salvando...' : confirmLabel}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
