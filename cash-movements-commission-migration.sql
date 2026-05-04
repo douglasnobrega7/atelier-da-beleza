@@ -13,7 +13,8 @@ alter table public.cash_movements
   add column if not exists payment_status text not null default 'pago',
   add column if not exists payment_method text,
   add column if not exists referencia_id bigint,
-  add column if not exists referencia_tipo text;
+  add column if not exists referencia_tipo text,
+  add column if not exists cancelled_at timestamptz;
 
 create unique index if not exists cash_movements_unique_appointment
   on public.cash_movements (salon_id, appointment_id)

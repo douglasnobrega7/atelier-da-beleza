@@ -197,6 +197,7 @@ function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
     date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
     status: includeSalon || hasField(payload, 'status') || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') ? paymentStatus : undefined,
     payment_status: includeSalon || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') || hasField(payload, 'status') ? paymentStatus : undefined,
+    cancelled_at: includeSalon || hasField(payload, 'cancelledAt') || hasField(payload, 'cancelled_at') ? payload.cancelledAt ?? payload.cancelled_at : undefined,
     client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client_name') ? payload.clientName ?? payload.client_name ?? '' : undefined,
     service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service_name') ? payload.serviceName ?? payload.service_name ?? '' : undefined,
     employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? payload.employeeName ?? payload.employee_name ?? '' : undefined,

@@ -515,12 +515,20 @@ function cashStatus(entry) {
   return normalizePaymentStatus(field(entry, 'paymentStatus', 'payment_status') ?? field(entry, 'status') ?? '')
 }
 
+function cashCancelledAt(entry) {
+  return field(entry, 'cancelledAt', 'cancelled_at')
+}
+
+function isActiveCashEntry(entry) {
+  return !cashCancelledAt(entry)
+}
+
 function isPaidIncomeCashEntry(entry) {
-  return cashType(entry) === 'entrada' && cashStatus(entry) === 'pago'
+  return isActiveCashEntry(entry) && cashType(entry) === 'entrada' && cashStatus(entry) === 'pago'
 }
 
 function isPendingIncomeCashEntry(entry) {
-  return cashType(entry) === 'entrada' && cashStatus(entry) === 'pendente'
+  return isActiveCashEntry(entry) && cashType(entry) === 'entrada' && cashStatus(entry) === 'pendente'
 }
 
 function isCompletedStatus(status) {
@@ -867,7 +875,9 @@ function normalizeCashMovementRecord(row) {
     referenciaTipo: field(row, 'referenciaTipo', 'referencia_tipo'),
     referencia_tipo: field(row, 'referencia_tipo') ?? field(row, 'referenciaTipo'),
     createdAt: field(row, 'createdAt', 'created_at'),
-    created_at: field(row, 'created_at') ?? field(row, 'createdAt')
+    created_at: field(row, 'created_at') ?? field(row, 'createdAt'),
+    cancelledAt: field(row, 'cancelledAt', 'cancelled_at'),
+    cancelled_at: field(row, 'cancelled_at') ?? field(row, 'cancelledAt')
   }
 }
 
@@ -1703,7 +1713,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     caixa: <CashRegister salonId={salonId} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} serviceItems={services} notify={notify} />,
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
-    relatorios: user.role === 'admin' ? <Reports appointments={appointments} employees={employees} cashEntries={cashEntries} user={user} /> : <AccessDenied />,
+    relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} user={user} notify={notify} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
@@ -1734,7 +1744,7 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const cashIncome = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
   const dashboardByMethod = (methods) => paidIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
   const pendingPaymentsTotal = cashEntries.filter(isPendingIncomeCashEntry).reduce((sum, item) => sum + cashServiceValue(item), 0)
-  const cashOutcome = cashEntries.filter((item) => cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
+  const cashOutcome = cashEntries.filter((item) => isActiveCashEntry(item) && cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
 
   return (
     <div className="space-y-5">
@@ -3048,7 +3058,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
 function CashRegister({ salonId, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], serviceItems = services, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [paymentAppointment, setPaymentAppointment] = useState(null)
-  const todayEntries = entries.filter((item) => cashDate(item) === todayIso)
+  const todayEntries = entries.filter((item) => cashDate(item) === todayIso && isActiveCashEntry(item))
   const incomeEntries = todayEntries.filter((item) => cashType(item) === 'entrada')
   const paidIncomeEntries = incomeEntries.filter(isPaidIncomeCashEntry)
   const pendingIncomeEntries = incomeEntries.filter(isPendingIncomeCashEntry)
@@ -3732,7 +3742,7 @@ function InventoryModal({ product, onClose, onSave }) {
   )
 }
 
-function Reports({ appointments, employees, cashEntries = [], user }) {
+function Reports({ salonId, appointments, employees, cashEntries = [], setCashEntries, user, notify }) {
   const [employeeResultPeriod, setEmployeeResultPeriod] = useState('semana')
   const [employeeResultStartDate, setEmployeeResultStartDate] = useState(todayIso)
   const appointmentEntries = cashEntries.filter((item) => isAppointmentCashEntry(item) && isPaidIncomeCashEntry(item))
@@ -3756,12 +3766,15 @@ function Reports({ appointments, employees, cashEntries = [], user }) {
     <div className="space-y-5">
       {user.role === 'admin' && (
         <EmployeeResultsReport
+          salonId={salonId}
           cashEntries={cashEntries}
+          setCashEntries={setCashEntries}
           employees={employees}
           periodType={employeeResultPeriod}
           startDate={employeeResultStartDate}
           onPeriodTypeChange={setEmployeeResultPeriod}
           onStartDateChange={setEmployeeResultStartDate}
+          notify={notify}
         />
       )}
 
@@ -3778,7 +3791,8 @@ function Reports({ appointments, employees, cashEntries = [], user }) {
   )
 }
 
-function EmployeeResultsReport({ cashEntries, employees, periodType, startDate, onPeriodTypeChange, onStartDateChange }) {
+function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees, periodType, startDate, onPeriodTypeChange, onStartDateChange, notify }) {
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
   const endDate = getPeriodEndDate(startDate, periodType)
   const startDateTime = parseDateStart(startDate)
   const endDateTime = parseDateEnd(endDate)
@@ -3798,6 +3812,7 @@ function EmployeeResultsReport({ cashEntries, employees, periodType, startDate, 
     const employee = employees.find((item) => String(item.id) === key)
     acc[key] = acc[key] ?? {
       id: key,
+      employeeId: key,
       employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionário',
       appointments: 0,
       revenue: 0,
@@ -3862,6 +3877,7 @@ function EmployeeResultsReport({ cashEntries, employees, periodType, startDate, 
             rows={rows}
             columns={['employeeName', 'appointments', 'revenue', 'commission', 'salonProfit']}
             labels={['Funcionário', 'Atendimentos concluídos', 'Faturamento bruto', 'Comissão total', 'Valor líquido do salão']}
+            onRowClick={(row) => setSelectedEmployee(row)}
             formatValue={(column, value) => {
               if (column === 'appointments') return <StatusBadge tone="gray">{value}</StatusBadge>
               if (column === 'revenue' || column === 'commission' || column === 'salonProfit') return money.format(value)
@@ -3872,7 +3888,161 @@ function EmployeeResultsReport({ cashEntries, employees, periodType, startDate, 
           <EmptyState>Nenhum resultado encontrado para este período.</EmptyState>
         )}
       </div>
+      {selectedEmployee && (
+        <EmployeeAppointmentsModal
+          salonId={salonId}
+          employee={selectedEmployee}
+          entries={resultEntries.filter((entry) => String(field(entry, 'employeeId', 'employee_id')) === String(selectedEmployee.employeeId))}
+          setCashEntries={setCashEntries}
+          onClose={() => setSelectedEmployee(null)}
+          notify={notify}
+        />
+      )}
     </section>
+  )
+}
+
+function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries, onClose, notify }) {
+  const [selectedEntry, setSelectedEntry] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    const timer = window.setTimeout(() => setLoading(false), 180)
+    return () => window.clearTimeout(timer)
+  }, [employee?.employeeId])
+
+  function replaceEntry(updatedEntry) {
+    setCashEntries?.((current) => current.map((entry) => String(entry.id) === String(updatedEntry.id) ? updatedEntry : entry))
+  }
+
+  return (
+    <Modal title="Atendimentos do funcionÃ¡rio" onClose={onClose} maxWidth="max-w-5xl">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-lg font-black text-graphite dark:text-gray-100">{employee.employeeName}</p>
+          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">{entries.length} atendimento(s) pago(s)</p>
+        </div>
+        <StatusBadge tone="green">Pago e ativo</StatusBadge>
+      </div>
+
+      {loading ? (
+        <EmptyState>Carregando atendimentos...</EmptyState>
+      ) : entries.length ? (
+        <Table
+          rows={entries}
+          columns={['client', 'service', 'date', 'value', 'commission', 'method', 'status']}
+          labels={['Cliente', 'ServiÃ§o', 'Data', 'Valor', 'ComissÃ£o', 'Forma de pagamento', 'Status']}
+          onRowClick={(row) => setSelectedEntry(row)}
+          formatValue={(key, value, row) => {
+            if (key === 'client') return cashClientName(row) || '-'
+            if (key === 'service') return cashServiceName(row) || '-'
+            if (key === 'date') return formatDate(cashDate(row))
+            if (key === 'value') return money.format(cashServiceValue(row))
+            if (key === 'commission') return money.format(cashCommissionValue(row))
+            if (key === 'method') return <PaymentMethodBadge method={cashMethod(row)} />
+            if (key === 'status') return <StatusBadge tone="green">Pago</StatusBadge>
+            return value
+          }}
+        />
+      ) : (
+        <EmptyState>Nenhum atendimento pago encontrado para este funcionÃ¡rio no perÃ­odo.</EmptyState>
+      )}
+
+      {selectedEntry && (
+        <EditCashMovementModal
+          salonId={salonId}
+          entry={selectedEntry}
+          onClose={() => setSelectedEntry(null)}
+          onSaved={(updatedEntry) => {
+            replaceEntry(updatedEntry)
+            setSelectedEntry(updatedEntry)
+          }}
+          onRemoved={(updatedEntry) => {
+            replaceEntry(updatedEntry)
+            setSelectedEntry(null)
+          }}
+          notify={notify}
+        />
+      )}
+    </Modal>
+  )
+}
+
+function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, notify }) {
+  const [form, setForm] = useState({
+    serviceValue: String(cashServiceValue(entry)),
+    commissionPercent: String(field(entry, 'commissionPercent', 'commission_percent') ?? 0),
+    paymentMethod: normalizeAppointmentPaymentMethod(cashMethod(entry)) ?? 'pix',
+    paymentStatus: cashStatus(entry)
+  })
+  const [saving, setSaving] = useState(false)
+  const [removing, setRemoving] = useState(false)
+
+  async function save(event) {
+    event.preventDefault()
+    const serviceValue = Number(form.serviceValue) || 0
+    const commissionPercent = Number(form.commissionPercent) || 0
+    const commissionValue = (serviceValue * commissionPercent) / 100
+    const salonValue = serviceValue - commissionValue
+    const payload = {
+      serviceValue,
+      value: serviceValue,
+      commissionPercent,
+      commissionValue,
+      salonValue,
+      paymentMethod: form.paymentMethod,
+      paymentStatus: form.paymentStatus,
+      status: form.paymentStatus
+    }
+
+    setSaving(true)
+    try {
+      const savedEntry = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, payload))
+      onSaved(savedEntry)
+      notify?.('Atendimento atualizado com sucesso.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function removeEntry() {
+    if (!window.confirm('Remover este lanÃ§amento dos cÃ¡lculos financeiros?')) return
+    setRemoving(true)
+    try {
+      const savedEntry = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, { cancelledAt: new Date().toISOString() }))
+      onRemoved(savedEntry)
+      notify?.('LanÃ§amento removido dos cÃ¡lculos.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    } finally {
+      setRemoving(false)
+    }
+  }
+
+  return (
+    <Modal title="Editar atendimento" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
+      <form onSubmit={save} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Valor do serviÃ§o" type="number" min="0" value={form.serviceValue} onChange={(value) => setForm((current) => ({ ...current, serviceValue: value }))} />
+          <Field label="ComissÃ£o (%)" type="number" min="0" value={form.commissionPercent} onChange={(value) => setForm((current) => ({ ...current, commissionPercent: value }))} />
+          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm((current) => ({ ...current, paymentMethod: value }))} options={['Pix', 'Dinheiro', 'DÃ©bito', 'CrÃ©dito', 'Pendente']} values={['pix', 'dinheiro', 'debito', 'credito', 'pendente']} />
+          <Select label="Status" value={form.paymentStatus} onChange={(value) => setForm((current) => ({ ...current, paymentStatus: value }))} options={['Pago', 'Pendente']} values={['pago', 'pendente']} />
+        </div>
+        <div className="rounded-2xl border border-gray-100 bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
+          ComissÃ£o recalculada: {money.format(((Number(form.serviceValue) || 0) * (Number(form.commissionPercent) || 0)) / 100)}
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <button type="button" onClick={removeEntry} disabled={saving || removing} className={buttonDanger}>{removing ? 'Removendo...' : 'Remover lanÃ§amento'}</button>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} disabled={saving || removing} className={buttonSecondary}>Cancelar</button>
+            <button type="submit" disabled={saving || removing} className={buttonPrimary}>{saving ? 'Salvando...' : 'Salvar atendimento'}</button>
+          </div>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -4176,7 +4346,7 @@ function Settings({ salonId, settings, setSettings, notify }) {
   )
 }
 
-function Modal({ title, children, onClose }) {
+function Modal({ title, children, onClose, maxWidth = 'max-w-xl', zClass = 'z-40' }) {
   const modalRef = useRef(null)
 
   useEffect(() => {
@@ -4190,8 +4360,8 @@ function Modal({ title, children, onClose }) {
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-graphite/35 px-4 py-6">
-      <div ref={modalRef} className="simple-scrollbar max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-blush bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]">
+    <div className={`fixed inset-0 ${zClass} flex items-center justify-center bg-graphite/35 px-4 py-6`}>
+      <div ref={modalRef} className={`simple-scrollbar max-h-[92vh] w-full ${maxWidth} overflow-y-auto rounded-3xl border border-blush bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]`}>
         <div className="mb-4 flex items-center justify-between gap-4">
           <h3 className="text-xl font-bold">{title}</h3>
           <button onClick={onClose} className={`${buttonSecondary} px-3 py-2`}>Fechar</button>
@@ -4446,7 +4616,7 @@ function LineItem({ label, value, positive, negative }) {
   )
 }
 
-function Table({ rows, columns, labels, formatValue }) {
+function Table({ rows, columns, labels, formatValue, onRowClick }) {
   return (
     <div className="simple-scrollbar overflow-x-auto">
       <table className="w-full min-w-[640px] text-left text-sm">
@@ -4459,7 +4629,15 @@ function Table({ rows, columns, labels, formatValue }) {
           {rows.map((row, index) => {
             if (!row) return null
             return (
-              <tr key={row.id ?? index} className="border-b border-gray-50 dark:border-white/5">
+              <tr
+                key={row.id ?? index}
+                className={`border-b border-gray-50 transition hover:bg-pearl dark:border-white/5 dark:hover:bg-white/5 ${onRowClick ? 'cursor-pointer' : ''}`}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={onRowClick ? (event) => {
+                  if (event.key === 'Enter' || event.key === ' ') onRowClick(row)
+                } : undefined}
+              >
                 {columns.map((column) => <td key={column} className="px-3 py-3 font-medium text-gray-700 dark:text-gray-200">{formatValue(column, row[column], row)}</td>)}
               </tr>
             )
