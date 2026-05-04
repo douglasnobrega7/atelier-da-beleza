@@ -109,7 +109,7 @@ function financialPaymentMethodLabel(value) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-  if (normalized === 'transferencia') return 'Transferencia'
+  if (normalized === 'transferencia') return 'Transferência'
   return paymentMethodLabel(value)
 }
 
@@ -1049,7 +1049,7 @@ function handleDataActionError(error, notify) {
 }
 
 function getDataActionErrorMessage(error) {
-  return error?.original?.message || error?.message || 'Nao foi possivel salvar no banco de dados.'
+  return error?.original?.message || error?.message || 'Não foi possível salvar no banco de dados.'
 }
 
 function handleAgendaDataActionError(error, notify) {
@@ -1871,7 +1871,7 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const busyHours = topEntries(countBy(appointments.filter((item) => !isCancelledStatus(item.status)), (item) => item.time?.slice(0, 2) + ':00'))
   const bestWeekday = topEntries(paidIncomeEntries.reduce((acc, item) => ({ ...acc, [getWeekdayLabel(cashDate(item))]: (acc[getWeekdayLabel(cashDate(item))] || 0) + cashServiceValue(item) }), {}), 1)[0]
   const serviceRevenue = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashServiceValue(item) }), {}))
-  const serviceSales = topEntries(countBy(paidAppointmentEntries, (item) => cashServiceName(item) || 'ServiÃ§o'))
+  const serviceSales = topEntries(countBy(paidAppointmentEntries, (item) => cashServiceName(item) || 'Serviço'))
   const serviceCommissions = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}))
   const cashIncome = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
   const dashboardByMethod = (methods) => paidIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
@@ -1882,18 +1882,18 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
     <div className="space-y-5">
       <div>
         <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo financeiro</h3>
-        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Valores financeiros lidos apenas de cash_movements pagos.</p>
+        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Valores financeiros lidos apenas de lançamentos financeiros pagos.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric title="Faturamento do dia" value={money.format(dayRevenue)} detail="service_value pago hoje" />
-        <Metric title="Faturamento do mês" value={money.format(monthRevenue)} detail="service_value pago no mês" />
-        <Metric title="Comissões do dia" value={money.format(dayCommissions)} detail="commission_value pago hoje" />
-        <Metric title="Comissões do mês" value={money.format(monthCommissions)} detail="commission_value pago no mês" />
+        <Metric title="Faturamento do dia" value={money.format(dayRevenue)} detail="Faturamento pago hoje" />
+        <Metric title="Faturamento do mês" value={money.format(monthRevenue)} detail="Faturamento pago no mês" />
+        <Metric title="Comissões do dia" value={money.format(dayCommissions)} detail="Comissões pagas hoje" />
+        <Metric title="Comissões do mês" value={money.format(monthCommissions)} detail="Comissões pagas no mês" />
         <Metric title="PIX" value={money.format(dashboardByMethod(['PIX', 'Pix', 'pix']))} detail="Pagamentos pagos" />
         <Metric title="Dinheiro" value={money.format(dashboardByMethod(['Dinheiro', 'dinheiro']))} detail="Pagamentos pagos" />
         <Metric title="Cartão" value={money.format(dashboardByMethod(['debito', 'credito']))} detail="Débito + crédito pagos" />
         <Metric title="Pendentes" value={money.format(pendingPaymentsTotal)} detail="Entradas pendentes" />
-        <Metric title="Saldo líquido" value={money.format(cashIncome - cashOutcome)} detail="salon_value pago - saídas" />
+        <Metric title="Saldo líquido" value={money.format(cashIncome - cashOutcome)} detail="Lucro líquido após saídas" />
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Faturamento semanal">
@@ -3428,14 +3428,14 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo do dia</h3>
-          <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Somente cash_movements com type entrada e payment_status pago entram nos recebidos.</p>
+          <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Somente lançamentos financeiros de entrada com status pago entram nos recebidos.</p>
         </div>
         <div className="w-full sm:w-56">
           <Field label="Data do caixa" type="date" value={cashDateFilter} onChange={setCashDateFilter} />
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Metric title="Total recebido" value={money.format(income)} detail="service_value pago" />
+        <Metric title="Total recebido" value={money.format(income)} detail="Faturamento pago" />
         <Metric title="Pix" value={money.format(summary.pix)} detail="Recebido no dia" />
         <Metric title="Dinheiro" value={money.format(summary.cash)} detail="Recebido no dia" />
         <Metric title="Débito" value={money.format(byMethod(['Débito', 'debito']))} detail="Recebido hoje" />
@@ -3545,7 +3545,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
           <Table
             rows={closures}
             columns={['date', 'totalReceived', 'pix', 'cash', 'outcome', 'commission', 'salonProfit', 'balance']}
-            labels={['Data', 'Recebido', 'Pix', 'Dinheiro', 'Saidas', 'Comissao', 'Lucro salao', 'Saldo final']}
+            labels={['Data', 'Recebido', 'Pix', 'Dinheiro', 'Saídas', 'Comissão', 'Lucro do salão', 'Saldo final']}
             formatValue={(key, value, row) => {
               if (key === 'date') return <StatusBadge tone="cyan">{formatDate(row.date)}</StatusBadge>
               return money.format(Number(value) || 0)
@@ -3568,12 +3568,12 @@ function CashClosureModal({ summary, onClose, onConfirm }) {
     ['Total recebido', money.format(summary.totalReceived)],
     ['Pix', money.format(summary.pix)],
     ['Dinheiro', money.format(summary.cash)],
-    ['Debito', money.format(summary.debit)],
-    ['Credito', money.format(summary.credit)],
+    ['Débito', money.format(summary.debit)],
+    ['Crédito', money.format(summary.credit)],
     ['Pendentes', money.format(summary.pending)],
-    ['Saidas', money.format(summary.outcome)],
-    ['Comissao dos profissionais', money.format(summary.commission)],
-    ['Lucro liquido do salao', money.format(summary.salonProfit)],
+    ['Saídas', money.format(summary.outcome)],
+    ['Comissão dos profissionais', money.format(summary.commission)],
+    ['Lucro líquido do salão', money.format(summary.salonProfit)],
     ['Saldo final', money.format(summary.balance)]
   ]
 
@@ -3581,7 +3581,7 @@ function CashClosureModal({ summary, onClose, onConfirm }) {
     <Modal title="Confirmar fechamento de caixa" onClose={onClose} maxWidth="max-w-3xl">
       <div className="space-y-4">
         <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
-          Confira os valores antes de confirmar. Depois de salvo, o fechamento desta data nao podera ser duplicado.
+          Confira os valores antes de confirmar. Depois de salvo, o fechamento desta data não poderá ser duplicado.
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map(([label, value]) => (
@@ -4010,8 +4010,8 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
       if (format === 'excel') await exportReportsExcel(reportData, salonSettings)
       notify?.(format === 'pdf' ? 'PDF exportado.' : 'Excel exportado.')
     } catch (error) {
-      console.error('Erro ao exportar relatorio:', error)
-      notify?.('Nao foi possivel exportar o relatorio.', 'error')
+      console.error('Erro ao exportar relatório:', error)
+      notify?.('Não foi possível exportar o relatório.', 'error')
     } finally {
       setExporting(null)
     }
@@ -4021,13 +4021,13 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
       <section className="rounded-2xl border border-[#d9c17a]/70 bg-white p-5 shadow-soft dark:border-[#d9c17a]/30 dark:bg-[#1f1b26]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Relatorios premium</p>
-            <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">Exportacoes financeiras</h2>
-            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">PDF e Excel respeitam periodo, data inicial e funcionario selecionado.</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Relatórios premium</p>
+            <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">Exportações financeiras</h2>
+            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">PDF e Excel respeitam período, data inicial e funcionário selecionado.</p>
           </div>
           <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[560px]">
             <Select
-              label="Funcionario"
+              label="Funcionário"
               value={selectedReportEmployee}
               onChange={setSelectedReportEmployee}
               options={['Todos', ...employees.map((item) => item.name)]}
@@ -4078,23 +4078,23 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
 function CommissionPaymentHistory({ payments = [] }) {
   const rows = [...payments].sort((a, b) => String(b.paidAt ?? b.paid_at ?? '').localeCompare(String(a.paidAt ?? a.paid_at ?? '')))
   return (
-    <Panel title="Historico de pagamentos de comissao">
+    <Panel title="Histórico de pagamentos de comissão">
       {rows.length ? (
         <Table
           rows={rows}
           columns={['paidAt', 'employeeName', 'amount', 'paymentMethod', 'notes', 'period']}
-          labels={['Data do pagamento', 'Funcionario', 'Valor pago', 'Forma de pagamento', 'Observacao', 'Periodo referente']}
+          labels={['Data do pagamento', 'Funcionário', 'Valor pago', 'Forma de pagamento', 'Observação', 'Período referente']}
           formatValue={(key, value, row) => {
             if (key === 'paidAt') return formatDate(String(row.paidAt ?? row.paid_at ?? '').slice(0, 10))
             if (key === 'employeeName') return row.employeeName || row.employee_name || '-'
             if (key === 'amount') return money.format(Number(row.amount) || 0)
             if (key === 'paymentMethod') return <StatusBadge tone="cyan">{financialPaymentMethodLabel(row.paymentMethod ?? row.payment_method)}</StatusBadge>
-            if (key === 'period') return `${formatDate(row.periodStart ?? row.period_start)} ate ${formatDate(row.periodEnd ?? row.period_end)}`
+            if (key === 'period') return `${formatDate(row.periodStart ?? row.period_start)} até ${formatDate(row.periodEnd ?? row.period_end)}`
             return value || '-'
           }}
         />
       ) : (
-        <EmptyState>Nenhum pagamento de comissao registrado.</EmptyState>
+        <EmptyState>Nenhum pagamento de comissão registrado.</EmptyState>
       )}
     </Panel>
   )
@@ -4123,7 +4123,7 @@ function buildFinancialReportData({ cashEntries = [], employees = [], periodType
     acc[key] = acc[key] ?? {
       id: key,
       employeeId: employeeId ? String(employeeId) : '',
-      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionario',
+      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionário',
       appointments: 0,
       revenue: 0,
       commission: 0,
@@ -4156,7 +4156,7 @@ function buildFinancialReportData({ cashEntries = [], employees = [], periodType
     endDate,
     periodType,
     selectedEmployeeId: employeeFilter,
-    selectedEmployeeName: employeeFilter === 'todos' ? 'Todos' : selectedEmployee?.name ?? 'Funcionario',
+    selectedEmployeeName: employeeFilter === 'todos' ? 'Todos' : selectedEmployee?.name ?? 'Funcionário',
     periodEntries,
     appointmentEntries,
     pendingEntries,
@@ -4166,7 +4166,7 @@ function buildFinancialReportData({ cashEntries = [], employees = [], periodType
 }
 
 function reportPeriodLabel(reportData) {
-  return `${formatDate(reportData.startDate)} ate ${formatDate(reportData.endDate)}`
+  return `${formatDate(reportData.startDate)} até ${formatDate(reportData.endDate)}`
 }
 
 function reportMoney(value) {
@@ -4178,27 +4178,27 @@ function movementExportRows(entries) {
     Data: formatDate(cashDate(entry)),
     Tipo: cashType(entry),
     Cliente: cashClientName(entry) || cashDescription(entry),
-    Servico: cashServiceName(entry) || cashCategory(entry),
-    Funcionario: cashEmployeeName(entry),
+    Serviço: cashServiceName(entry) || cashCategory(entry),
+    Funcionário: cashEmployeeName(entry),
     Forma: paymentMethodLabel(cashMethod(entry)),
     Status: cashStatus(entry),
     Valor: cashServiceValue(entry),
-    Comissao: cashCommissionValue(entry),
-    Salao: cashSalonValue(entry),
-    ComissaoPaga: cashCommissionPaid(entry) ? 'Sim' : 'Nao',
-    PagoEm: cashCommissionPaidAt(entry) ? formatDate(String(cashCommissionPaidAt(entry)).slice(0, 10)) : ''
+    Comissão: cashCommissionValue(entry),
+    Salão: cashSalonValue(entry),
+    'Comissão paga': cashCommissionPaid(entry) ? 'Sim' : 'Não',
+    'Pago em': cashCommissionPaidAt(entry) ? formatDate(String(cashCommissionPaidAt(entry)).slice(0, 10)) : ''
   }))
 }
 
 function employeeExportRows(rows) {
   return (rows || []).map((row) => ({
-    Funcionario: row.employeeName,
+    Funcionário: row.employeeName,
     Atendimentos: row.appointments,
     Faturamento: row.revenue,
-    ComissaoTotal: row.commission,
-    ComissaoPaga: row.commissionPaid,
-    ComissaoPendente: row.commissionPending,
-    LucroSalao: row.salonProfit
+    'Comissão total': row.commission,
+    'Comissão paga': row.commissionPaid,
+    'Comissão pendente': row.commissionPending,
+    'Lucro do salão': row.salonProfit
   }))
 }
 
@@ -4209,16 +4209,16 @@ async function exportReportsPdf(reportData, salonSettings) {
   ])
   const autoTable = autoTableModule.default
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
-  const salonName = salonSettings?.salonName || 'Salao'
+  const salonName = salonSettings?.salonName || 'Salão'
   doc.setFontSize(16)
   doc.text(salonName, 40, 36)
   doc.setFontSize(10)
-  doc.text(`Periodo analisado: ${reportPeriodLabel(reportData)}`, 40, 54)
-  doc.text(`Funcionario: ${reportData.selectedEmployeeName}`, 40, 70)
+  doc.text(`Período analisado: ${reportPeriodLabel(reportData)}`, 40, 54)
+  doc.text(`Funcionário: ${reportData.selectedEmployeeName}`, 40, 70)
 
   autoTable(doc, {
     startY: 88,
-    head: [['Total faturado', 'Total de comissoes', 'Lucro do salao', 'Comissao paga', 'Comissao pendente']],
+    head: [['Total faturado', 'Total de comissões', 'Lucro do salão', 'Comissão paga', 'Comissão pendente']],
     body: [[
       reportMoney(reportData.totals.revenue),
       reportMoney(reportData.totals.commission),
@@ -4231,7 +4231,7 @@ async function exportReportsPdf(reportData, salonSettings) {
 
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 18,
-    head: [['Funcionario', 'Atendimentos', 'Faturamento', 'Comissao', 'Pago', 'Pendente', 'Lucro salao']],
+    head: [['Funcionário', 'Atendimentos', 'Faturamento', 'Comissão', 'Pago', 'Pendente', 'Lucro do salão']],
     body: reportData.employeeRows.length ? reportData.employeeRows.map((row) => [
       row.employeeName,
       row.appointments,
@@ -4246,7 +4246,7 @@ async function exportReportsPdf(reportData, salonSettings) {
 
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 18,
-    head: [['Pagamentos pendentes', 'Servico', 'Funcionario', 'Valor']],
+    head: [['Pagamentos pendentes', 'Serviço', 'Funcionário', 'Valor']],
     body: reportData.pendingEntries.length ? reportData.pendingEntries.map((entry) => [
       cashClientName(entry) || cashDescription(entry),
       cashServiceName(entry) || cashCategory(entry),
@@ -4258,7 +4258,7 @@ async function exportReportsPdf(reportData, salonSettings) {
 
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 18,
-    head: [['Data', 'Cliente', 'Servico', 'Funcionario', 'Forma', 'Status', 'Valor', 'Comissao', 'Salao']],
+    head: [['Data', 'Cliente', 'Serviço', 'Funcionário', 'Forma', 'Status', 'Valor', 'Comissão', 'Salão']],
     body: reportData.periodEntries.length ? reportData.periodEntries.map((entry) => [
       formatDate(cashDate(entry)),
       cashClientName(entry) || cashDescription(entry),
@@ -4269,7 +4269,7 @@ async function exportReportsPdf(reportData, salonSettings) {
       reportMoney(cashServiceValue(entry)),
       reportMoney(cashCommissionValue(entry)),
       reportMoney(cashSalonValue(entry))
-    ]) : [['Sem movimentacoes', '-', '-', '-', '-', '-', '-', '-', '-']],
+    ]) : [['Sem movimentações', '-', '-', '-', '-', '-', '-', '-', '-']],
     styles: { fontSize: 7 }
   })
 
@@ -4280,24 +4280,24 @@ async function exportReportsExcel(reportData, salonSettings) {
   const XLSX = await import('xlsx')
   const workbook = XLSX.utils.book_new()
   const summaryRows = [
-    { Indicador: 'Salao', Valor: salonSettings?.salonName || 'Salao' },
-    { Indicador: 'Periodo', Valor: reportPeriodLabel(reportData) },
-    { Indicador: 'Funcionario', Valor: reportData.selectedEmployeeName },
+    { Indicador: 'Salão', Valor: salonSettings?.salonName || 'Salão' },
+    { Indicador: 'Período', Valor: reportPeriodLabel(reportData) },
+    { Indicador: 'Funcionário', Valor: reportData.selectedEmployeeName },
     { Indicador: 'Total faturado', Valor: reportData.totals.revenue },
-    { Indicador: 'Total de comissoes', Valor: reportData.totals.commission },
-    { Indicador: 'Lucro do salao', Valor: reportData.totals.salonProfit },
-    { Indicador: 'Comissao paga', Valor: reportData.totals.commissionPaid },
-    { Indicador: 'Comissao pendente', Valor: reportData.totals.commissionPending }
+    { Indicador: 'Total de comissões', Valor: reportData.totals.commission },
+    { Indicador: 'Lucro do salão', Valor: reportData.totals.salonProfit },
+    { Indicador: 'Comissão paga', Valor: reportData.totals.commissionPaid },
+    { Indicador: 'Comissão pendente', Valor: reportData.totals.commissionPending }
   ]
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Resumo')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows)), 'Funcionarios')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows)), 'Funcionários')
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows).map((row) => ({
-    Funcionario: row.Funcionario,
-    ComissaoTotal: row.ComissaoTotal,
-    ComissaoPaga: row.ComissaoPaga,
-    ComissaoPendente: row.ComissaoPendente
-  }))), 'Comissoes')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.periodEntries)), 'Movimentacoes')
+    Funcionário: row.Funcionário,
+    'Comissão total': row['Comissão total'],
+    'Comissão paga': row['Comissão paga'],
+    'Comissão pendente': row['Comissão pendente']
+  }))), 'Comissões')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.periodEntries)), 'Movimentações')
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.pendingEntries)), 'Pendentes')
   XLSX.writeFile(workbook, `relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.xlsx`)
 }
@@ -4366,7 +4366,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
     <section className="min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26] sm:p-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-goldSoft">cash_movements</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-goldSoft">Lançamentos financeiros</p>
           <h3 className="mt-1 text-2xl font-bold text-graphite dark:text-gray-100">Resultado dos funcionários</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             <StatusBadge tone="cyan">{formatDate(startDate)} até {formatDate(endDate)}</StatusBadge>
@@ -4384,7 +4384,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
           />
           <Field label="Data inicial" type="date" value={startDate} onChange={onStartDateChange} />
           <Select
-            label="Funcionario"
+            label="Funcionário"
             value={selectedEmployeeId}
             onChange={onSelectedEmployeeChange}
             options={['Todos', ...employees.map((item) => item.name)]}
@@ -4429,14 +4429,14 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-goldSoft">controle financeiro</p>
-            <h4 className="mt-1 text-xl font-black text-graphite dark:text-gray-100">Valores a receber por funcionario</h4>
+            <h4 className="mt-1 text-xl font-black text-graphite dark:text-gray-100">Valores a receber por funcionário</h4>
           </div>
           <div className="w-full sm:w-64">
             <Select
               label="Filtro"
               value={commissionStatusFilter}
               onChange={setCommissionStatusFilter}
-              options={['Todos', 'Comissao pendente', 'Comissao paga']}
+              options={['Todos', 'Comissão pendente', 'Comissão paga']}
               values={['todos', 'pendente', 'paga']}
             />
           </div>
@@ -4445,20 +4445,20 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
           <Table
             rows={receivableRows}
             columns={['employeeName', 'appointments', 'revenue', 'commission', 'commissionPaid', 'commissionPending', 'action']}
-            labels={['Nome', 'Atendimentos concluidos', 'Faturamento gerado', 'Comissao total a receber', 'Comissao ja paga', 'Comissao pendente', 'Acao']}
+            labels={['Nome', 'Atendimentos concluídos', 'Faturamento gerado', 'Comissão total a receber', 'Comissão já paga', 'Comissão pendente', 'Ação']}
             formatValue={(column, value, row) => {
               if (column === 'appointments') return <StatusBadge tone="gray">{value}</StatusBadge>
               if (['revenue', 'commission', 'commissionPaid', 'commissionPending'].includes(column)) return money.format(value)
               if (column === 'action') return (
                 <button type="button" disabled={row.commissionPending <= 0} onClick={() => setPaymentEmployee(row)} className="focus-ring rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
-                  Marcar comissao como paga
+                  Marcar comissão como paga
                 </button>
               )
               return value
             }}
           />
         ) : (
-          <EmptyState>Nenhum valor de comissao encontrado para este filtro.</EmptyState>
+          <EmptyState>Nenhum valor de comissão encontrado para este filtro.</EmptyState>
         )}
       </div>
       {selectedEmployee && (
@@ -4519,7 +4519,7 @@ function CommissionPaymentModal({ salonId, employee, entries, periodStart, perio
       const normalized = updatedEntries.map(normalizeCashMovementRecord)
       setCashEntries?.((current) => current.map((entry) => normalized.find((updated) => String(updated.id) === String(entry.id)) ?? entry))
       setCommissionPayments?.((current) => [paymentRecord, ...(current || [])])
-      notify?.('Comissao marcada como paga.')
+      notify?.('Comissão marcada como paga.')
       onClose()
     } catch (error) {
       handleDataActionError(error, notify)
@@ -4529,21 +4529,21 @@ function CommissionPaymentModal({ salonId, employee, entries, periodStart, perio
   }
 
   return (
-    <Modal title="Marcar comissao como paga" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
+    <Modal title="Marcar comissão como paga" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
       <form onSubmit={confirmPayment} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
-            <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Funcionario</p>
+            <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Funcionário</p>
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{employee.employeeName}</p>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-500/10">
-            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Comissao pendente</p>
+            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Comissão pendente</p>
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(totalPending)}</p>
           </div>
         </div>
-        <Select label="Forma de pagamento" value={form.method} onChange={(method) => setForm((current) => ({ ...current, method }))} options={['Pix', 'Dinheiro', 'Transferencia']} values={['pix', 'dinheiro', 'transferencia']} />
+        <Select label="Forma de pagamento" value={form.method} onChange={(method) => setForm((current) => ({ ...current, method }))} options={['Pix', 'Dinheiro', 'Transferência']} values={['pix', 'dinheiro', 'transferencia']} />
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Observacao</span>
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Observação</span>
           <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
         </label>
         <div className="flex justify-end gap-2">
@@ -4570,7 +4570,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
   }
 
   return (
-    <Modal title="Atendimentos do funcionÃ¡rio" onClose={onClose} maxWidth="max-w-5xl">
+    <Modal title="Atendimentos do funcionário" onClose={onClose} maxWidth="max-w-5xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-lg font-black text-graphite dark:text-gray-100">{employee.employeeName}</p>
@@ -4585,7 +4585,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
         <Table
           rows={entries}
           columns={['client', 'service', 'date', 'value', 'commission', 'method', 'status']}
-          labels={['Cliente', 'ServiÃ§o', 'Data', 'Valor', 'ComissÃ£o', 'Forma de pagamento', 'Status']}
+          labels={['Cliente', 'Serviço', 'Data', 'Valor', 'Comissão', 'Forma de pagamento', 'Status']}
           onRowClick={(row) => setSelectedEntry(row)}
           formatValue={(key, value, row) => {
             if (key === 'client') return cashClientName(row) || '-'
@@ -4599,7 +4599,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
           }}
         />
       ) : (
-        <EmptyState>Nenhum atendimento pago encontrado para este funcionÃ¡rio no perÃ­odo.</EmptyState>
+        <EmptyState>Nenhum atendimento pago encontrado para este funcionário no período.</EmptyState>
       )}
 
       {selectedEntry && (
@@ -4662,12 +4662,12 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, no
   }
 
   async function removeEntry() {
-    if (!window.confirm('Remover este lanÃ§amento dos cÃ¡lculos financeiros?')) return
+    if (!window.confirm('Remover este lançamento dos cálculos financeiros?')) return
     setRemoving(true)
     try {
       const savedEntry = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, { cancelledAt: new Date().toISOString() }))
       onRemoved(savedEntry)
-      notify?.('LanÃ§amento removido dos cÃ¡lculos.')
+      notify?.('Lançamento removido dos cálculos.')
     } catch (error) {
       handleDataActionError(error, notify)
     } finally {
@@ -4679,16 +4679,16 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, no
     <Modal title="Editar atendimento" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
       <form onSubmit={save} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Valor do serviÃ§o" type="number" min="0" value={form.serviceValue} onChange={(value) => setForm((current) => ({ ...current, serviceValue: value }))} />
-          <Field label="ComissÃ£o (%)" type="number" min="0" value={form.commissionPercent} onChange={(value) => setForm((current) => ({ ...current, commissionPercent: value }))} />
-          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm((current) => ({ ...current, paymentMethod: value }))} options={['Pix', 'Dinheiro', 'DÃ©bito', 'CrÃ©dito', 'Pendente']} values={['pix', 'dinheiro', 'debito', 'credito', 'pendente']} />
+          <Field label="Valor do serviço" type="number" min="0" value={form.serviceValue} onChange={(value) => setForm((current) => ({ ...current, serviceValue: value }))} />
+          <Field label="Comissão (%)" type="number" min="0" value={form.commissionPercent} onChange={(value) => setForm((current) => ({ ...current, commissionPercent: value }))} />
+          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm((current) => ({ ...current, paymentMethod: value }))} options={['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} values={['pix', 'dinheiro', 'debito', 'credito', 'pendente']} />
           <Select label="Status" value={form.paymentStatus} onChange={(value) => setForm((current) => ({ ...current, paymentStatus: value }))} options={['Pago', 'Pendente']} values={['pago', 'pendente']} />
         </div>
         <div className="rounded-2xl border border-gray-100 bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
-          ComissÃ£o recalculada: {money.format(((Number(form.serviceValue) || 0) * (Number(form.commissionPercent) || 0)) / 100)}
+          Comissão recalculada: {money.format(((Number(form.serviceValue) || 0) * (Number(form.commissionPercent) || 0)) / 100)}
         </div>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <button type="button" onClick={removeEntry} disabled={saving || removing} className={buttonDanger}>{removing ? 'Removendo...' : 'Remover lanÃ§amento'}</button>
+          <button type="button" onClick={removeEntry} disabled={saving || removing} className={buttonDanger}>{removing ? 'Removendo...' : 'Remover lançamento'}</button>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={saving || removing} className={buttonSecondary}>Cancelar</button>
             <button type="submit" disabled={saving || removing} className={buttonPrimary}>{saving ? 'Salvando...' : 'Salvar atendimento'}</button>
