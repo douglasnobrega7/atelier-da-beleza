@@ -15,7 +15,7 @@ export const TABLES = {
   stockItems: 'stock_items'
 }
 
-export const databaseNotConfiguredMessage = 'Banco ainda nÃ£o configurado para esta tela.'
+export const databaseNotConfiguredMessage = 'Banco ainda não configurado para esta tela.'
 export const missingSalonIdMessage = 'salon_id ausente'
 
 export function isMissingTableError(error) {
@@ -405,7 +405,7 @@ export async function createSalonForAdmin(profile, authUser) {
   const salon = await runQuery(
     supabase
       .from(TABLES.salons)
-      .insert({ name: 'Meu SalÃ£o' })
+      .insert({ name: 'Meu Salão' })
       .select('*')
       .single()
   )
@@ -433,7 +433,7 @@ export async function createEmployeeUserProfile(salonId, payload) {
 
   const email = payload.email?.trim().toLowerCase()
   if (!email) {
-    throw new Error('E-mail do funcionÃ¡rio nÃ£o informado.')
+    throw new Error('E-mail do funcionário não informado.')
   }
 
   const role = payload.role === 'cashier' ? 'caixa' : 'profissional'
@@ -678,7 +678,7 @@ export async function seedInitialSalonData(salonId) {
         .from(TABLES.employees)
         .insert([
           employeePayload({
-            name: 'Caixa/RecepÃ§Ã£o',
+            name: 'Caixa/Recepção',
             phone: '',
             role: 'cashier',
             position: 'caixa',
