@@ -66,10 +66,10 @@ export const uiText = {
 
   employees: {
     title: "Equipe do salão",
-    subtitle: "Cadastre, edite e gerencie os profissionais do salão.",
-    newEmployee: "Novo profissional",
-    editEmployee: "Editar profissional",
-    loginEmployee: "Login do profissional"
+    subtitle: "Cadastre, edite e gerencie os funcionários do salão.",
+    newEmployee: "Novo funcionário",
+    editEmployee: "Editar funcionário",
+    loginEmployee: "Login do funcionário"
   },
 
   appointments: {

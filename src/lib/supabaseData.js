@@ -80,6 +80,12 @@ function hasField(payload, key) {
   return Object.prototype.hasOwnProperty.call(payload, key)
 }
 
+function toListPayload(value) {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean)
+  return []
+}
+
 function clientPayload(payload = {}, salonId, includeSalon = false) {
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
@@ -92,16 +98,45 @@ function clientPayload(payload = {}, salonId, includeSalon = false) {
 
 function employeePayload(payload = {}, salonId, includeSalon = false) {
   const rawRole = String(payload.role ?? '').trim().toLowerCase()
-  const employeeType = payload.employeeType ?? (rawRole === 'cashier' || rawRole === 'caixa' ? 'cashier' : 'professional')
-  const employeeFunctions = payload.functions ?? payload.role ?? payload.position ?? ''
+  const rawEmployeeType = payload.employeeType ?? payload.employee_type ?? payload.tipoUsuario ?? payload.tipo_usuario
+  const employeeType = rawEmployeeType ?? (rawRole === 'cashier' || rawRole === 'caixa' ? 'cashier' : 'professional')
+  const normalizedEmployeeType = employeeType === 'caixa' || employeeType === 'cashier' ? 'cashier' : employeeType === 'admin' ? 'admin' : 'professional'
+  const dbUserType = normalizedEmployeeType === 'cashier' ? 'caixa' : normalizedEmployeeType === 'admin' ? 'admin' : 'profissional'
+  const employeeFunctions = normalizedEmployeeType === 'cashier' ? '' : (payload.functions ?? payload.funcoes ?? payload.role ?? payload.position ?? '')
+  const employeeFunctionsList = toListPayload(employeeFunctions)
+  const employeeFunctionsText = employeeFunctionsList.join(', ')
   const employeeName = payload.name ?? payload.employeeName ?? payload.employee_name ?? ''
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     name: includeSalon || hasField(payload, 'name') || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? employeeName : undefined,
     employee_name: hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? employeeName : undefined,
     phone: includeSalon || hasField(payload, 'phone') ? payload.phone : undefined,
+    employee_type: includeSalon || hasField(payload, 'employeeType') || hasField(payload, 'employee_type') || hasField(payload, 'tipoUsuario') || hasField(payload, 'tipo_usuario') ? normalizedEmployeeType : undefined,
+    tipo_usuario: includeSalon || hasField(payload, 'employeeType') || hasField(payload, 'employee_type') || hasField(payload, 'tipoUsuario') || hasField(payload, 'tipo_usuario') ? dbUserType : undefined,
+    role: includeSalon || hasField(payload, 'role') || hasField(payload, 'functions') || hasField(payload, 'position') ? employeeFunctionsText : undefined,
+    functions: hasField(payload, 'functions') ? employeeFunctionsText : undefined,
+    funcoes: includeSalon || hasField(payload, 'functions') || hasField(payload, 'funcoes') || hasField(payload, 'role') || hasField(payload, 'position') ? employeeFunctionsList : undefined,
+    status: includeSalon || hasField(payload, 'status') || hasField(payload, 'workStatus') || hasField(payload, 'active')
+      ? payload.status ?? payload.workStatus ?? (payload.active === false ? 'Inativo' : 'Ativo')
+      : undefined,
+    commission_percent: includeSalon || hasField(payload, 'commissionPercent') || hasField(payload, 'commission')
+      ? Number(payload.commissionPercent ?? payload.commission ?? 0)
+      : undefined,
+    position: includeSalon || hasField(payload, 'position') || hasField(payload, 'role') || hasField(payload, 'functions') ? payload.position ?? employeeFunctionsText : undefined,
+    services: includeSalon || hasField(payload, 'services') ? payload.services ?? [] : undefined,
+    login_email: includeSalon || hasField(payload, 'loginEmail') || hasField(payload, 'accessEmail') || hasField(payload, 'login_email') ? payload.loginEmail ?? payload.accessEmail ?? payload.login_email ?? '' : undefined,
+    login_status: hasField(payload, 'loginStatus') || hasField(payload, 'login_status') ? payload.loginStatus ?? payload.login_status : undefined
+  })
+}
+
+function legacyEmployeePayload(payload = {}, salonId, includeSalon = false) {
+  const employeeFunctions = toListPayload(payload.functions ?? payload.role ?? payload.position ?? '').join(', ')
+  const employeeName = payload.name ?? payload.employeeName ?? payload.employee_name ?? ''
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    name: includeSalon || hasField(payload, 'name') || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? employeeName : undefined,
+    phone: includeSalon || hasField(payload, 'phone') ? payload.phone : undefined,
     role: includeSalon || hasField(payload, 'role') || hasField(payload, 'functions') || hasField(payload, 'position') ? employeeFunctions : undefined,
-    functions: hasField(payload, 'functions') ? employeeFunctions : undefined,
     status: includeSalon || hasField(payload, 'status') || hasField(payload, 'workStatus') || hasField(payload, 'active')
       ? payload.status ?? payload.workStatus ?? (payload.active === false ? 'Inativo' : 'Ativo')
       : undefined,
@@ -163,7 +198,7 @@ function normalizeAppointmentStatus(status) {
   if (normalized === 'confirmado') return 'confirmado'
   if (normalized === 'em_atendimento' || normalized === 'ematendimento' || normalized === 'em atendimento') return 'em_atendimento'
   if (normalized === 'aguardando_pagamento' || normalized === 'aguardandopagamento' || normalized === 'aguardando pagamento') return 'aguardando_pagamento'
-  if (normalized === 'concluido') return 'concluido'
+  if (normalized === 'concluido' || normalized === 'finalizado') return 'concluido'
   if (normalized === 'cancelado') return 'cancelado'
   return 'agendado'
 }
@@ -199,9 +234,13 @@ function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
     ...(includeSalon ? { salon_id: salonId } : {}),
     type,
     description: includeSalon || hasField(payload, 'description') || hasField(payload, 'descricao') ? payload.description ?? payload.descricao ?? '' : undefined,
+    notes: includeSalon || hasField(payload, 'notes') || hasField(payload, 'observacao') ? payload.notes ?? payload.observacao ?? '' : undefined,
+    observacao: includeSalon || hasField(payload, 'notes') || hasField(payload, 'observacao') ? payload.notes ?? payload.observacao ?? '' : undefined,
     category: includeSalon || hasField(payload, 'category') || hasField(payload, 'categoria') ? payload.category ?? payload.categoria ?? '' : undefined,
     payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? paymentMethod : undefined,
     value: hasField(payload, 'value') || hasField(payload, 'valor') ? value : undefined,
+    discount: includeSalon || hasField(payload, 'discount') || hasField(payload, 'desconto') ? Number(payload.discount ?? payload.desconto ?? 0) : undefined,
+    desconto: includeSalon || hasField(payload, 'discount') || hasField(payload, 'desconto') ? Number(payload.discount ?? payload.desconto ?? 0) : undefined,
     date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
     status: includeSalon || hasField(payload, 'status') || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') ? paymentStatus : undefined,
     payment_status: includeSalon || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') || hasField(payload, 'status') ? paymentStatus : undefined,
@@ -247,6 +286,8 @@ function cashClosurePayload(payload = {}, salonId, includeSalon = false) {
     commission_total: includeSalon || hasField(payload, 'commission') || hasField(payload, 'commissionTotal') || hasField(payload, 'commission_total') ? Number(payload.commission ?? payload.commissionTotal ?? payload.commission_total ?? 0) : undefined,
     salon_profit: includeSalon || hasField(payload, 'salonProfit') || hasField(payload, 'salon_profit') ? Number(payload.salonProfit ?? payload.salon_profit ?? 0) : undefined,
     final_balance: includeSalon || hasField(payload, 'balance') || hasField(payload, 'finalBalance') || hasField(payload, 'final_balance') ? Number(payload.balance ?? payload.finalBalance ?? payload.final_balance ?? 0) : undefined,
+    notes: includeSalon || hasField(payload, 'notes') || hasField(payload, 'observacao') ? payload.notes ?? payload.observacao ?? '' : undefined,
+    observacao: includeSalon || hasField(payload, 'notes') || hasField(payload, 'observacao') ? payload.notes ?? payload.observacao ?? '' : undefined,
     created_at: includeSalon || hasField(payload, 'createdAt') || hasField(payload, 'created_at') ? payload.createdAt ?? payload.created_at : undefined
   })
 }
@@ -342,6 +383,7 @@ function toSnakeKey(key) {
   const special = {
     lastVisit: 'last_visit',
     employeeType: 'employee_type',
+    tipoUsuario: 'tipo_usuario',
     workStatus: 'work_status',
     workStart: 'work_start',
     workEnd: 'work_end',
@@ -353,7 +395,8 @@ function toSnakeKey(key) {
     accessEmail: 'access_email',
     temporaryPassword: 'temporary_password',
     loginActive: 'login_active',
-    paymentMethod: 'payment_method'
+    paymentMethod: 'payment_method',
+    discount: 'discount'
   }
   return special[key] ?? key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
 }
@@ -543,10 +586,10 @@ export async function createEmployee(salonId, payload) {
   try {
     return await insertRow(TABLES.employees, salonId, payload, employeePayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions'])) throw error
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes'])) throw error
     console.error('erro real do Supabase:', error?.original ?? error)
-    const { employeeName, employee_name, functions, ...compatiblePayload } = payload
-    return insertRow(TABLES.employees, salonId, compatiblePayload, employeePayload)
+    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, ...compatiblePayload } = payload
+    return insertRow(TABLES.employees, salonId, compatiblePayload, legacyEmployeePayload)
   }
 }
 
@@ -554,10 +597,10 @@ export async function updateEmployee(salonId, id, payload) {
   try {
     return await updateRow(TABLES.employees, salonId, id, payload, employeePayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions'])) throw error
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes'])) throw error
     console.error('erro real do Supabase:', error?.original ?? error)
-    const { employeeName, employee_name, functions, ...compatiblePayload } = payload
-    return updateRow(TABLES.employees, salonId, id, compatiblePayload, employeePayload)
+    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, ...compatiblePayload } = payload
+    return updateRow(TABLES.employees, salonId, id, compatiblePayload, legacyEmployeePayload)
   }
 }
 
@@ -621,7 +664,7 @@ export async function seedSalonData(salonId) {
     supabase
       .from(TABLES.employees)
       .insert(employeePayload({
-        name: 'Profissional Inicial',
+        name: 'Funcionario Inicial',
         phone: '',
         role: 'professional',
         position: 'profissional',

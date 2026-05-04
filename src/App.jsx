@@ -81,8 +81,8 @@ const weekDayOptions = [
 const defaultWorkingDays = weekDayOptions.map((day) => day.id)
 const defaultOpeningHours = Object.fromEntries(weekDayOptions.map((day) => [day.id, { open: '09:00', close: '18:00' }]))
 const appointmentSlotInterval = 15
-const paymentMethodOptions = ['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente / pagar depois']
-const paymentMethodValues = ['pix', 'dinheiro', 'debito', 'credito', 'pendente']
+const paymentMethodOptions = ['Dinheiro', 'PIX', 'Cartão', 'Débito', 'Crédito', 'Pendente / pagar depois']
+const paymentMethodValues = ['dinheiro', 'pix', 'cartao', 'debito', 'credito', 'pendente']
 const appointmentPaymentOptions = ['Sem pagamento', 'PIX', 'Dinheiro', 'Débito', 'Crédito']
 const appointmentPaymentValues = ['', 'pix', 'dinheiro', 'debito', 'credito']
 
@@ -438,6 +438,24 @@ function isProfessional(employee) {
   return (employee?.employeeType ?? 'professional') === 'professional'
 }
 
+function isEmployeeForUser(employee, user) {
+  if (!employee || !user) return false
+  return (user.employeeId && String(employee.id) === String(user.employeeId)) ||
+    (employee.accessEmail && user.email && employee.accessEmail.toLowerCase() === user.email.toLowerCase()) ||
+    employee.name === user.name
+}
+
+function toEmployeeType(value) {
+  const normalized = String(value ?? 'professional')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (normalized === 'caixa' || normalized === 'cashier') return 'cashier'
+  if (normalized === 'admin') return 'admin'
+  return 'professional'
+}
+
 function normalizeLoginPart(value, fallback) {
   const normalized = (value || '')
     .normalize('NFD')
@@ -509,6 +527,10 @@ function cashValue(entry) {
   return Number(entry?.valor ?? entry?.value ?? 0)
 }
 
+function cashDiscount(entry) {
+  return Number(field(entry, 'discount') ?? field(entry, 'desconto') ?? 0)
+}
+
 function cashDate(entry) {
   return field(entry, 'date', 'data') ?? todayIso
 }
@@ -569,7 +591,7 @@ function normalizeAppointmentStatus(status) {
   if (normalized === 'confirmado') return 'confirmado'
   if (normalized === 'em_atendimento' || normalized === 'ematendimento' || normalized === 'em atendimento') return 'em_atendimento'
   if (normalized === 'aguardando_pagamento' || normalized === 'aguardandopagamento' || normalized === 'aguardando pagamento') return 'aguardando_pagamento'
-  if (normalized === 'concluido') return 'concluido'
+  if (normalized === 'concluido' || normalized === 'finalizado') return 'concluido'
   if (normalized === 'cancelado') return 'cancelado'
   return 'agendado'
 }
@@ -594,6 +616,15 @@ const appointmentStatusLabels = {
 
 function formatAppointmentStatus(status) {
   return appointmentStatusLabels[normalizeAppointmentStatus(status)] ?? 'Agendado'
+}
+
+function appointmentStatusTone(status) {
+  const normalized = normalizeAppointmentStatus(status)
+  if (normalized === 'concluido') return 'green'
+  if (normalized === 'cancelado') return 'rose'
+  if (normalized === 'em_atendimento') return 'cyan'
+  if (normalized === 'aguardando_pagamento') return 'amber'
+  return 'violet'
 }
 
 function cashAppointmentId(entry) {
@@ -665,6 +696,7 @@ function advanceCreatedDate(advance) {
 }
 
 function advanceStatus(advance) {
+  if (advanceCancelledAt(advance)) return 'cancelado'
   return normalizeAdvanceStatus(field(advance, 'status'))
 }
 
@@ -672,8 +704,12 @@ function advanceDiscountedDate(advance) {
   return String(field(advance, 'discountedAt', 'discounted_at') ?? '').slice(0, 10)
 }
 
-function isActiveAdvance(advance) {
-  return advanceStatus(advance) !== 'cancelado'
+function advanceCancelledAt(advance) {
+  return field(advance, 'cancelledAt', 'cancelled_at')
+}
+
+function isValidAdvance(advance) {
+  return advanceStatus(advance) !== 'cancelado' && !advanceCancelledAt(advance)
 }
 
 function isAdvanceForEmployee(advance, employeeId, employeeName) {
@@ -688,15 +724,15 @@ function advanceInPeriod(advance, startDate, endDate) {
   return created && start && end && created >= start && created <= end
 }
 
-function advanceStatusLabel(status) {
-  const normalized = normalizeAdvanceStatus(status)
+function advanceStatusLabel(advance) {
+  const normalized = typeof advance === 'object' ? advanceStatus(advance) : normalizeAdvanceStatus(advance)
   if (normalized === 'descontado') return 'Descontado'
   if (normalized === 'cancelado') return 'Cancelado'
   return 'Pendente'
 }
 
-function advanceStatusTone(status) {
-  const normalized = normalizeAdvanceStatus(status)
+function advanceStatusTone(advance) {
+  const normalized = typeof advance === 'object' ? advanceStatus(advance) : normalizeAdvanceStatus(advance)
   if (normalized === 'descontado') return 'green'
   if (normalized === 'cancelado') return 'rose'
   return 'amber'
@@ -709,7 +745,9 @@ function isAppointmentCashEntry(entry) {
 function createCompletedAppointmentCashEntry(appointment, employees = [], serviceItems = services) {
   const service = serviceItems.find((item) => String(item.id) === String(appointment.serviceId ?? appointment.service_id) || item.name === appointment.service)
   const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
-  const serviceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
+  const originalServiceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
+  const discount = Math.min(Math.max(Number(appointment.discount ?? appointment.desconto ?? 0) || 0, 0), originalServiceValue)
+  const serviceValue = Math.max(originalServiceValue - discount, 0)
   const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? employee?.commission ?? employee?.commission_percent ?? 0) || 0
   const commissionValue = (serviceValue * commissionPercent) / 100
   const salonValue = serviceValue - commissionValue
@@ -723,6 +761,8 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     categoria: 'Atendimento',
     description: `Atendimento - ${appointment.client}`,
     descricao: `Atendimento - ${appointment.client}`,
+    notes: appointment.notes ?? appointment.observacao ?? '',
+    observacao: appointment.notes ?? appointment.observacao ?? '',
     paymentMethod,
     payment_method: paymentMethod,
     paymentStatus,
@@ -738,6 +778,8 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     employee_name: employee?.name ?? getAppointmentEmployeeName(appointment) ?? '',
     serviceValue,
     service_value: serviceValue,
+    discount,
+    desconto: discount,
     commissionPercent,
     commission_percent: commissionPercent,
     commissionValue,
@@ -871,8 +913,8 @@ function normalizeClientRecord(row) {
 
 function normalizeEmployeeRecord(row) {
   const rawRole = field(row, 'role')
-  const rawFunctions = field(row, 'functions') ?? field(row, 'position') ?? rawRole ?? ''
-  const employeeType = field(row, 'employeeType', 'employee_type') ?? (['cashier', 'caixa'].includes(rawRole) ? 'cashier' : 'professional')
+  const employeeType = toEmployeeType(field(row, 'employeeType', 'employee_type') ?? field(row, 'tipoUsuario', 'tipo_usuario') ?? (['cashier', 'caixa'].includes(rawRole) ? 'cashier' : 'professional'))
+  const rawFunctions = employeeType === 'cashier' ? [] : (field(row, 'functions') ?? field(row, 'funcoes') ?? field(row, 'position') ?? rawRole ?? '')
   const professional = employeeType === 'professional'
   const status = field(row, 'status') || 'ativo'
   const loginStatus = field(row, 'loginStatus', 'login_status') ?? ''
@@ -894,6 +936,9 @@ function normalizeEmployeeRecord(row) {
     commission: Number(field(row, 'commission') ?? commissionPercent ?? 0),
     workStatus: field(row, 'workStatus', 'work_status') ?? status,
     employeeType,
+    tipoUsuario: employeeType === 'cashier' ? 'caixa' : employeeType === 'admin' ? 'admin' : 'profissional',
+    tipo_usuario: field(row, 'tipo_usuario') ?? (employeeType === 'cashier' ? 'caixa' : employeeType === 'admin' ? 'admin' : 'profissional'),
+    funcoes: professional ? toList(field(row, 'funcoes') ?? rawFunctions) : [],
     workStart: field(row, 'workStart', 'work_start') ?? (professional ? '09:00' : ''),
     workEnd: field(row, 'workEnd', 'work_end') ?? (professional ? '18:00' : ''),
     breakStart: field(row, 'breakStart', 'break_start') ?? '',
@@ -976,6 +1021,10 @@ function normalizeCashMovementRecord(row) {
     payment_method: normalizedPaymentMethod,
     value: Number(field(row, 'value') ?? field(row, 'valor') ?? 0),
     valor: Number(field(row, 'valor') ?? field(row, 'value') ?? 0),
+    discount: Number(field(row, 'discount') ?? field(row, 'desconto') ?? 0),
+    desconto: Number(field(row, 'desconto') ?? field(row, 'discount') ?? 0),
+    notes: field(row, 'notes') ?? field(row, 'observacao') ?? '',
+    observacao: field(row, 'observacao') ?? field(row, 'notes') ?? '',
     date: field(row, 'date') ?? field(row, 'data') ?? todayIso,
     data: field(row, 'data') ?? field(row, 'date') ?? todayIso,
     status: normalizePaymentStatus(field(row, 'paymentStatus', 'payment_status') ?? field(row, 'status') ?? ''),
@@ -1040,6 +1089,8 @@ function normalizeCashClosureRecord(row) {
     salon_profit: Number(field(row, 'salon_profit') ?? field(row, 'salonProfit') ?? 0),
     balance: Number(field(row, 'balance', 'final_balance') ?? 0),
     final_balance: Number(field(row, 'final_balance') ?? field(row, 'balance') ?? 0),
+    notes: field(row, 'notes') ?? field(row, 'observacao') ?? '',
+    observacao: field(row, 'observacao') ?? field(row, 'notes') ?? '',
     createdAt: field(row, 'createdAt', 'created_at'),
     created_at: field(row, 'created_at') ?? field(row, 'createdAt')
   }
@@ -1075,7 +1126,8 @@ function normalizeCommissionPaymentRecord(row) {
 
 function normalizeAdvanceRecord(row) {
   const employeeName = field(row, 'employeeName', 'employee_name') ?? ''
-  const status = normalizeAdvanceStatus(field(row, 'status'))
+  const cancelledAt = field(row, 'cancelledAt', 'cancelled_at')
+  const status = cancelledAt ? 'cancelado' : normalizeAdvanceStatus(field(row, 'status'))
   const createdAt = field(row, 'createdAt', 'created_at') ?? todayIso
   const notes = field(row, 'notes') ?? ''
   return {
@@ -1090,7 +1142,7 @@ function normalizeAdvanceRecord(row) {
     status,
     discountedAt: field(row, 'discountedAt', 'discounted_at'),
     discounted_at: field(row, 'discounted_at') ?? field(row, 'discountedAt'),
-    cancelledAt: field(row, 'cancelledAt', 'cancelled_at'),
+    cancelledAt,
     cancelled_at: field(row, 'cancelled_at') ?? field(row, 'cancelledAt'),
     notes
   }
@@ -1241,12 +1293,16 @@ const adminMenu = [
 ]
 
 const cashierMenu = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'agenda', label: 'Agenda' },
-  { id: 'caixa', label: 'Caixa' }
+  { id: 'clientes', label: 'Clientes' },
+  { id: 'caixa', label: 'Caixa' },
+  { id: 'vales', label: 'Vales' }
 ]
 
 const professionalMenu = [
   { id: 'minha-agenda', label: 'Minha Agenda' },
+  { id: 'clientes', label: 'Clientes' },
   { id: 'perfil', label: 'Perfil' }
 ]
 
@@ -1385,7 +1441,7 @@ function normalizeUserProfile(profile, employees = []) {
     role,
     dbRole: profile.role,
     employeeId: employee?.id,
-    name: profile.name,
+    name: employee?.name ?? profile.name,
     title: getRoleTitle(role),
     email: profile.email,
     phone: employee?.phone ?? ''
@@ -1410,8 +1466,9 @@ function createAdminFallbackUser(authUser) {
 
 function getInitialPageForRole(role) {
   if (role === 'admin') return 'dashboard'
+  if (role === 'cashier') return 'caixa'
   if (role === 'professional') return 'minha-agenda'
-  return 'agenda'
+  return 'caixa'
 }
 
 function App() {
@@ -1522,7 +1579,7 @@ function App() {
       services = normalizedServices
       const normalizedAppointments = (appointmentRows ?? []).map((appointment) => normalizeAppointmentRecord(appointment, normalizedEmployees))
       const normalizedAdvances = (advanceRows ?? []).map(normalizeAdvanceRecord)
-      const advanceCashEntries = normalizedAdvances.map((advance) => createAdvanceCashEntry(advance))
+      const advanceCashEntries = normalizedAdvances.filter(isValidAdvance).map((advance) => createAdvanceCashEntry(advance))
 
       setSalonSettings(normalizeSalonSettings(salonRow ?? {}))
       setClients((clientRows ?? []).map(normalizeClientRecord))
@@ -1968,8 +2025,8 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
   const search = query.trim().toLowerCase()
   const results = canSearchGlobal && search ? [
     ...clients.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Cliente', page: 'clientes' })),
-    ...services.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Serviço', page: 'servicos' })),
-    ...employees.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Funcionário', page: 'funcionarios' })),
+    ...(user.role === 'admin' ? services.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Serviço', page: 'servicos' })) : []),
+    ...(user.role === 'admin' ? employees.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Funcionário', page: 'funcionarios' })) : []),
     ...appointments.filter((item) => `${item.client} ${item.service} ${getAppointmentEmployeeName(item, employees)}`.toLowerCase().includes(search)).map((item) => ({ label: `${item.client} · ${item.time}`, detail: `Agenda · ${item.service}`, page: 'agenda' }))
   ].slice(0, 8) : []
 
@@ -2036,14 +2093,16 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
   if (dataLoading) return <DataLoading />
 
   const pages = {
-    dashboard: <AdminDashboard appointments={appointments} employees={employees} clients={clients} cashEntries={cashEntries} advances={advances} />,
+    dashboard: user.role === 'admin'
+      ? <AdminDashboard appointments={appointments} employees={employees} clients={clients} cashEntries={cashEntries} advances={advances} />
+      : <CashierDashboard appointments={appointments} employees={employees} cashEntries={cashEntries} advances={advances} />,
     agenda: <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} cashEntries={cashEntries} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />,
     clientes: <Clients salonId={salonId} user={user} clients={clients} setClients={setClients} appointments={appointments} notify={notify} />,
-    servicos: <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} />,
-    funcionarios: <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} />,
+    servicos: user.role === 'admin' ? <Services salonId={salonId} user={user} services={services} setServices={setServices} notify={notify} /> : <AccessDenied />,
+    funcionarios: user.role === 'admin' ? <Employees salonId={salonId} user={user} employees={employees} setEmployees={setEmployees} appointments={appointments} salonSettings={salonSettings} onOpenAgendaForProfessional={onOpenAgendaForProfessional} notify={notify} /> : <AccessDenied />,
     caixa: <CashRegister salonId={salonId} user={user} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} advances={advances} serviceItems={services} setAuditLogs={setAuditLogs} notify={notify} />,
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances salonId={salonId} user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
-    estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
+    estoque: user.role === 'admin' ? <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} /> : <AccessDenied />,
     relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} advances={advances} setAdvances={setAdvances} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
     auditoria: user.role === 'admin' ? <AuditTrail auditLogs={auditLogs} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
@@ -2052,6 +2111,50 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
   }
 
   return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} cashEntries={cashEntries} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
+}
+
+function CashierDashboard({ appointments, employees, cashEntries, advances }) {
+  const summary = buildCashClosureSummary(cashEntries, todayIso)
+  const validAdvances = advances.filter(isValidAdvance)
+  const dayAppointments = appointments.filter((item) => item.date === todayIso && !isCancelledStatus(item.status))
+  const waitingPayments = dayAppointments.filter((item) => normalizeAppointmentStatus(item.status) === 'em_atendimento' || normalizeAppointmentStatus(item.status) === 'aguardando_pagamento')
+  const nextAppointments = dayAppointments
+    .slice()
+    .sort((a, b) => String(a.time ?? '').localeCompare(String(b.time ?? '')))
+    .slice(0, 6)
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Dashboard do caixa</h3>
+        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Resumo operacional do dia, sem áreas administrativas.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric title="Total do dia" value={money.format(summary.totalReceived)} detail="Entradas pagas" />
+        <Metric title="Dinheiro" value={money.format(summary.cash)} detail="Recebido hoje" />
+        <Metric title="Pix" value={money.format(summary.pix)} detail="Recebido hoje" />
+        <Metric title="Cartão" value={money.format(summary.debit + summary.credit)} detail="Débito e crédito" />
+        <Metric title="Atendimentos pendentes" value={String(waitingPayments.length)} detail="Aguardando finalização" />
+        <Metric title="Saídas / sangria" value={money.format(summary.outcome)} detail="Movimentos do dia" />
+        <Metric title="Vales pendentes" value={money.format(validAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0))} detail="Sem vales cancelados" />
+        <Metric title="Resultado do dia" value={money.format(summary.balance)} detail="Entradas - saídas" />
+      </div>
+      <Panel title="Agenda do dia">
+        <div className="space-y-3">
+          {nextAppointments.map((item) => (
+            <div key={item.id} className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-bold text-graphite dark:text-gray-100">{item.time} · {item.client}</p>
+                <StatusBadge tone={appointmentStatusTone(item.status)}>{formatAppointmentStatus(item.status)}</StatusBadge>
+              </div>
+              <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{item.service} com {getAppointmentEmployeeName(item, employees)}</p>
+            </div>
+          ))}
+          {nextAppointments.length === 0 && <EmptyState>Nenhum atendimento agendado para hoje.</EmptyState>}
+        </div>
+      </Panel>
+    </div>
+  )
 }
 
 function AdminDashboard({ appointments, employees, clients, cashEntries, advances }) {
@@ -2077,10 +2180,10 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const dashboardByMethod = (methods) => paidIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
   const pendingPaymentsTotal = cashEntries.filter(isPendingIncomeCashEntry).reduce((sum, item) => sum + cashServiceValue(item), 0)
   const cashOutcome = cashEntries.filter((item) => isActiveCashEntry(item) && cashType(item) === 'saida').reduce((sum, item) => sum + cashValue(item), 0)
-  const activeAdvances = advances.filter(isActiveAdvance)
-  const dayAdvances = activeAdvances.filter((item) => advanceCreatedDate(item) === todayIso).reduce((sum, item) => sum + advanceValue(item), 0)
-  const monthAdvances = activeAdvances.filter((item) => advanceCreatedDate(item).startsWith(currentMonth)).reduce((sum, item) => sum + advanceValue(item), 0)
-  const pendingAdvances = activeAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0)
+  const validAdvances = advances.filter(isValidAdvance)
+  const dayAdvances = validAdvances.filter((item) => advanceCreatedDate(item) === todayIso).reduce((sum, item) => sum + advanceValue(item), 0)
+  const monthAdvances = validAdvances.filter((item) => advanceCreatedDate(item).startsWith(currentMonth)).reduce((sum, item) => sum + advanceValue(item), 0)
+  const pendingAdvances = validAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0)
   const faturamentoHoje = dayRevenue
   const resumoMensagem = faturamentoHoje > 0
     ? `Hoje você já faturou ${faturamentoHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
@@ -3117,16 +3220,16 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
   }
 
   async function saveEmployee(data) {
-    const employeeType = 'professional'
+    const employeeType = toEmployeeType(data.employeeType)
     const selectedFunctions = toList(data.selectedFunctions ?? data.role)
       .filter((option) => employeeFunctionOptions.includes(option))
-    const employeeFunctions = selectedFunctions.join(', ')
+    const employeeFunctions = employeeType === 'professional' ? selectedFunctions.join(', ') : ''
     const wantsLogin = Boolean(data.loginActive)
     const loginEmail = data.accessEmail?.trim().toLowerCase() ?? ''
     const temporaryPassword = data.temporaryPassword?.trim() ?? ''
     const employeeName = data.name.trim()
-    if (!data.name.trim() || !data.phone.trim() || !employeeFunctions) {
-      notify?.('Erro ao salvar: informe nome, telefone e função.', 'error')
+    if (!data.name.trim() || !data.phone.trim() || (employeeType === 'professional' && !employeeFunctions)) {
+      notify?.(employeeType === 'professional' ? 'Erro ao salvar: informe nome, telefone e funções profissionais.' : 'Erro ao salvar: informe nome e telefone.', 'error')
       return
     }
     if (wantsLogin && !salonId) {
@@ -3146,10 +3249,13 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     const payload = {
       ...data,
       employeeType,
+      tipoUsuario: employeeType === 'cashier' ? 'caixa' : 'profissional',
+      tipo_usuario: employeeType === 'cashier' ? 'caixa' : 'profissional',
       employeeName,
       employee_name: employeeName,
       role: employeeFunctions,
       functions: employeeFunctions,
+      funcoes: employeeType === 'professional' ? selectedFunctions : [],
       position: employeeFunctions,
       commission: Number(data.commission) || 0,
       defaultDuration: Number(data.defaultDuration) || 60,
@@ -3166,7 +3272,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
         id: item.id ?? Date.now() + index,
         value: Number(item.value) || 0
       })),
-      services: toList(data.services)
+      services: employeeType === 'professional' ? toList(data.services) : []
     }
     delete payload.selectedFunctions
     delete payload.servicesText
@@ -3316,7 +3422,8 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
             <span className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs font-bold ${item.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{item.active ? 'Ativo' : 'Inativo'}</span>
           </div>
           <p className="min-w-0 text-sm text-gray-500">{item.phone}</p>
-          <p className="min-w-0 text-sm text-gray-600">Funções: <strong>{formatEmployeeFunctions(item.role) || 'Não informado'}</strong></p>
+          <p className="min-w-0 text-sm text-gray-600">Tipo de usuário: <strong>{item.employeeType === 'cashier' ? 'Caixa' : 'Profissional'}</strong></p>
+          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Funções profissionais: <strong>{formatEmployeeFunctions(item.role) || 'Não informado'}</strong></p>}
           <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong></p>
           {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className={buttonSecondary}>{uiText.common.edit}</button><button onClick={() => deactivateEmployee(item)} disabled={!item.active} className={buttonSecondary}>Desativar</button><button onClick={() => removeEmployee(item)} className={buttonDanger}>{uiText.common.remove}</button></div>}
         </div>
@@ -3327,10 +3434,11 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 }
 
 function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
-  const defaultAccessEmail = employee?.accessEmail ?? getSuggestedAccessEmail({ name: employee?.name, employeeType: 'professional', salonSettings })
+  const initialEmployeeType = toEmployeeType(employee?.employeeType)
+  const defaultAccessEmail = employee?.accessEmail ?? getSuggestedAccessEmail({ name: employee?.name, employeeType: initialEmployeeType, salonSettings })
   const [form, setForm] = useState(employee ? {
     ...employee,
-    employeeType: 'professional',
+    employeeType: initialEmployeeType,
     role: formatEmployeeFunctions(employee.role),
     workStatus: employee.workStatus ?? 'Ativo',
     workStart: employee.workStart ?? '09:00',
@@ -3348,15 +3456,30 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
   const [selectedFunctions, setSelectedFunctions] = useState(() => (
     toList(employee ? employee.role : '').filter((option) => employeeFunctionOptions.includes(option))
   ))
-  const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: 'professional', salonSettings })
+  const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
 
   function updateName(name) {
-    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: 'professional', salonSettings })
+    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
     setForm((current) => ({
       ...current,
       name,
       accessEmail: !current.accessEmail || current.accessEmail === previousSuggestion
-        ? getSuggestedAccessEmail({ name, employeeType: 'professional', salonSettings })
+        ? getSuggestedAccessEmail({ name, employeeType: current.employeeType, salonSettings })
+        : current.accessEmail
+    }))
+  }
+
+  function updateEmployeeType(employeeType) {
+    const previousSuggestion = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
+    if (employeeType === 'cashier') setSelectedFunctions([])
+    setForm((current) => ({
+      ...current,
+      employeeType,
+      role: employeeType === 'cashier' ? '' : current.role,
+      commission: employeeType === 'cashier' ? 0 : current.commission,
+      services: employeeType === 'cashier' ? [] : current.services,
+      accessEmail: !current.accessEmail || current.accessEmail === previousSuggestion
+        ? getSuggestedAccessEmail({ name: current.name, employeeType, salonSettings })
         : current.accessEmail
     }))
   }
@@ -3372,7 +3495,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
   function generateLogin() {
     setForm((current) => ({
       ...current,
-      accessEmail: getSuggestedAccessEmail({ name: current.name, employeeType: 'professional', salonSettings }),
+      accessEmail: getSuggestedAccessEmail({ name: current.name, employeeType: current.employeeType, salonSettings }),
       temporaryPassword: current.temporaryPassword || String(Math.floor(100000 + Math.random() * 900000)),
       loginActive: true
     }))
@@ -3383,7 +3506,8 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
       <form onSubmit={(event) => { event.preventDefault(); onSave({ ...form, selectedFunctions }) }} className="space-y-3">
         <Field label="Nome" value={form.name} onChange={updateName} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
-        <CheckboxGroup label="Função" options={employeeFunctionOptions} selected={selectedFunctions} onToggle={toggleFunction} />
+        <Select label="Tipo de usuário" value={form.employeeType} onChange={updateEmployeeType} options={['Profissional', 'Caixa']} values={['professional', 'cashier']} />
+        {form.employeeType === 'professional' && <CheckboxGroup label="Funções profissionais" options={employeeFunctionOptions} selected={selectedFunctions} onToggle={toggleFunction} />}
         <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -3424,13 +3548,18 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
   const commissionPaid = summary.commission
   const salonProfit = summary.salonProfit
   const pendingTotal = summary.pending
-  const activeAdvances = advances.filter(isActiveAdvance)
-  const paidAdvancesToday = activeAdvances.filter((item) => advanceCreatedDate(item) === cashDateFilter).reduce((sum, item) => sum + advanceValue(item), 0)
-  const pendingAdvances = activeAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0)
+  const validAdvances = advances.filter(isValidAdvance)
+  const paidAdvancesToday = validAdvances.filter((item) => advanceCreatedDate(item) === cashDateFilter).reduce((sum, item) => sum + advanceValue(item), 0)
+  const pendingAdvances = validAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0)
   const awaitingPaymentAppointments = appointments.filter((item) => {
     const entry = entries.find((cashEntry) => String(cashAppointmentId(cashEntry) ?? '') === String(item.id))
-    return normalizeAppointmentStatus(item.status) === 'em_atendimento' && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && !entry
+    const status = normalizeAppointmentStatus(item.status)
+    return (status === 'em_atendimento' || status === 'aguardando_pagamento') && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && !entry
   })
+  const cashDayAppointments = appointments
+    .filter((item) => item.date === cashDateFilter && !isCancelledStatus(item.status))
+    .slice()
+    .sort((a, b) => String(a.time ?? '').localeCompare(String(b.time ?? '')))
   const pendingPayments = entries.filter(isPendingIncomeCashEntry)
   const employeeCommissions = Object.values(paidIncomeEntries.filter(isAppointmentCashEntry).reduce((acc, item) => {
     const key = String(field(item, 'employeeId', 'employee_id') ?? cashEmployeeName(item) ?? 'sem-profissional')
@@ -3442,12 +3571,24 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
   }, {})).sort((a, b) => b.value - a.value)
   const alreadyClosed = closures.some((item) => item.date === cashDateFilter)
 
-  async function receiveAppointmentPayment(appointment, paymentMethod) {
+  async function receiveAppointmentPayment(appointment, paymentMethod, paymentDetails = {}) {
+    if (isCompletedStatus(appointment.status)) {
+      notify?.('Atendimento já finalizado.', 'error')
+      return
+    }
+    const originalValue = Number(appointment.value ?? appointment.valor ?? 0) || 0
+    const discount = Math.min(Math.max(Number(paymentDetails.discount ?? 0) || 0, 0), originalValue)
     const normalizedMethod = normalizeAppointmentPaymentMethod(paymentMethod) ?? 'pendente'
     const paymentStatus = normalizedMethod === 'pendente' ? 'pendente' : 'pago'
     const appointmentStatus = paymentStatus === 'pago' ? 'concluido' : 'aguardando_pagamento'
     const payload = createCompletedAppointmentCashEntry({
       ...appointment,
+      value: originalValue,
+      valor: originalValue,
+      discount,
+      desconto: discount,
+      notes: paymentDetails.notes ?? '',
+      observacao: paymentDetails.notes ?? '',
       paymentMethod: normalizedMethod,
       payment_method: normalizedMethod,
       paymentStatus,
@@ -3576,7 +3717,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
     setClosureModalOpen(true)
   }
 
-  async function confirmCloseDay() {
+  async function confirmCloseDay(notes = '') {
     if (alreadyClosed) {
       notify?.('Caixa ja fechado para esta data.', 'error')
       return
@@ -3594,6 +3735,8 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
         commission: summary.commission,
         salonProfit: summary.salonProfit,
         balance: summary.balance,
+        notes,
+        observacao: notes,
         createdAt: new Date().toISOString()
       }))
       await recordAuditLog({
@@ -3626,17 +3769,18 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       return
     }
     const ownerWithdrawal = data.type === 'Retirada do dono'
+    const cashOut = ownerWithdrawal || data.type === 'Sangria' || data.type === 'Saída' || data.type === 'Saida'
     if (ownerWithdrawal && !window.confirm(`Confirmar retirada do dono no valor de ${money.format(value)}?`)) return
     const selectedMethod = normalizeAppointmentPaymentMethod(data.paymentMethod) ?? 'pendente'
     const paymentStatus = selectedMethod === 'pendente' ? 'pendente' : 'pago'
     const payload = {
       id: Date.now(),
-      type: ownerWithdrawal ? 'saida' : data.type,
-      tipo: ownerWithdrawal ? 'saida' : data.type.toLowerCase(),
+      type: data.type === 'Sangria' ? 'sangria' : cashOut ? 'saida' : 'entrada',
+      tipo: data.type === 'Sangria' ? 'sangria' : cashOut ? 'saida' : 'entrada',
       description: data.description.trim(),
       descricao: data.description.trim(),
-      category: ownerWithdrawal ? 'retirada_dono' : data.category.trim() || 'Operacional',
-      categoria: ownerWithdrawal ? 'retirada_dono' : data.category.trim() || 'Operacional',
+      category: ownerWithdrawal ? 'retirada_dono' : data.type === 'Sangria' ? 'sangria' : data.category.trim() || 'Operacional',
+      categoria: ownerWithdrawal ? 'retirada_dono' : data.type === 'Sangria' ? 'sangria' : data.category.trim() || 'Operacional',
       paymentMethod: selectedMethod,
       payment_method: selectedMethod,
       status: paymentStatus,
@@ -3711,6 +3855,28 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       </div>
       </section>
 
+      <Panel title="Agenda do dia">
+        <div className="space-y-3">
+          {cashDayAppointments.map((item) => (
+            <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-bold text-graphite dark:text-gray-100">{item.time} · {item.client}</p>
+                  <StatusBadge tone={appointmentStatusTone(item.status)}>{formatAppointmentStatus(item.status)}</StatusBadge>
+                </div>
+                <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{item.service} com {getAppointmentEmployeeName(item, employees)} · {money.format(Number(item.value ?? item.valor ?? 0) || 0)}</p>
+              </div>
+              {(normalizeAppointmentStatus(item.status) === 'em_atendimento' || normalizeAppointmentStatus(item.status) === 'aguardando_pagamento') && (
+                <button type="button" onClick={() => setPaymentAppointment(item)} className="focus-ring rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">
+                  Finalizar
+                </button>
+              )}
+            </div>
+          ))}
+          {cashDayAppointments.length === 0 && <EmptyState>Nenhum atendimento agendado para esta data.</EmptyState>}
+        </div>
+      </Panel>
+
       <Panel title={uiText.cash.receivePayment}>
         <div className="space-y-3">
           {awaitingPaymentAppointments.map((item) => {
@@ -3774,8 +3940,8 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       <Panel title={uiText.cash.movements}>
         <Table
           rows={todayEntries}
-          columns={['date', 'client', 'service', 'employee', 'paymentMethod', 'status', 'value', 'commission', 'salon']}
-          labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Forma', 'Status', 'Valor total', 'Comissão', 'Salão']}
+          columns={['date', 'client', 'service', 'employee', 'paymentMethod', 'status', 'discount', 'value', 'commission', 'salon']}
+          labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Forma', 'Status', 'Desconto', 'Valor total', 'Comissão', 'Salão']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
             if (key === 'client') return cashClientName(row) || cashDescription(row) || '-'
@@ -3786,6 +3952,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
               return paymentMethod ? <PaymentMethodBadge method={paymentMethod} /> : '-'
             }
             if (key === 'status') return <StatusBadge tone={cashStatus(row) === 'pago' ? 'green' : 'amber'}>{cashStatus(row) === 'pago' ? 'Pago' : 'Pendente'}</StatusBadge>
+            if (key === 'discount') return money.format(cashDiscount(row))
             if (key === 'value') return money.format(cashType(row) === 'entrada' ? cashServiceValue(row) : cashValue(row))
             if (key === 'commission') return isAppointmentCashEntry(row) ? money.format(cashCommissionValue(row)) : '-'
             if (key === 'salon') return isAppointmentCashEntry(row) ? money.format(cashSalonValue(row)) : '-'
@@ -3835,6 +4002,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
 }
 
 function CashClosureModal({ summary, onClose, onConfirm }) {
+  const [notes, setNotes] = useState('')
   const rows = [
     ['Data do fechamento', formatDate(summary.date)],
     ['Total recebido', money.format(summary.totalReceived)],
@@ -3863,9 +4031,10 @@ function CashClosureModal({ summary, onClose, onConfirm }) {
             </div>
           ))}
         </div>
+        <Field label="Observação" value={notes} onChange={setNotes} />
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
-          <button type="button" onClick={onConfirm} className={buttonPrimary}>Confirmar fechamento</button>
+          <button type="button" onClick={() => onConfirm(notes)} className={buttonPrimary}>Confirmar fechamento</button>
         </div>
       </div>
     </Modal>
@@ -3875,17 +4044,21 @@ function CashClosureModal({ summary, onClose, onConfirm }) {
 function ReceivePaymentModal({ appointment, employees, serviceItems, existingEntry, onClose, onConfirm }) {
   const existingMethod = normalizeAppointmentPaymentMethod(cashMethod(existingEntry) || appointment.paymentMethod || appointment.payment_method) ?? 'pix'
   const [paymentMethod, setPaymentMethod] = useState(existingMethod)
+  const [discount, setDiscount] = useState(cashDiscount(existingEntry))
+  const [notes, setNotes] = useState(field(existingEntry, 'notes') ?? field(existingEntry, 'observacao') ?? '')
   const service = serviceItems.find((item) => String(item.id) === String(appointment.serviceId ?? appointment.service_id) || item.name === appointment.service)
   const employee = employees.find((item) => isAppointmentForEmployee(appointment, item))
   const serviceValue = Number(appointment.value ?? appointment.valor ?? service?.price ?? 0) || 0
+  const safeDiscount = Math.min(Math.max(Number(discount) || 0, 0), serviceValue)
+  const finalValue = Math.max(serviceValue - safeDiscount, 0)
   const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? employee?.commission ?? employee?.commission_percent ?? 0) || 0
-  const commissionValue = serviceValue * (commissionPercent / 100)
-  const salonValue = serviceValue - commissionValue
+  const commissionValue = finalValue * (commissionPercent / 100)
+  const salonValue = finalValue - commissionValue
   const paymentStatus = paymentMethod === 'pendente' ? 'pendente' : 'pago'
 
   return (
     <Modal title="Receber pagamento" onClose={onClose}>
-      <form onSubmit={(event) => { event.preventDefault(); onConfirm(appointment, paymentMethod) }} className="space-y-4">
+      <form onSubmit={(event) => { event.preventDefault(); onConfirm(appointment, paymentMethod, { discount: safeDiscount, notes }) }} className="space-y-4">
         <div className="rounded-2xl border border-blush bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
           <div className="grid gap-3 sm:grid-cols-3">
             <div><p className="text-xs font-black uppercase text-gray-400">Cliente</p><p className="mt-1 text-graphite dark:text-gray-100">{appointment.client}</p></div>
@@ -3895,8 +4068,13 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <Metric title="Valor total" value={money.format(serviceValue)} detail="Valor do serviço" />
-          <Metric title="Comissão do profissional" value={money.format(commissionValue)} detail={`${commissionPercent}%`} />
+          <Metric title="Desconto" value={money.format(safeDiscount)} detail="Opcional" />
+          <Metric title="Valor final" value={money.format(finalValue)} detail="Total a receber" />
           <Metric title="Lucro do salão" value={money.format(salonValue)} detail="Valor líquido" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Desconto" type="number" min="0" value={discount} onChange={setDiscount} />
+          <Field label="Observação" value={notes} onChange={setNotes} />
         </div>
         <fieldset className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
           <legend className="px-1 text-sm font-semibold text-gray-600 dark:text-gray-300">Forma de pagamento</legend>
@@ -3915,7 +4093,7 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
         </fieldset>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
-          <button type="button" onClick={() => onConfirm(appointment, 'pendente')} className="focus-ring inline-flex min-h-10 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
+          <button type="button" onClick={() => onConfirm(appointment, 'pendente', { discount: safeDiscount, notes })} className="focus-ring inline-flex min-h-10 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
             Manter pendente
           </button>
           <button className={`${paymentStatus === 'pago' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-500 hover:bg-amber-600'} focus-ring inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition`}>
@@ -3930,10 +4108,11 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
 function CashEntryModal({ onClose, onSave }) {
   const [form, setForm] = useState({ type: 'Entrada', description: '', category: 'Operacional', paymentMethod: 'Pix', value: 0, date: todayIso })
   const ownerWithdrawal = form.type === 'Retirada do dono'
+  const cashOut = ownerWithdrawal || form.type === 'Sangria' || form.type === 'Saída' || form.type === 'Saida'
   return (
     <Modal title="Nova movimentação" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value, category: value === 'Retirada do dono' ? 'retirada_dono' : form.category })} options={['Entrada', 'Saida', 'Retirada do dono']} />
+        <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value, category: value === 'Retirada do dono' ? 'retirada_dono' : value === 'Sangria' ? 'sangria' : form.category })} options={['Entrada', 'Saída', 'Sangria', 'Retirada do dono']} />
         {ownerWithdrawal && (
           <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
             A retirada do dono sera registrada como saida e reduzira o resultado do dia do caixa.
@@ -3942,7 +4121,7 @@ function CashEntryModal({ onClose, onSave }) {
         <Field label="Descrição" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} />
+          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={cashOut ? ['Dinheiro', 'Pix', 'Outro'] : ['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} />
           <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
         </div>
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
@@ -3984,6 +4163,10 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
 
   async function saveAdvance(data) {
     const employee = employees.find((item) => String(item.id) === String(data.employeeId)) ?? employees.find((item) => item.name === data.employeeName)
+    const status = normalizeAdvanceStatus(data.status)
+    const cancelledAt = status === 'cancelado'
+      ? (data.cancelledAt ?? advanceCancelledAt(editing) ?? new Date().toISOString())
+      : null
     const payload = {
       ...data,
       employeeId: employee?.id ?? data.employeeId ?? null,
@@ -3991,11 +4174,11 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       employeeName: employee?.name ?? data.employeeName ?? '',
       employee_name: employee?.name ?? data.employeeName ?? '',
       value: Number(data.value) || 0,
-      status: normalizeAdvanceStatus(data.status),
+      status,
       createdAt: data.createdAt,
       created_at: data.createdAt,
-      cancelledAt: data.cancelledAt ?? null,
-      cancelled_at: data.cancelledAt ?? null,
+      cancelledAt,
+      cancelled_at: cancelledAt,
       notes: data.notes ?? ''
     }
     if (!payload.employeeName || payload.value <= 0 || !payload.createdAt) {
@@ -4022,6 +4205,9 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       })
       setAdvances((current) => current.map((item) => item.id === editing.id ? updatedAdvance : item))
       setCashEntries((current) => {
+        if (!isValidAdvance(updatedAdvance)) {
+          return current.filter((entry) => String(entry.id) !== String(`advance-${editing.id}`))
+        }
         const exists = current.some((entry) => String(entry.id) === String(`advance-${editing.id}`))
         if (!exists) return [...current, createAdvanceCashEntry(updatedAdvance)]
         return current.map((entry) => (
@@ -4034,8 +4220,10 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
     } else {
       const newAdvance = normalizeAdvanceRecord(await createAdvanceRecord(salonId, payload))
       setAdvances((current) => [...current, newAdvance])
-      setCashEntries((current) => [...current, createAdvanceCashEntry(newAdvance)])
-      notify?.('Vale criado e lançado no caixa.')
+      if (isValidAdvance(newAdvance)) {
+        setCashEntries((current) => [...current, createAdvanceCashEntry(newAdvance)])
+      }
+      notify?.(isValidAdvance(newAdvance) ? 'Vale criado e lançado no caixa.' : 'Vale criado.')
     }
     setModalOpen(false)
     } catch (error) {
@@ -4123,7 +4311,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
               <p className="text-lg font-bold">{advanceEmployeeName(item)}</p>
               <p className="mt-1 text-sm text-gray-500">{formatDate(advanceCreatedDate(item))}</p>
             </div>
-            <StatusBadge tone={advanceStatusTone(item.status)}>{advanceStatusLabel(item.status)}</StatusBadge>
+            <StatusBadge tone={advanceStatusTone(item)}>{advanceStatusLabel(item)}</StatusBadge>
           </div>
           <p className="mt-4 text-2xl font-bold text-graphite dark:text-gray-100">{money.format(advanceValue(item))}</p>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{uiText.advances.notes}: {item.notes || '-'}</p>
@@ -4652,7 +4840,7 @@ function buildFinancialReportData({ cashEntries = [], advances = [], employees =
   const periodEntries = (cashEntries || []).filter((entry) => isActiveCashEntry(entry) && inPeriod(entry) && matchesEmployee(entry))
   const appointmentEntries = periodEntries.filter((entry) => isAppointmentCashEntry(entry) && isPaidIncomeCashEntry(entry))
   const pendingEntries = periodEntries.filter(isPendingIncomeCashEntry)
-  const periodAdvances = (advances || []).filter((advance) => isActiveAdvance(advance) && advanceInPeriod(advance, startDate, endDate) && matchesAdvanceEmployee(advance))
+  const periodAdvances = (advances || []).filter((advance) => isValidAdvance(advance) && advanceInPeriod(advance, startDate, endDate) && matchesAdvanceEmployee(advance))
   const employeeRows = Object.values(appointmentEntries.reduce((acc, entry) => {
     const employeeId = field(entry, 'employeeId', 'employee_id')
     const key = employeeId ? String(employeeId) : `name:${cashEmployeeName(entry) || 'sem-funcionario'}`
@@ -4914,7 +5102,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
     acc[key].salonProfit += cashSalonValue(entry)
     return acc
   }, {})).sort((a, b) => b.revenue - a.revenue)
-  const resultAdvances = (advances || []).filter((advance) => isActiveAdvance(advance) && advanceInPeriod(advance, startDate, endDate) && (
+  const resultAdvances = (advances || []).filter((advance) => isValidAdvance(advance) && advanceInPeriod(advance, startDate, endDate) && (
     String(selectedEmployeeId ?? 'todos') === 'todos' ||
     String(advanceEmployeeId(advance) ?? '') === String(selectedEmployeeId) ||
     (selectedEmployeeFilter?.name && advanceEmployeeName(advance) === selectedEmployeeFilter.name)
@@ -5089,7 +5277,7 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
   const [form, setForm] = useState({ paymentMethod: 'pix', notes: '' })
   const [saving, setSaving] = useState(false)
   const totalPending = entries.reduce((sum, entry) => sum + cashCommissionValue(entry), 0)
-  const advancesToDiscount = advances.filter((advance) => advanceStatus(advance) === 'pendente')
+  const advancesToDiscount = advances.filter((advance) => isValidAdvance(advance) && advanceStatus(advance) === 'pendente')
   const advancesTotal = advancesToDiscount.reduce((sum, advance) => sum + advanceValue(advance), 0)
   const netTotal = Math.max(totalPending - advancesTotal, 0)
 
@@ -5370,7 +5558,7 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
 }
 
 function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salonSettings, notify }) {
-  const employee = employees.find((item) => item.id === user.employeeId && isProfessional(item))
+  const employee = employees.find((item) => isProfessional(item) && isEmployeeForUser(item, user))
   const employeeServices = toList(employee?.services || '')
   const [date, setDate] = useState(todayIso)
   const [view, setView] = useState('day')
@@ -5516,7 +5704,7 @@ function MyAppointments({ user, appointments }) {
 }
 
 function EmployeeProfile({ user, appointments, employees, setEmployees }) {
-  const employee = employees.find((item) => item.name === user.name)
+  const employee = employees.find((item) => isEmployeeForUser(item, user))
   const currentStatus = employee?.workStatus ?? 'Ativo'
 
   function updateMyStatus(status) {
