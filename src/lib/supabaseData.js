@@ -8,6 +8,8 @@ export const TABLES = {
   services: 'services',
   appointments: 'appointments',
   cashMovements: 'cash_movements',
+  cashClosures: 'cash_closures',
+  commissionPayments: 'commission_payments',
   advances: 'advances',
   stockItems: 'stock_items'
 }
@@ -210,6 +212,10 @@ function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
     appointment_id: includeSalon || hasField(payload, 'appointmentId') || hasField(payload, 'appointment_id') ? payload.appointmentId ?? payload.appointment_id ?? null : undefined,
     referencia_id: includeSalon || hasField(payload, 'referenciaId') || hasField(payload, 'referencia_id') ? payload.referenciaId ?? payload.referencia_id ?? null : undefined,
     referencia_tipo: includeSalon || hasField(payload, 'referenciaTipo') || hasField(payload, 'referencia_tipo') ? payload.referenciaTipo ?? payload.referencia_tipo ?? '' : undefined,
+    commission_paid: includeSalon || hasField(payload, 'commissionPaid') || hasField(payload, 'commission_paid') ? Boolean(payload.commissionPaid ?? payload.commission_paid) : undefined,
+    commission_paid_at: includeSalon || hasField(payload, 'commissionPaidAt') || hasField(payload, 'commission_paid_at') ? payload.commissionPaidAt ?? payload.commission_paid_at ?? null : undefined,
+    commission_payment_method: includeSalon || hasField(payload, 'commissionPaymentMethod') || hasField(payload, 'commission_payment_method') ? payload.commissionPaymentMethod ?? payload.commission_payment_method ?? '' : undefined,
+    commission_notes: includeSalon || hasField(payload, 'commissionNotes') || hasField(payload, 'commission_notes') ? payload.commissionNotes ?? payload.commission_notes ?? '' : undefined,
     created_at: includeSalon || hasField(payload, 'createdAt') || hasField(payload, 'created_at') ? payload.createdAt ?? payload.created_at : undefined
   })
 }
@@ -220,6 +226,39 @@ function salonPayload(payload = {}) {
     whatsapp: hasField(payload, 'whatsapp') || hasField(payload, 'receptionWhatsapp') ? payload.whatsapp ?? payload.receptionWhatsapp ?? '' : undefined,
     working_days: hasField(payload, 'workingDays') || hasField(payload, 'working_days') ? payload.workingDays ?? payload.working_days ?? [] : undefined,
     opening_hours: hasField(payload, 'openingHours') || hasField(payload, 'opening_hours') ? payload.openingHours ?? payload.opening_hours ?? {} : undefined
+  })
+}
+
+function cashClosurePayload(payload = {}, salonId, includeSalon = false) {
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    date: includeSalon || hasField(payload, 'date') ? payload.date : undefined,
+    total_received: includeSalon || hasField(payload, 'totalReceived') || hasField(payload, 'total_received') ? Number(payload.totalReceived ?? payload.total_received ?? 0) : undefined,
+    pix_total: includeSalon || hasField(payload, 'pix') || hasField(payload, 'pixTotal') || hasField(payload, 'pix_total') ? Number(payload.pix ?? payload.pixTotal ?? payload.pix_total ?? 0) : undefined,
+    cash_total: includeSalon || hasField(payload, 'cash') || hasField(payload, 'cashTotal') || hasField(payload, 'cash_total') ? Number(payload.cash ?? payload.cashTotal ?? payload.cash_total ?? 0) : undefined,
+    debit_total: includeSalon || hasField(payload, 'debit') || hasField(payload, 'debitTotal') || hasField(payload, 'debit_total') ? Number(payload.debit ?? payload.debitTotal ?? payload.debit_total ?? 0) : undefined,
+    credit_total: includeSalon || hasField(payload, 'credit') || hasField(payload, 'creditTotal') || hasField(payload, 'credit_total') ? Number(payload.credit ?? payload.creditTotal ?? payload.credit_total ?? 0) : undefined,
+    pending_total: includeSalon || hasField(payload, 'pending') || hasField(payload, 'pendingTotal') || hasField(payload, 'pending_total') ? Number(payload.pending ?? payload.pendingTotal ?? payload.pending_total ?? 0) : undefined,
+    outcome_total: includeSalon || hasField(payload, 'outcome') || hasField(payload, 'outcomeTotal') || hasField(payload, 'outcome_total') ? Number(payload.outcome ?? payload.outcomeTotal ?? payload.outcome_total ?? 0) : undefined,
+    commission_total: includeSalon || hasField(payload, 'commission') || hasField(payload, 'commissionTotal') || hasField(payload, 'commission_total') ? Number(payload.commission ?? payload.commissionTotal ?? payload.commission_total ?? 0) : undefined,
+    salon_profit: includeSalon || hasField(payload, 'salonProfit') || hasField(payload, 'salon_profit') ? Number(payload.salonProfit ?? payload.salon_profit ?? 0) : undefined,
+    final_balance: includeSalon || hasField(payload, 'balance') || hasField(payload, 'finalBalance') || hasField(payload, 'final_balance') ? Number(payload.balance ?? payload.finalBalance ?? payload.final_balance ?? 0) : undefined,
+    created_at: includeSalon || hasField(payload, 'createdAt') || hasField(payload, 'created_at') ? payload.createdAt ?? payload.created_at : undefined
+  })
+}
+
+function commissionPaymentPayload(payload = {}, salonId, includeSalon = false) {
+  return pickDefined({
+    ...(includeSalon ? { salon_id: salonId } : {}),
+    employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
+    employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? payload.employeeName ?? payload.employee_name ?? '' : undefined,
+    amount: includeSalon || hasField(payload, 'amount') || hasField(payload, 'value') ? Number(payload.amount ?? payload.value ?? 0) : undefined,
+    payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? payload.paymentMethod ?? payload.payment_method ?? '' : undefined,
+    notes: includeSalon || hasField(payload, 'notes') ? payload.notes ?? '' : undefined,
+    period_start: includeSalon || hasField(payload, 'periodStart') || hasField(payload, 'period_start') ? payload.periodStart ?? payload.period_start : undefined,
+    period_end: includeSalon || hasField(payload, 'periodEnd') || hasField(payload, 'period_end') ? payload.periodEnd ?? payload.period_end : undefined,
+    paid_at: includeSalon || hasField(payload, 'paidAt') || hasField(payload, 'paid_at') ? payload.paidAt ?? payload.paid_at : undefined,
+    cash_movement_ids: includeSalon || hasField(payload, 'cashMovementIds') || hasField(payload, 'cash_movement_ids') ? payload.cashMovementIds ?? payload.cash_movement_ids ?? [] : undefined
   })
 }
 
@@ -643,6 +682,34 @@ export async function deleteAppointment(salonId, id) {
 
 export async function fetchCashMovements(salonId) {
   return runQuery(bySalon(TABLES.cashMovements, salonId).order('date', { ascending: false }))
+}
+
+export async function fetchCashClosures(salonId) {
+  try {
+    const data = await runQuery(bySalon(TABLES.cashClosures, salonId).order('date', { ascending: false }))
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    if (isMissingTableError(error?.original ?? error)) return []
+    throw error
+  }
+}
+
+export async function createCashClosure(salonId, payload) {
+  return insertRow(TABLES.cashClosures, salonId, payload, cashClosurePayload)
+}
+
+export async function fetchCommissionPayments(salonId) {
+  try {
+    const data = await runQuery(bySalon(TABLES.commissionPayments, salonId).order('paid_at', { ascending: false }))
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    if (isMissingTableError(error?.original ?? error)) return []
+    throw error
+  }
+}
+
+export async function createCommissionPayment(salonId, payload) {
+  return insertRow(TABLES.commissionPayments, salonId, payload, commissionPaymentPayload)
 }
 
 export async function fetchCashMovementByAppointment(salonId, appointmentId) {

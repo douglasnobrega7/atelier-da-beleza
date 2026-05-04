@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom'
 import { supabase } from './lib/supabase'
 import {
   createAppointment as createAppointmentRecord,
+  createCashClosure as createCashClosureRecord,
   createCashMovement as createCashMovementRecord,
+  createCommissionPayment as createCommissionPaymentRecord,
   createClient as createClientRecord,
   createEmployee as createEmployeeRecord,
   createService as createServiceRecord,
@@ -14,9 +16,11 @@ import {
   ensureAdminSalon,
   fetchAdvances as fetchAdvancesFromSupabase,
   fetchAppointments as fetchAppointmentsFromSupabase,
+  fetchCashClosures as fetchCashClosuresFromSupabase,
   fetchCashMovements as fetchCashMovementsFromSupabase,
   fetchCashMovementByAppointment as fetchCashMovementByAppointmentFromSupabase,
   fetchClients as fetchClientsFromSupabase,
+  fetchCommissionPayments as fetchCommissionPaymentsFromSupabase,
   fetchEmployees as fetchEmployeesFromSupabase,
   fetchSalon,
   fetchServices as fetchServicesFromSupabase,
@@ -97,6 +101,16 @@ function cashPaymentMethodLabel(value) {
 function paymentMethodLabel(value) {
   const labels = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Débito', credito: 'Crédito', pendente: 'Pendente' }
   return labels[normalizeAppointmentPaymentMethod(value)] ?? 'Pendente'
+}
+
+function financialPaymentMethodLabel(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (normalized === 'transferencia') return 'Transferencia'
+  return paymentMethodLabel(value)
 }
 
 function normalizePaymentStatus(value) {
@@ -588,6 +602,22 @@ function cashCommissionValue(entry) {
   return Number(field(entry, 'commissionValue', 'commission_value') ?? 0)
 }
 
+function cashCommissionPaid(entry) {
+  return Boolean(field(entry, 'commissionPaid', 'commission_paid'))
+}
+
+function cashCommissionPaidAt(entry) {
+  return field(entry, 'commissionPaidAt', 'commission_paid_at')
+}
+
+function cashCommissionPaymentMethod(entry) {
+  return field(entry, 'commissionPaymentMethod', 'commission_payment_method') ?? ''
+}
+
+function cashCommissionNotes(entry) {
+  return field(entry, 'commissionNotes', 'commission_notes') ?? ''
+}
+
 function cashSalonValue(entry) {
   return Number(field(entry, 'salonValue', 'salon_value') ?? (cashServiceValue(entry) - cashCommissionValue(entry)))
 }
@@ -683,6 +713,39 @@ function createAdvanceCashEntry(advance) {
     payment_method: 'dinheiro',
     referenciaId: advance.id,
     referenciaTipo: 'vale'
+  }
+}
+
+function buildCashClosureSummary(entries = [], date = todayIso) {
+  const dayEntries = entries.filter((item) => cashDate(item) === date && isActiveCashEntry(item))
+  const incomeEntries = dayEntries.filter((item) => cashType(item) === 'entrada')
+  const paidIncomeEntries = incomeEntries.filter(isPaidIncomeCashEntry)
+  const pendingIncomeEntries = incomeEntries.filter(isPendingIncomeCashEntry)
+  const outcomeEntries = dayEntries.filter((item) => cashType(item) === 'saida')
+  const byMethod = (method) => paidIncomeEntries
+    .filter((item) => cashMethod(item) === method)
+    .reduce((sum, item) => sum + cashServiceValue(item), 0)
+  const totalReceived = paidIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
+  const outcome = outcomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
+  const commission = paidIncomeEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
+  const salonProfit = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
+
+  return {
+    date,
+    entries: dayEntries,
+    paidIncomeEntries,
+    pendingIncomeEntries,
+    outcomeEntries,
+    totalReceived,
+    pix: byMethod('pix'),
+    cash: byMethod('dinheiro'),
+    debit: byMethod('debito'),
+    credit: byMethod('credito'),
+    pending: pendingIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0),
+    outcome,
+    commission,
+    salonProfit,
+    balance: totalReceived - outcome
   }
 }
 
@@ -877,7 +940,66 @@ function normalizeCashMovementRecord(row) {
     createdAt: field(row, 'createdAt', 'created_at'),
     created_at: field(row, 'created_at') ?? field(row, 'createdAt'),
     cancelledAt: field(row, 'cancelledAt', 'cancelled_at'),
-    cancelled_at: field(row, 'cancelled_at') ?? field(row, 'cancelledAt')
+    cancelled_at: field(row, 'cancelled_at') ?? field(row, 'cancelledAt'),
+    commissionPaid: Boolean(field(row, 'commissionPaid', 'commission_paid')),
+    commission_paid: Boolean(field(row, 'commission_paid') ?? field(row, 'commissionPaid')),
+    commissionPaidAt: field(row, 'commissionPaidAt', 'commission_paid_at'),
+    commission_paid_at: field(row, 'commission_paid_at') ?? field(row, 'commissionPaidAt'),
+    commissionPaymentMethod: field(row, 'commissionPaymentMethod', 'commission_payment_method') ?? '',
+    commission_payment_method: field(row, 'commission_payment_method') ?? field(row, 'commissionPaymentMethod') ?? '',
+    commissionNotes: field(row, 'commissionNotes', 'commission_notes') ?? '',
+    commission_notes: field(row, 'commission_notes') ?? field(row, 'commissionNotes') ?? ''
+  }
+}
+
+function normalizeCashClosureRecord(row) {
+  return {
+    ...row,
+    date: field(row, 'date') ?? todayIso,
+    totalReceived: Number(field(row, 'totalReceived', 'total_received') ?? 0),
+    total_received: Number(field(row, 'total_received') ?? field(row, 'totalReceived') ?? 0),
+    pix: Number(field(row, 'pix', 'pix_total') ?? 0),
+    pix_total: Number(field(row, 'pix_total') ?? field(row, 'pix') ?? 0),
+    cash: Number(field(row, 'cash', 'cash_total') ?? 0),
+    cash_total: Number(field(row, 'cash_total') ?? field(row, 'cash') ?? 0),
+    debit: Number(field(row, 'debit', 'debit_total') ?? 0),
+    debit_total: Number(field(row, 'debit_total') ?? field(row, 'debit') ?? 0),
+    credit: Number(field(row, 'credit', 'credit_total') ?? 0),
+    credit_total: Number(field(row, 'credit_total') ?? field(row, 'credit') ?? 0),
+    pending: Number(field(row, 'pending', 'pending_total') ?? 0),
+    pending_total: Number(field(row, 'pending_total') ?? field(row, 'pending') ?? 0),
+    outcome: Number(field(row, 'outcome', 'outcome_total') ?? 0),
+    outcome_total: Number(field(row, 'outcome_total') ?? field(row, 'outcome') ?? 0),
+    commission: Number(field(row, 'commission', 'commission_total') ?? 0),
+    commission_total: Number(field(row, 'commission_total') ?? field(row, 'commission') ?? 0),
+    salonProfit: Number(field(row, 'salonProfit', 'salon_profit') ?? 0),
+    salon_profit: Number(field(row, 'salon_profit') ?? field(row, 'salonProfit') ?? 0),
+    balance: Number(field(row, 'balance', 'final_balance') ?? 0),
+    final_balance: Number(field(row, 'final_balance') ?? field(row, 'balance') ?? 0),
+    createdAt: field(row, 'createdAt', 'created_at'),
+    created_at: field(row, 'created_at') ?? field(row, 'createdAt')
+  }
+}
+
+function normalizeCommissionPaymentRecord(row) {
+  return {
+    ...row,
+    employeeId: field(row, 'employeeId', 'employee_id'),
+    employee_id: field(row, 'employee_id') ?? field(row, 'employeeId'),
+    employeeName: field(row, 'employeeName', 'employee_name') ?? '',
+    employee_name: field(row, 'employee_name') ?? field(row, 'employeeName') ?? '',
+    amount: Number(field(row, 'amount') ?? 0),
+    paymentMethod: field(row, 'paymentMethod', 'payment_method') ?? '',
+    payment_method: field(row, 'payment_method') ?? field(row, 'paymentMethod') ?? '',
+    notes: field(row, 'notes') ?? '',
+    periodStart: field(row, 'periodStart', 'period_start') ?? '',
+    period_start: field(row, 'period_start') ?? field(row, 'periodStart') ?? '',
+    periodEnd: field(row, 'periodEnd', 'period_end') ?? '',
+    period_end: field(row, 'period_end') ?? field(row, 'periodEnd') ?? '',
+    paidAt: field(row, 'paidAt', 'paid_at'),
+    paid_at: field(row, 'paid_at') ?? field(row, 'paidAt'),
+    cashMovementIds: field(row, 'cashMovementIds', 'cash_movement_ids') ?? [],
+    cash_movement_ids: field(row, 'cash_movement_ids') ?? field(row, 'cashMovementIds') ?? []
   }
 }
 
@@ -1124,6 +1246,7 @@ function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [cashEntries, setCashEntries] = useState([])
   const [cashClosures, setCashClosures] = useState([])
+  const [commissionPayments, setCommissionPayments] = useState([])
   const [advances, setAdvances] = useState([])
   const [blockedSlots, setBlockedSlots] = useState([])
   const [salonSettings, setSalonSettings] = useState({ salonName: '', receptionWhatsapp: '', workingDays: defaultWorkingDays, openingHours: defaultOpeningHours })
@@ -1137,6 +1260,7 @@ function App() {
   function clearSalonData() {
     setCashEntries([])
     setCashClosures([])
+    setCommissionPayments([])
     setAdvances([])
     setBlockedSlots([])
     setSalonSettings({ salonName: '', receptionWhatsapp: '', workingDays: defaultWorkingDays, openingHours: defaultOpeningHours })
@@ -1164,6 +1288,8 @@ function App() {
         serviceRows,
         appointmentRows,
         cashMovementRows,
+        cashClosureRows,
+        commissionPaymentRows,
         advanceRows,
         stockRows
       ] = await Promise.all([
@@ -1173,6 +1299,8 @@ function App() {
         fetchServicesFromSupabase(salonId),
         fetchAppointmentsFromSupabase(salonId),
         fetchCashMovementsFromSupabase(salonId),
+        fetchCashClosuresFromSupabase(salonId),
+        fetchCommissionPaymentsFromSupabase(salonId),
         fetchAdvancesFromSupabase(salonId),
         fetchStockItemsFromSupabase(salonId)
       ])
@@ -1213,6 +1341,8 @@ function App() {
       setServiceItems(normalizedServices)
       setAppointments(normalizedAppointments)
       setCashEntries([...(cashMovementRows ?? []).map(normalizeCashMovementRecord), ...advanceCashEntries])
+      setCashClosures((cashClosureRows ?? []).map(normalizeCashClosureRecord))
+      setCommissionPayments((commissionPaymentRows ?? []).map(normalizeCommissionPaymentRecord))
       setAdvances(normalizedAdvances)
       setInventoryItems((stockRows ?? []).map(normalizeStockItemRecord))
       setDatabaseStatus({ notConfigured: false, message: '' })
@@ -1437,6 +1567,8 @@ function App() {
                 setCashEntries={setCashEntries}
                 cashClosures={cashClosures}
                 setCashClosures={setCashClosures}
+                commissionPayments={commissionPayments}
+                setCommissionPayments={setCommissionPayments}
                 advances={advances}
                 setAdvances={setAdvances}
                 blockedSlots={blockedSlots}
@@ -1696,7 +1828,7 @@ function ThemeToggle({ theme, onChange }) {
   )
 }
 
-function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
+function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
   const employeeAppointments = appointments.filter((item) => getAppointmentEmployeeName(item, employees) === user.name)
   const visibleAppointments = appointments
   const activeClients = clients.filter((client) => client.active)
@@ -1713,7 +1845,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     caixa: <CashRegister salonId={salonId} entries={cashEntries} setEntries={setCashEntries} closures={cashClosures} setClosures={setCashClosures} appointments={appointments} setAppointments={setAppointments} employees={employees} serviceItems={services} notify={notify} />,
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} notify={notify} /> : <AccessDenied />,
     estoque: <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} />,
-    relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} user={user} notify={notify} /> : <AccessDenied />,
+    relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} notify={notify} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
@@ -3058,21 +3190,21 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
 function CashRegister({ salonId, entries, setEntries, closures, setClosures, appointments = [], setAppointments, employees = [], serviceItems = services, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [paymentAppointment, setPaymentAppointment] = useState(null)
-  const todayEntries = entries.filter((item) => cashDate(item) === todayIso && isActiveCashEntry(item))
-  const incomeEntries = todayEntries.filter((item) => cashType(item) === 'entrada')
-  const paidIncomeEntries = incomeEntries.filter(isPaidIncomeCashEntry)
-  const pendingIncomeEntries = incomeEntries.filter(isPendingIncomeCashEntry)
-  const outcomeEntries = todayEntries.filter((item) => cashType(item) === 'saida')
-  const income = paidIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
-  const outcome = outcomeEntries.reduce((sum, item) => sum + cashValue(item), 0)
-  const commissionPaid = paidIncomeEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
-  const salonProfit = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
+  const [cashDateFilter, setCashDateFilter] = useState(todayIso)
+  const [closureModalOpen, setClosureModalOpen] = useState(false)
+  const summary = buildCashClosureSummary(entries, cashDateFilter)
+  const todayEntries = summary.entries
+  const paidIncomeEntries = summary.paidIncomeEntries
   const byMethod = (methods) => {
     const methodList = Array.isArray(methods) ? methods : [methods]
     const aliases = methodList.map((method) => normalizeAppointmentPaymentMethod(method)).filter(Boolean)
     return paidIncomeEntries.filter((item) => aliases.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
   }
-  const pendingTotal = pendingIncomeEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
+  const income = summary.totalReceived
+  const outcome = summary.outcome
+  const commissionPaid = summary.commission
+  const salonProfit = summary.salonProfit
+  const pendingTotal = summary.pending
   const awaitingPaymentAppointments = appointments.filter((item) => {
     const entry = entries.find((cashEntry) => String(cashAppointmentId(cashEntry) ?? '') === String(item.id))
     return normalizeAppointmentStatus(item.status) === 'em_atendimento' && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && !entry
@@ -3086,7 +3218,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     acc[key].count += isAppointmentCashEntry(item) ? 1 : 0
     return acc
   }, {})).sort((a, b) => b.value - a.value)
-  const alreadyClosed = closures.some((item) => item.date === todayIso)
+  const alreadyClosed = closures.some((item) => item.date === cashDateFilter)
 
   async function receiveAppointmentPayment(appointment, paymentMethod) {
     const normalizedMethod = normalizeAppointmentPaymentMethod(paymentMethod) ?? 'pendente'
@@ -3198,22 +3330,64 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     notify?.('Caixa do dia fechado com sucesso.')
   }
 
+  function openCloseDayModal() {
+    if (alreadyClosed) {
+      notify?.('Caixa ja fechado para esta data.', 'error')
+      return
+    }
+    setClosureModalOpen(true)
+  }
+
+  async function confirmCloseDay() {
+    if (alreadyClosed) {
+      notify?.('Caixa ja fechado para esta data.', 'error')
+      return
+    }
+    try {
+      const savedClosure = normalizeCashClosureRecord(await createCashClosureRecord(salonId, {
+        date: cashDateFilter,
+        totalReceived: summary.totalReceived,
+        pix: summary.pix,
+        cash: summary.cash,
+        debit: summary.debit,
+        credit: summary.credit,
+        pending: summary.pending,
+        outcome: summary.outcome,
+        commission: summary.commission,
+        salonProfit: summary.salonProfit,
+        balance: summary.balance,
+        createdAt: new Date().toISOString()
+      }))
+      setClosures((current) => [savedClosure, ...current])
+      setClosureModalOpen(false)
+      notify?.('Caixa do dia fechado com sucesso.')
+    } catch (error) {
+      if (error?.code === '23505') {
+        notify?.('Ja existe fechamento registrado para esta data.', 'error')
+        return
+      }
+      handleDataActionError(error, notify)
+    }
+  }
+
   async function saveCashEntry(data) {
     const value = Number(data.value) || 0
     if (!data.description.trim() || value <= 0) {
       notify?.('Erro ao salvar: informe descrição e valor maior que zero.', 'error')
       return
     }
+    const ownerWithdrawal = data.type === 'Retirada do dono'
+    if (ownerWithdrawal && !window.confirm(`Confirmar retirada do dono no valor de ${money.format(value)}?`)) return
     const selectedMethod = normalizeAppointmentPaymentMethod(data.method) ?? 'pendente'
     const paymentStatus = selectedMethod === 'pendente' ? 'pendente' : 'pago'
     const payload = {
       id: Date.now(),
-      type: data.type,
-      tipo: data.type.toLowerCase(),
+      type: ownerWithdrawal ? 'saida' : data.type,
+      tipo: ownerWithdrawal ? 'saida' : data.type.toLowerCase(),
       description: data.description.trim(),
       descricao: data.description.trim(),
-      category: data.category.trim() || 'Operacional',
-      categoria: data.category.trim() || 'Operacional',
+      category: ownerWithdrawal ? 'retirada_dono' : data.category.trim() || 'Operacional',
+      categoria: ownerWithdrawal ? 'retirada_dono' : data.category.trim() || 'Operacional',
       method: data.method,
       paymentMethod: selectedMethod,
       payment_method: selectedMethod,
@@ -3245,20 +3419,25 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl dark:border-white/10 dark:hover:bg-white/10">Nova movimentação</button>
-            <button onClick={closeDay} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Fechar caixa do dia</button>
+            <button onClick={openCloseDayModal} disabled={alreadyClosed} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>{alreadyClosed ? 'Caixa fechado' : 'Fechar caixa do dia'}</button>
           </div>
         </div>
       </section>
 
       <section className="space-y-3">
-      <div>
-        <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo do dia</h3>
-        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Somente cash_movements com type entrada e payment_status pago entram nos recebidos.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo do dia</h3>
+          <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Somente cash_movements com type entrada e payment_status pago entram nos recebidos.</p>
+        </div>
+        <div className="w-full sm:w-56">
+          <Field label="Data do caixa" type="date" value={cashDateFilter} onChange={setCashDateFilter} />
+        </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Metric title="Total recebido hoje" value={money.format(income)} detail="service_value pago hoje" />
-        <Metric title="Pix" value={money.format(byMethod(['PIX', 'Pix', 'pix']))} detail="Recebido hoje" />
-        <Metric title="Dinheiro" value={money.format(byMethod(['Dinheiro', 'dinheiro']))} detail="Recebido hoje" />
+        <Metric title="Total recebido" value={money.format(income)} detail="service_value pago" />
+        <Metric title="Pix" value={money.format(summary.pix)} detail="Recebido no dia" />
+        <Metric title="Dinheiro" value={money.format(summary.cash)} detail="Recebido no dia" />
         <Metric title="Débito" value={money.format(byMethod(['Débito', 'debito']))} detail="Recebido hoje" />
         <Metric title="Crédito" value={money.format(byMethod(['Crédito', 'credito']))} detail="Recebido hoje" />
         <Metric title="Pagamentos pendentes" value={money.format(pendingTotal)} detail="A receber" />
@@ -3361,9 +3540,63 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       <Panel title="Fechamentos registrados">
         <CompactList items={closures.length ? closures.map((item) => `${formatDate(item.date)} · saldo ${money.format(item.balance)}`) : ['Nenhum fechamento registrado']} />
       </Panel>
+      <Panel title="Fechamentos registrados - detalhes">
+        {closures.length ? (
+          <Table
+            rows={closures}
+            columns={['date', 'totalReceived', 'pix', 'cash', 'outcome', 'commission', 'salonProfit', 'balance']}
+            labels={['Data', 'Recebido', 'Pix', 'Dinheiro', 'Saidas', 'Comissao', 'Lucro salao', 'Saldo final']}
+            formatValue={(key, value, row) => {
+              if (key === 'date') return <StatusBadge tone="cyan">{formatDate(row.date)}</StatusBadge>
+              return money.format(Number(value) || 0)
+            }}
+          />
+        ) : (
+          <EmptyState>Nenhum fechamento registrado.</EmptyState>
+        )}
+      </Panel>
       {modalOpen && <CashEntryModal onClose={() => setModalOpen(false)} onSave={saveCashEntry} />}
+      {closureModalOpen && <CashClosureModal summary={summary} onClose={() => setClosureModalOpen(false)} onConfirm={confirmCloseDay} />}
       {paymentAppointment && <ReceivePaymentModal appointment={paymentAppointment} employees={employees} serviceItems={serviceItems} existingEntry={entries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(paymentAppointment.id))} onClose={() => setPaymentAppointment(null)} onConfirm={receiveAppointmentPayment} />}
     </div>
+  )
+}
+
+function CashClosureModal({ summary, onClose, onConfirm }) {
+  const rows = [
+    ['Data do fechamento', formatDate(summary.date)],
+    ['Total recebido', money.format(summary.totalReceived)],
+    ['Pix', money.format(summary.pix)],
+    ['Dinheiro', money.format(summary.cash)],
+    ['Debito', money.format(summary.debit)],
+    ['Credito', money.format(summary.credit)],
+    ['Pendentes', money.format(summary.pending)],
+    ['Saidas', money.format(summary.outcome)],
+    ['Comissao dos profissionais', money.format(summary.commission)],
+    ['Lucro liquido do salao', money.format(summary.salonProfit)],
+    ['Saldo final', money.format(summary.balance)]
+  ]
+
+  return (
+    <Modal title="Confirmar fechamento de caixa" onClose={onClose} maxWidth="max-w-3xl">
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
+          Confira os valores antes de confirmar. Depois de salvo, o fechamento desta data nao podera ser duplicado.
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {rows.map(([label, value]) => (
+            <div key={label} className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-gray-400">{label}</p>
+              <p className="mt-1 text-lg font-black text-graphite dark:text-gray-100">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button type="button" onClick={onConfirm} className={buttonPrimary}>Confirmar fechamento</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -3424,10 +3657,16 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
 
 function CashEntryModal({ onClose, onSave }) {
   const [form, setForm] = useState({ type: 'Entrada', description: '', category: 'Operacional', method: 'Pix', value: 0, date: todayIso })
+  const ownerWithdrawal = form.type === 'Retirada do dono'
   return (
     <Modal title="Nova movimentação" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value })} options={['Entrada', 'Saída']} />
+        <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value, category: value === 'Retirada do dono' ? 'retirada_dono' : form.category })} options={['Entrada', 'Saida', 'Retirada do dono']} />
+        {ownerWithdrawal && (
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
+            A retirada do dono sera registrada como saida e reduzira o saldo final do caixa.
+          </div>
+        )}
         <Field label="Descrição" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
@@ -3742,28 +3981,69 @@ function InventoryModal({ product, onClose, onSave }) {
   )
 }
 
-function Reports({ salonId, appointments, employees, cashEntries = [], setCashEntries, user, notify }) {
+function Reports({ salonId, appointments, employees, cashEntries = [], setCashEntries, commissionPayments = [], setCommissionPayments, user, salonSettings, notify }) {
   const [employeeResultPeriod, setEmployeeResultPeriod] = useState('semana')
   const [employeeResultStartDate, setEmployeeResultStartDate] = useState(todayIso)
-  const appointmentEntries = cashEntries.filter((item) => isAppointmentCashEntry(item) && isPaidIncomeCashEntry(item))
+  const [selectedReportEmployee, setSelectedReportEmployee] = useState('todos')
+  const [exporting, setExporting] = useState(null)
+  const reportData = buildFinancialReportData({
+    cashEntries,
+    employees,
+    periodType: employeeResultPeriod,
+    startDate: employeeResultStartDate,
+    selectedEmployeeId: selectedReportEmployee
+  })
+  const appointmentEntries = reportData.appointmentEntries
   const completed = appointmentEntries
-  const pendingReportEntries = cashEntries.filter(isPendingIncomeCashEntry)
-  const commissions = appointmentEntries.reduce((sum, item) => sum + cashCommissionValue(item), 0)
-  const employeeCommissions = Object.values(appointmentEntries.reduce((acc, item) => {
-    const key = String(field(item, 'employeeId', 'employee_id') ?? cashEmployeeName(item) ?? '')
-    if (!key) return acc
-    const employee = employees.find((current) => String(current.id) === key || current.name === cashEmployeeName(item))
-    acc[key] = acc[key] ?? { name: employee?.name ?? cashEmployeeName(item), value: 0, count: 0 }
-    acc[key].value += cashCommissionValue(item)
-    acc[key].count += 1
-    return acc
-  }, {})).filter((item) => item.count > 0)
+  const pendingReportEntries = reportData.pendingEntries
+  const commissions = reportData.totals.commission
+  const employeeCommissions = reportData.employeeRows.map((item) => ({ name: item.employeeName, value: item.commission, count: item.appointments }))
   const serviceCommissions = topEntries(appointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}), 8)
   const serviceSales = topEntries(countBy(appointmentEntries, (item) => cashServiceName(item) || 'Serviço'))
   const frequentClients = topEntries(countBy(appointmentEntries, (item) => cashClientName(item) || 'Cliente'), 5)
-  const revenue = appointmentEntries.reduce((sum, item) => sum + cashServiceValue(item), 0)
+  const revenue = reportData.totals.revenue
+
+  async function exportReport(format) {
+    setExporting(format)
+    try {
+      if (format === 'pdf') await exportReportsPdf(reportData, salonSettings)
+      if (format === 'excel') await exportReportsExcel(reportData, salonSettings)
+      notify?.(format === 'pdf' ? 'PDF exportado.' : 'Excel exportado.')
+    } catch (error) {
+      console.error('Erro ao exportar relatorio:', error)
+      notify?.('Nao foi possivel exportar o relatorio.', 'error')
+    } finally {
+      setExporting(null)
+    }
+  }
   return (
     <div className="space-y-5">
+      <section className="rounded-2xl border border-[#d9c17a]/70 bg-white p-5 shadow-soft dark:border-[#d9c17a]/30 dark:bg-[#1f1b26]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Relatorios premium</p>
+            <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">Exportacoes financeiras</h2>
+            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">PDF e Excel respeitam periodo, data inicial e funcionario selecionado.</p>
+          </div>
+          <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[560px]">
+            <Select
+              label="Funcionario"
+              value={selectedReportEmployee}
+              onChange={setSelectedReportEmployee}
+              options={['Todos', ...employees.map((item) => item.name)]}
+              values={['todos', ...employees.map((item) => String(item.id))]}
+            />
+            <div className="flex items-end gap-2">
+              <button type="button" onClick={() => exportReport('pdf')} disabled={Boolean(exporting)} className="focus-ring min-h-12 flex-1 rounded-2xl border border-[#d9c17a] bg-[#fff8e1] px-4 py-3 text-sm font-black text-[#6f5612] shadow-sm transition hover:bg-[#ffefb0] disabled:opacity-70 dark:border-[#d9c17a]/40 dark:bg-[#3a311f] dark:text-[#ffe6a1]">
+                {exporting === 'pdf' ? 'Exportando...' : 'Exportar PDF'}
+              </button>
+              <button type="button" onClick={() => exportReport('excel')} disabled={Boolean(exporting)} className="focus-ring min-h-12 flex-1 rounded-2xl bg-graphite px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#343039] disabled:opacity-70 dark:bg-lilacSoft dark:text-graphite">
+                {exporting === 'excel' ? 'Exportando...' : 'Exportar Excel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
       {user.role === 'admin' && (
         <EmployeeResultsReport
           salonId={salonId}
@@ -3772,8 +4052,11 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
           employees={employees}
           periodType={employeeResultPeriod}
           startDate={employeeResultStartDate}
+          selectedEmployeeId={selectedReportEmployee}
           onPeriodTypeChange={setEmployeeResultPeriod}
           onStartDateChange={setEmployeeResultStartDate}
+          onSelectedEmployeeChange={setSelectedReportEmployee}
+          setCommissionPayments={setCommissionPayments}
           notify={notify}
         />
       )}
@@ -3787,15 +4070,246 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
       <Panel title="Clientes mais frequentes"><CompactList items={frequentClients.length ? frequentClients.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
       {user.role === 'admin' && <Panel title="Pagamentos pendentes"><CompactList items={pendingReportEntries.length ? pendingReportEntries.map((item) => `${cashClientName(item) || cashDescription(item)}: ${money.format(cashServiceValue(item))}`) : ['Sem pagamentos pendentes']} /></Panel>}
       </div>
+      <CommissionPaymentHistory payments={commissionPayments} />
     </div>
   )
 }
 
-function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees, periodType, startDate, onPeriodTypeChange, onStartDateChange, notify }) {
-  const [selectedEmployee, setSelectedEmployee] = useState(null)
+function CommissionPaymentHistory({ payments = [] }) {
+  const rows = [...payments].sort((a, b) => String(b.paidAt ?? b.paid_at ?? '').localeCompare(String(a.paidAt ?? a.paid_at ?? '')))
+  return (
+    <Panel title="Historico de pagamentos de comissao">
+      {rows.length ? (
+        <Table
+          rows={rows}
+          columns={['paidAt', 'employeeName', 'amount', 'paymentMethod', 'notes', 'period']}
+          labels={['Data do pagamento', 'Funcionario', 'Valor pago', 'Forma de pagamento', 'Observacao', 'Periodo referente']}
+          formatValue={(key, value, row) => {
+            if (key === 'paidAt') return formatDate(String(row.paidAt ?? row.paid_at ?? '').slice(0, 10))
+            if (key === 'employeeName') return row.employeeName || row.employee_name || '-'
+            if (key === 'amount') return money.format(Number(row.amount) || 0)
+            if (key === 'paymentMethod') return <StatusBadge tone="cyan">{financialPaymentMethodLabel(row.paymentMethod ?? row.payment_method)}</StatusBadge>
+            if (key === 'period') return `${formatDate(row.periodStart ?? row.period_start)} ate ${formatDate(row.periodEnd ?? row.period_end)}`
+            return value || '-'
+          }}
+        />
+      ) : (
+        <EmptyState>Nenhum pagamento de comissao registrado.</EmptyState>
+      )}
+    </Panel>
+  )
+}
+
+function buildFinancialReportData({ cashEntries = [], employees = [], periodType = 'semana', startDate = todayIso, selectedEmployeeId = 'todos' }) {
   const endDate = getPeriodEndDate(startDate, periodType)
   const startDateTime = parseDateStart(startDate)
   const endDateTime = parseDateEnd(endDate)
+  const employeeFilter = String(selectedEmployeeId ?? 'todos')
+  const selectedEmployee = employees.find((item) => String(item.id) === employeeFilter)
+  const inPeriod = (entry) => {
+    const entryDate = parseDateStart(cashDate(entry))
+    return entryDate && startDateTime && endDateTime && entryDate >= startDateTime && entryDate <= endDateTime
+  }
+  const matchesEmployee = (entry) => employeeFilter === 'todos' ||
+    String(field(entry, 'employeeId', 'employee_id') ?? '') === employeeFilter ||
+    (selectedEmployee?.name && cashEmployeeName(entry) === selectedEmployee.name)
+  const periodEntries = (cashEntries || []).filter((entry) => isActiveCashEntry(entry) && inPeriod(entry) && matchesEmployee(entry))
+  const appointmentEntries = periodEntries.filter((entry) => isAppointmentCashEntry(entry) && isPaidIncomeCashEntry(entry))
+  const pendingEntries = periodEntries.filter(isPendingIncomeCashEntry)
+  const employeeRows = Object.values(appointmentEntries.reduce((acc, entry) => {
+    const employeeId = field(entry, 'employeeId', 'employee_id')
+    const key = employeeId ? String(employeeId) : `name:${cashEmployeeName(entry) || 'sem-funcionario'}`
+    const employee = employees.find((item) => String(item.id) === String(employeeId) || item.name === cashEmployeeName(entry))
+    acc[key] = acc[key] ?? {
+      id: key,
+      employeeId: employeeId ? String(employeeId) : '',
+      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionario',
+      appointments: 0,
+      revenue: 0,
+      commission: 0,
+      commissionPaid: 0,
+      commissionPending: 0,
+      salonProfit: 0,
+      entries: []
+    }
+    const commissionValue = cashCommissionValue(entry)
+    acc[key].appointments += 1
+    acc[key].revenue += cashServiceValue(entry)
+    acc[key].commission += commissionValue
+    acc[key].commissionPaid += cashCommissionPaid(entry) ? commissionValue : 0
+    acc[key].commissionPending += cashCommissionPaid(entry) ? 0 : commissionValue
+    acc[key].salonProfit += cashSalonValue(entry)
+    acc[key].entries.push(entry)
+    return acc
+  }, {})).sort((a, b) => b.revenue - a.revenue)
+  const totals = employeeRows.reduce((acc, row) => ({
+    revenue: acc.revenue + row.revenue,
+    commission: acc.commission + row.commission,
+    commissionPaid: acc.commissionPaid + row.commissionPaid,
+    commissionPending: acc.commissionPending + row.commissionPending,
+    salonProfit: acc.salonProfit + row.salonProfit,
+    appointments: acc.appointments + row.appointments
+  }), { revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, salonProfit: 0, appointments: 0 })
+
+  return {
+    startDate,
+    endDate,
+    periodType,
+    selectedEmployeeId: employeeFilter,
+    selectedEmployeeName: employeeFilter === 'todos' ? 'Todos' : selectedEmployee?.name ?? 'Funcionario',
+    periodEntries,
+    appointmentEntries,
+    pendingEntries,
+    employeeRows,
+    totals
+  }
+}
+
+function reportPeriodLabel(reportData) {
+  return `${formatDate(reportData.startDate)} ate ${formatDate(reportData.endDate)}`
+}
+
+function reportMoney(value) {
+  return money.format(Number(value) || 0)
+}
+
+function movementExportRows(entries) {
+  return (entries || []).map((entry) => ({
+    Data: formatDate(cashDate(entry)),
+    Tipo: cashType(entry),
+    Cliente: cashClientName(entry) || cashDescription(entry),
+    Servico: cashServiceName(entry) || cashCategory(entry),
+    Funcionario: cashEmployeeName(entry),
+    Forma: paymentMethodLabel(cashMethod(entry)),
+    Status: cashStatus(entry),
+    Valor: cashServiceValue(entry),
+    Comissao: cashCommissionValue(entry),
+    Salao: cashSalonValue(entry),
+    ComissaoPaga: cashCommissionPaid(entry) ? 'Sim' : 'Nao',
+    PagoEm: cashCommissionPaidAt(entry) ? formatDate(String(cashCommissionPaidAt(entry)).slice(0, 10)) : ''
+  }))
+}
+
+function employeeExportRows(rows) {
+  return (rows || []).map((row) => ({
+    Funcionario: row.employeeName,
+    Atendimentos: row.appointments,
+    Faturamento: row.revenue,
+    ComissaoTotal: row.commission,
+    ComissaoPaga: row.commissionPaid,
+    ComissaoPendente: row.commissionPending,
+    LucroSalao: row.salonProfit
+  }))
+}
+
+async function exportReportsPdf(reportData, salonSettings) {
+  const [{ default: jsPDF }, autoTableModule] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ])
+  const autoTable = autoTableModule.default
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const salonName = salonSettings?.salonName || 'Salao'
+  doc.setFontSize(16)
+  doc.text(salonName, 40, 36)
+  doc.setFontSize(10)
+  doc.text(`Periodo analisado: ${reportPeriodLabel(reportData)}`, 40, 54)
+  doc.text(`Funcionario: ${reportData.selectedEmployeeName}`, 40, 70)
+
+  autoTable(doc, {
+    startY: 88,
+    head: [['Total faturado', 'Total de comissoes', 'Lucro do salao', 'Comissao paga', 'Comissao pendente']],
+    body: [[
+      reportMoney(reportData.totals.revenue),
+      reportMoney(reportData.totals.commission),
+      reportMoney(reportData.totals.salonProfit),
+      reportMoney(reportData.totals.commissionPaid),
+      reportMoney(reportData.totals.commissionPending)
+    ]],
+    styles: { fontSize: 9 }
+  })
+
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 18,
+    head: [['Funcionario', 'Atendimentos', 'Faturamento', 'Comissao', 'Pago', 'Pendente', 'Lucro salao']],
+    body: reportData.employeeRows.length ? reportData.employeeRows.map((row) => [
+      row.employeeName,
+      row.appointments,
+      reportMoney(row.revenue),
+      reportMoney(row.commission),
+      reportMoney(row.commissionPaid),
+      reportMoney(row.commissionPending),
+      reportMoney(row.salonProfit)
+    ]) : [['Sem dados', '-', '-', '-', '-', '-', '-']],
+    styles: { fontSize: 8 }
+  })
+
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 18,
+    head: [['Pagamentos pendentes', 'Servico', 'Funcionario', 'Valor']],
+    body: reportData.pendingEntries.length ? reportData.pendingEntries.map((entry) => [
+      cashClientName(entry) || cashDescription(entry),
+      cashServiceName(entry) || cashCategory(entry),
+      cashEmployeeName(entry),
+      reportMoney(cashServiceValue(entry))
+    ]) : [['Sem pagamentos pendentes', '-', '-', '-']],
+    styles: { fontSize: 8 }
+  })
+
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 18,
+    head: [['Data', 'Cliente', 'Servico', 'Funcionario', 'Forma', 'Status', 'Valor', 'Comissao', 'Salao']],
+    body: reportData.periodEntries.length ? reportData.periodEntries.map((entry) => [
+      formatDate(cashDate(entry)),
+      cashClientName(entry) || cashDescription(entry),
+      cashServiceName(entry) || cashCategory(entry),
+      cashEmployeeName(entry),
+      paymentMethodLabel(cashMethod(entry)),
+      cashStatus(entry),
+      reportMoney(cashServiceValue(entry)),
+      reportMoney(cashCommissionValue(entry)),
+      reportMoney(cashSalonValue(entry))
+    ]) : [['Sem movimentacoes', '-', '-', '-', '-', '-', '-', '-', '-']],
+    styles: { fontSize: 7 }
+  })
+
+  doc.save(`relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.pdf`)
+}
+
+async function exportReportsExcel(reportData, salonSettings) {
+  const XLSX = await import('xlsx')
+  const workbook = XLSX.utils.book_new()
+  const summaryRows = [
+    { Indicador: 'Salao', Valor: salonSettings?.salonName || 'Salao' },
+    { Indicador: 'Periodo', Valor: reportPeriodLabel(reportData) },
+    { Indicador: 'Funcionario', Valor: reportData.selectedEmployeeName },
+    { Indicador: 'Total faturado', Valor: reportData.totals.revenue },
+    { Indicador: 'Total de comissoes', Valor: reportData.totals.commission },
+    { Indicador: 'Lucro do salao', Valor: reportData.totals.salonProfit },
+    { Indicador: 'Comissao paga', Valor: reportData.totals.commissionPaid },
+    { Indicador: 'Comissao pendente', Valor: reportData.totals.commissionPending }
+  ]
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Resumo')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows)), 'Funcionarios')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows).map((row) => ({
+    Funcionario: row.Funcionario,
+    ComissaoTotal: row.ComissaoTotal,
+    ComissaoPaga: row.ComissaoPaga,
+    ComissaoPendente: row.ComissaoPendente
+  }))), 'Comissoes')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.periodEntries)), 'Movimentacoes')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.pendingEntries)), 'Pendentes')
+  XLSX.writeFile(workbook, `relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.xlsx`)
+}
+
+function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees, periodType, startDate, selectedEmployeeId, onPeriodTypeChange, onStartDateChange, onSelectedEmployeeChange, setCommissionPayments, notify }) {
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [commissionStatusFilter, setCommissionStatusFilter] = useState('todos')
+  const [paymentEmployee, setPaymentEmployee] = useState(null)
+  const endDate = getPeriodEndDate(startDate, periodType)
+  const startDateTime = parseDateStart(startDate)
+  const endDateTime = parseDateEnd(endDate)
+  const selectedEmployeeFilter = employees.find((item) => String(item.id) === String(selectedEmployeeId ?? 'todos'))
   const resultEntries = (cashEntries || []).filter((entry) => {
     const entryDate = parseDateStart(cashDate(entry))
     return entryDate &&
@@ -3803,13 +4317,15 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
       endDateTime &&
       entryDate >= startDateTime &&
       entryDate <= endDateTime &&
-      isPaidIncomeCashEntry(entry)
+      isPaidIncomeCashEntry(entry) &&
+      (String(selectedEmployeeId ?? 'todos') === 'todos' ||
+        String(field(entry, 'employeeId', 'employee_id') ?? '') === String(selectedEmployeeId) ||
+        (selectedEmployeeFilter?.name && cashEmployeeName(entry) === selectedEmployeeFilter.name))
   })
   const rows = Object.values(resultEntries.reduce((acc, entry) => {
     const employeeId = field(entry, 'employeeId', 'employee_id')
-    if (!employeeId) return acc
-    const key = String(employeeId)
-    const employee = employees.find((item) => String(item.id) === key)
+    const key = employeeId ? String(employeeId) : `name:${cashEmployeeName(entry) || 'sem-funcionario'}`
+    const employee = employees.find((item) => String(item.id) === String(employeeId) || item.name === cashEmployeeName(entry))
     acc[key] = acc[key] ?? {
       id: key,
       employeeId: key,
@@ -3817,20 +4333,34 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
       appointments: 0,
       revenue: 0,
       commission: 0,
+      commissionPaid: 0,
+      commissionPending: 0,
+      entries: [],
       salonProfit: 0
     }
+    const commissionValue = cashCommissionValue(entry)
     acc[key].appointments += 1
     acc[key].revenue += cashServiceValue(entry)
-    acc[key].commission += cashCommissionValue(entry)
+    acc[key].commission += commissionValue
+    acc[key].commissionPaid += cashCommissionPaid(entry) ? commissionValue : 0
+    acc[key].commissionPending += cashCommissionPaid(entry) ? 0 : commissionValue
+    acc[key].entries.push(entry)
     acc[key].salonProfit += cashSalonValue(entry)
     return acc
   }, {})).sort((a, b) => b.revenue - a.revenue)
   const totals = rows.reduce((acc, row) => ({
     revenue: acc.revenue + row.revenue,
     commission: acc.commission + row.commission,
+    commissionPaid: acc.commissionPaid + row.commissionPaid,
+    commissionPending: acc.commissionPending + row.commissionPending,
     salonProfit: acc.salonProfit + row.salonProfit,
     appointments: acc.appointments + row.appointments
-  }), { revenue: 0, commission: 0, salonProfit: 0, appointments: 0 })
+  }), { revenue: 0, commission: 0, commissionPaid: 0, commissionPending: 0, salonProfit: 0, appointments: 0 })
+  const receivableRows = rows.filter((row) => {
+    if (commissionStatusFilter === 'pendente') return row.commissionPending > 0
+    if (commissionStatusFilter === 'paga') return row.commissionPending <= 0 && row.commissionPaid > 0
+    return true
+  })
 
   return (
     <section className="min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26] sm:p-6">
@@ -3844,7 +4374,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
           </div>
         </div>
 
-        <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[420px]">
+        <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[640px] xl:grid-cols-3">
           <Select
             label="Tipo de período"
             value={periodType}
@@ -3853,6 +4383,13 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
             values={['semana', 'quinzena', 'mes']}
           />
           <Field label="Data inicial" type="date" value={startDate} onChange={onStartDateChange} />
+          <Select
+            label="Funcionario"
+            value={selectedEmployeeId}
+            onChange={onSelectedEmployeeChange}
+            options={['Todos', ...employees.map((item) => item.name)]}
+            values={['todos', ...employees.map((item) => String(item.id))]}
+          />
         </div>
       </div>
 
@@ -3888,17 +4425,133 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, employees
           <EmptyState>Nenhum resultado encontrado para este período.</EmptyState>
         )}
       </div>
+      <div className="mt-6 rounded-2xl border border-gray-100 bg-pearl/70 p-4 dark:border-white/10 dark:bg-white/5">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-goldSoft">controle financeiro</p>
+            <h4 className="mt-1 text-xl font-black text-graphite dark:text-gray-100">Valores a receber por funcionario</h4>
+          </div>
+          <div className="w-full sm:w-64">
+            <Select
+              label="Filtro"
+              value={commissionStatusFilter}
+              onChange={setCommissionStatusFilter}
+              options={['Todos', 'Comissao pendente', 'Comissao paga']}
+              values={['todos', 'pendente', 'paga']}
+            />
+          </div>
+        </div>
+        {receivableRows.length ? (
+          <Table
+            rows={receivableRows}
+            columns={['employeeName', 'appointments', 'revenue', 'commission', 'commissionPaid', 'commissionPending', 'action']}
+            labels={['Nome', 'Atendimentos concluidos', 'Faturamento gerado', 'Comissao total a receber', 'Comissao ja paga', 'Comissao pendente', 'Acao']}
+            formatValue={(column, value, row) => {
+              if (column === 'appointments') return <StatusBadge tone="gray">{value}</StatusBadge>
+              if (['revenue', 'commission', 'commissionPaid', 'commissionPending'].includes(column)) return money.format(value)
+              if (column === 'action') return (
+                <button type="button" disabled={row.commissionPending <= 0} onClick={() => setPaymentEmployee(row)} className="focus-ring rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  Marcar comissao como paga
+                </button>
+              )
+              return value
+            }}
+          />
+        ) : (
+          <EmptyState>Nenhum valor de comissao encontrado para este filtro.</EmptyState>
+        )}
+      </div>
       {selectedEmployee && (
         <EmployeeAppointmentsModal
           salonId={salonId}
           employee={selectedEmployee}
-          entries={resultEntries.filter((entry) => String(field(entry, 'employeeId', 'employee_id')) === String(selectedEmployee.employeeId))}
+          entries={resultEntries.filter((entry) => String(field(entry, 'employeeId', 'employee_id')) === String(selectedEmployee.employeeId) || cashEmployeeName(entry) === selectedEmployee.employeeName)}
           setCashEntries={setCashEntries}
           onClose={() => setSelectedEmployee(null)}
           notify={notify}
         />
       )}
+      {paymentEmployee && (
+        <CommissionPaymentModal
+          salonId={salonId}
+          employee={paymentEmployee}
+          entries={paymentEmployee.entries.filter((entry) => !cashCommissionPaid(entry))}
+          periodStart={startDate}
+          periodEnd={endDate}
+          setCommissionPayments={setCommissionPayments}
+          setCashEntries={setCashEntries}
+          onClose={() => setPaymentEmployee(null)}
+          notify={notify}
+        />
+      )}
     </section>
+  )
+}
+
+function CommissionPaymentModal({ salonId, employee, entries, periodStart, periodEnd, setCashEntries, setCommissionPayments, onClose, notify }) {
+  const [form, setForm] = useState({ method: 'pix', notes: '' })
+  const [saving, setSaving] = useState(false)
+  const totalPending = entries.reduce((sum, entry) => sum + cashCommissionValue(entry), 0)
+
+  async function confirmPayment(event) {
+    event.preventDefault()
+    if (totalPending <= 0) return
+    setSaving(true)
+    const paidAt = new Date().toISOString()
+    try {
+      const updatedEntries = await Promise.all(entries.map((entry) => updateCashMovementRecord(salonId, entry.id, {
+        commissionPaid: true,
+        commissionPaidAt: paidAt,
+        commissionPaymentMethod: form.method,
+        commissionNotes: form.notes
+      })))
+      const paymentRecord = normalizeCommissionPaymentRecord(await createCommissionPaymentRecord(salonId, {
+        employeeId: employee.employeeId || null,
+        employeeName: employee.employeeName,
+        amount: totalPending,
+        paymentMethod: form.method,
+        notes: form.notes,
+        periodStart,
+        periodEnd,
+        paidAt,
+        cashMovementIds: entries.map((entry) => entry.id).filter(Boolean)
+      }))
+      const normalized = updatedEntries.map(normalizeCashMovementRecord)
+      setCashEntries?.((current) => current.map((entry) => normalized.find((updated) => String(updated.id) === String(entry.id)) ?? entry))
+      setCommissionPayments?.((current) => [paymentRecord, ...(current || [])])
+      notify?.('Comissao marcada como paga.')
+      onClose()
+    } catch (error) {
+      handleDataActionError(error, notify)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title="Marcar comissao como paga" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
+      <form onSubmit={confirmPayment} className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
+            <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Funcionario</p>
+            <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{employee.employeeName}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-500/10">
+            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Comissao pendente</p>
+            <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(totalPending)}</p>
+          </div>
+        </div>
+        <Select label="Forma de pagamento" value={form.method} onChange={(method) => setForm((current) => ({ ...current, method }))} options={['Pix', 'Dinheiro', 'Transferencia']} values={['pix', 'dinheiro', 'transferencia']} />
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Observacao</span>
+          <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={saving} className={buttonSecondary}>Cancelar</button>
+          <button type="submit" disabled={saving || totalPending <= 0} className={buttonPrimary}>{saving ? 'Salvando...' : 'Confirmar'}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
