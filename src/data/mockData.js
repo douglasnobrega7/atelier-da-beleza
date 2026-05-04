@@ -35,16 +35,16 @@ export const appointments = [
 ]
 
 export const cashFlow = [
-  { id: 1, type: 'Entrada', description: 'Corte Ana Paula', method: 'Pix', value: 90 },
-  { id: 2, type: 'Entrada', description: 'Limpeza de pele Patricia', method: 'Cartão', value: 160 },
-  { id: 3, type: 'Saída', description: 'Reposição de esmaltes', method: 'Dinheiro', value: 130 },
-  { id: 4, type: 'Entrada', description: 'Manicure Juliana', method: 'Pendente', value: 70 },
-  { id: 5, type: 'Saída', description: 'Material descartável', method: 'Pix', value: 65 }
+  { id: 1, type: 'Entrada', description: 'Corte Ana Paula', payment_method: 'pix', value: 90 },
+  { id: 2, type: 'Entrada', description: 'Limpeza de pele Patricia', payment_method: 'credito', value: 160 },
+  { id: 3, type: 'Saída', description: 'Reposição de esmaltes', payment_method: 'dinheiro', value: 130 },
+  { id: 4, type: 'Entrada', description: 'Manicure Juliana', payment_method: 'pendente', value: 70 },
+  { id: 5, type: 'Saída', description: 'Material descartável', payment_method: 'pix', value: 65 }
 ]
 
 export const advances = [
-  { id: 1, employee: 'Camila Rocha', value: 120, date: '2026-04-27', status: 'Aberto', reason: 'Adiantamento semanal' },
-  { id: 2, employee: 'Livia Moreira', value: 80, date: '2026-04-26', status: 'Descontado', reason: 'Vale transporte' }
+  { id: 1, employee_id: 1, employee_name: 'Camila Rocha', value: 120, created_at: '2026-04-27', status: 'pendente', notes: 'Adiantamento semanal' },
+  { id: 2, employee_id: 2, employee_name: 'Livia Moreira', value: 80, created_at: '2026-04-26', discounted_at: '2026-04-26', status: 'descontado', notes: 'Vale transporte' }
 ]
 
 export const inventory = [

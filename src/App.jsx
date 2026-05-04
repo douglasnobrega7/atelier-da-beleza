@@ -516,7 +516,7 @@ function cashServiceValue(entry) {
 
 function cashMethod(movimento) {
   if (!movimento) return null
-  return normalizeAppointmentPaymentMethod(movimento?.payment_method ?? movimento?.paymentMethod ?? movimento?.method)
+  return normalizeAppointmentPaymentMethod(movimento?.payment_method ?? movimento?.paymentMethod)
 }
 
 function cashDescription(entry) {
@@ -594,10 +594,7 @@ function formatAppointmentStatus(status) {
 }
 
 function cashAppointmentId(entry) {
-  const appointmentId = field(entry, 'appointmentId', 'appointment_id')
-  if (appointmentId) return appointmentId
-  const referenceType = String(field(entry, 'referenciaTipo', 'referencia_tipo') ?? '').toLowerCase()
-  return referenceType === 'appointment' ? field(entry, 'referenciaId', 'referencia_id') : null
+  return field(entry, 'appointmentId', 'appointment_id')
 }
 
 function cashCommissionValue(entry) {
@@ -653,7 +650,7 @@ function advanceEmployeeId(advance) {
 }
 
 function advanceEmployeeName(advance) {
-  return field(advance, 'employeeName', 'employee_name') ?? advance?.employee ?? ''
+  return field(advance, 'employeeName', 'employee_name') ?? ''
 }
 
 function advanceValue(advance) {
@@ -661,7 +658,7 @@ function advanceValue(advance) {
 }
 
 function advanceCreatedDate(advance) {
-  return String(field(advance, 'createdAt', 'created_at') ?? advance?.date ?? todayIso).slice(0, 10)
+  return String(field(advance, 'createdAt', 'created_at') ?? todayIso).slice(0, 10)
 }
 
 function advanceStatus(advance) {
@@ -669,7 +666,7 @@ function advanceStatus(advance) {
 }
 
 function advanceDiscountedDate(advance) {
-  return String(field(advance, 'discountedAt', 'discounted_at') ?? field(advance, 'paidAt', 'paid_at') ?? '').slice(0, 10)
+  return String(field(advance, 'discountedAt', 'discounted_at') ?? '').slice(0, 10)
 }
 
 function isActiveAdvance(advance) {
@@ -713,9 +710,8 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
   const commissionPercent = Number(service?.commission_percent ?? service?.commissionPercent ?? employee?.commission ?? employee?.commission_percent ?? 0) || 0
   const commissionValue = (serviceValue * commissionPercent) / 100
   const salonValue = serviceValue - commissionValue
-  const paymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod ?? appointment.payment_method ?? appointment.method) ?? 'pendente'
+  const paymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod ?? appointment.payment_method) ?? 'pendente'
   const paymentStatus = paymentMethod === 'pendente' ? 'pendente' : normalizePaymentStatus(appointment.paymentStatus ?? appointment.payment_status ?? 'pago')
-  const methodLabel = paymentMethodLabel(paymentMethod)
   const createdAt = new Date().toISOString()
   return {
     type: 'entrada',
@@ -724,13 +720,10 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     categoria: 'Atendimento',
     description: `Atendimento - ${appointment.client}`,
     descricao: `Atendimento - ${appointment.client}`,
-    method: methodLabel,
     paymentMethod,
     payment_method: paymentMethod,
     paymentStatus,
     payment_status: paymentStatus,
-    value: serviceValue,
-    valor: serviceValue,
     date: appointment.date ?? todayIso,
     data: appointment.date ?? todayIso,
     status: paymentStatus,
@@ -754,10 +747,6 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
     service_id: service?.id ?? null,
     appointmentId: appointment.id,
     appointment_id: appointment.id,
-    referenciaId: appointment.id,
-    referencia_id: appointment.id,
-    referenciaTipo: 'appointment',
-    referencia_tipo: 'appointment',
     createdAt,
     created_at: createdAt
   }
@@ -767,7 +756,7 @@ function createAdvanceCashEntry(advance) {
   const employeeName = advanceEmployeeName(advance)
   const createdDate = advanceCreatedDate(advance)
   return {
-    id: Date.now() + 1,
+    id: advance.id ? `advance-${advance.id}` : Date.now() + 1,
     tipo: 'saida',
     type: 'Saída',
     categoria: 'Vale',
@@ -778,17 +767,12 @@ function createAdvanceCashEntry(advance) {
     value: advanceValue(advance),
     data: createdDate,
     date: createdDate,
-    method: 'Dinheiro',
     paymentMethod: 'dinheiro',
     payment_method: 'dinheiro',
     employeeId: advanceEmployeeId(advance),
     employee_id: advanceEmployeeId(advance),
     employeeName,
-    employee_name: employeeName,
-    referenciaId: advance.id,
-    referencia_id: advance.id,
-    referenciaTipo: 'vale',
-    referencia_tipo: 'vale'
+    employee_name: employeeName
   }
 }
 
@@ -969,7 +953,7 @@ function normalizeCashMovementRecord(row) {
   if (!row) return null
   const serviceValue = Number(field(row, 'serviceValue', 'service_value') ?? field(row, 'value') ?? field(row, 'valor') ?? 0)
   const commissionValue = Number(field(row, 'commissionValue', 'commission_value') ?? 0)
-  const rawPaymentMethod = field(row, 'paymentMethod', 'payment_method') ?? field(row, 'method') ?? null
+  const rawPaymentMethod = field(row, 'paymentMethod', 'payment_method') ?? null
   const normalizedPaymentMethod = normalizeAppointmentPaymentMethod(rawPaymentMethod)
   return {
     ...row,
@@ -979,7 +963,6 @@ function normalizeCashMovementRecord(row) {
     descricao: field(row, 'descricao') ?? field(row, 'description') ?? '',
     category: field(row, 'category') ?? field(row, 'categoria') ?? '',
     categoria: field(row, 'categoria') ?? field(row, 'category') ?? '',
-    method: normalizedPaymentMethod ? paymentMethodLabel(normalizedPaymentMethod) : 'Não informado',
     paymentMethod: normalizedPaymentMethod,
     payment_method: normalizedPaymentMethod,
     value: Number(field(row, 'value') ?? field(row, 'valor') ?? 0),
@@ -1009,10 +992,6 @@ function normalizeCashMovementRecord(row) {
     service_id: field(row, 'service_id') ?? field(row, 'serviceId'),
     appointmentId: field(row, 'appointmentId', 'appointment_id'),
     appointment_id: field(row, 'appointment_id') ?? field(row, 'appointmentId'),
-    referenciaId: field(row, 'referenciaId', 'referencia_id'),
-    referencia_id: field(row, 'referencia_id') ?? field(row, 'referenciaId'),
-    referenciaTipo: field(row, 'referenciaTipo', 'referencia_tipo'),
-    referencia_tipo: field(row, 'referencia_tipo') ?? field(row, 'referenciaTipo'),
     createdAt: field(row, 'createdAt', 'created_at'),
     created_at: field(row, 'created_at') ?? field(row, 'createdAt'),
     cancelledAt: field(row, 'cancelledAt', 'cancelled_at'),
@@ -1086,28 +1065,25 @@ function normalizeCommissionPaymentRecord(row) {
 }
 
 function normalizeAdvanceRecord(row) {
-  const employeeName = field(row, 'employeeName', 'employee_name') ?? field(row, 'employee') ?? ''
+  const employeeName = field(row, 'employeeName', 'employee_name') ?? ''
   const status = normalizeAdvanceStatus(field(row, 'status'))
-  const createdAt = field(row, 'createdAt', 'created_at') ?? field(row, 'date') ?? todayIso
-  const notes = field(row, 'notes') ?? field(row, 'reason') ?? ''
+  const createdAt = field(row, 'createdAt', 'created_at') ?? todayIso
+  const notes = field(row, 'notes') ?? ''
   return {
     ...row,
     employeeId: field(row, 'employeeId', 'employee_id'),
     employee_id: field(row, 'employee_id') ?? field(row, 'employeeId'),
     employeeName,
     employee_name: employeeName,
-    employee: employeeName,
     value: Number(field(row, 'value') ?? 0),
-    date: String(field(row, 'date') ?? createdAt ?? todayIso).slice(0, 10),
     createdAt,
     created_at: field(row, 'created_at') ?? field(row, 'createdAt') ?? createdAt,
     status,
-    paidAt: field(row, 'paidAt', 'paid_at'),
-    paid_at: field(row, 'paid_at') ?? field(row, 'paidAt'),
     discountedAt: field(row, 'discountedAt', 'discounted_at'),
     discounted_at: field(row, 'discounted_at') ?? field(row, 'discountedAt'),
-    notes,
-    reason: notes
+    cancelledAt: field(row, 'cancelledAt', 'cancelled_at'),
+    cancelled_at: field(row, 'cancelled_at') ?? field(row, 'cancelledAt'),
+    notes
   }
 }
 
@@ -3406,7 +3382,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     const appointmentId = cashAppointmentId(entry)
     const appointment = appointments.find((item) => String(item.id) === String(appointmentId))
     const normalizedMethod = normalizeAppointmentPaymentMethod(cashMethod(entry)) ?? 'pix'
-    const payload = { ...entry, status: 'pago', paymentStatus: 'pago', payment_status: 'pago', paymentMethod: normalizedMethod, payment_method: normalizedMethod, method: paymentMethodLabel(normalizedMethod) }
+    const payload = { ...entry, status: 'pago', paymentStatus: 'pago', payment_status: 'pago', paymentMethod: normalizedMethod, payment_method: normalizedMethod }
     const sameEntry = (item) => (entry.id !== undefined && item.id === entry.id) || (appointmentId && String(cashAppointmentId(item) ?? '') === String(appointmentId))
 
     try {
@@ -3485,7 +3461,7 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
     }
     const ownerWithdrawal = data.type === 'Retirada do dono'
     if (ownerWithdrawal && !window.confirm(`Confirmar retirada do dono no valor de ${money.format(value)}?`)) return
-    const selectedMethod = normalizeAppointmentPaymentMethod(data.method) ?? 'pendente'
+    const selectedMethod = normalizeAppointmentPaymentMethod(data.paymentMethod) ?? 'pendente'
     const paymentStatus = selectedMethod === 'pendente' ? 'pendente' : 'pago'
     const payload = {
       id: Date.now(),
@@ -3495,7 +3471,6 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       descricao: data.description.trim(),
       category: ownerWithdrawal ? 'retirada_dono' : data.category.trim() || 'Operacional',
       categoria: ownerWithdrawal ? 'retirada_dono' : data.category.trim() || 'Operacional',
-      method: data.method,
       paymentMethod: selectedMethod,
       payment_method: selectedMethod,
       status: paymentStatus,
@@ -3620,16 +3595,16 @@ function CashRegister({ salonId, entries, setEntries, closures, setClosures, app
       <Panel title="Movimentações do caixa">
         <Table
           rows={todayEntries}
-          columns={['date', 'client', 'service', 'employee', 'method', 'status', 'value', 'commission', 'salon']}
+          columns={['date', 'client', 'service', 'employee', 'paymentMethod', 'status', 'value', 'commission', 'salon']}
           labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Forma', 'Status', 'Valor total', 'Comissão', 'Salão']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
             if (key === 'client') return cashClientName(row) || cashDescription(row) || '-'
             if (key === 'service') return cashServiceName(row) || cashCategory(row) || '-'
             if (key === 'employee') return cashEmployeeName(row) || '-'
-            if (key === 'method') {
-              const method = cashMethod(row)
-              return method ? <PaymentMethodBadge method={method} /> : '-'
+            if (key === 'paymentMethod') {
+              const paymentMethod = cashMethod(row)
+              return paymentMethod ? <PaymentMethodBadge method={paymentMethod} /> : '-'
             }
             if (key === 'status') return <StatusBadge tone={cashStatus(row) === 'pago' ? 'green' : 'amber'}>{cashStatus(row) === 'pago' ? 'Pago' : 'Pendente'}</StatusBadge>
             if (key === 'value') return money.format(cashType(row) === 'entrada' ? cashServiceValue(row) : cashValue(row))
@@ -3765,7 +3740,7 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
 }
 
 function CashEntryModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ type: 'Entrada', description: '', category: 'Operacional', method: 'Pix', value: 0, date: todayIso })
+  const [form, setForm] = useState({ type: 'Entrada', description: '', category: 'Operacional', paymentMethod: 'Pix', value: 0, date: todayIso })
   const ownerWithdrawal = form.type === 'Retirada do dono'
   return (
     <Modal title="Nova movimentação" onClose={onClose}>
@@ -3779,7 +3754,7 @@ function CashEntryModal({ onClose, onSave }) {
         <Field label="Descrição" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Select label="Forma de pagamento" value={form.method} onChange={(value) => setForm({ ...form, method: value })} options={['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} />
+          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} />
           <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
         </div>
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
@@ -3795,14 +3770,14 @@ function CashEntryModal({ onClose, onSave }) {
 function Advances({ salonId, user, employees, advances, setAdvances, setCashEntries, notify }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [filters, setFilters] = useState({ employee: 'all', date: '', status: 'all' })
+  const [filters, setFilters] = useState({ employeeId: 'all', date: '', status: 'all' })
   const canAccess = user.role === 'admin' || user.role === 'cashier'
   const canDelete = user.role === 'admin'
 
   if (!canAccess) return <AccessDenied />
 
   const filteredAdvances = advances.filter((item) => (
-    (filters.employee === 'all' || String(advanceEmployeeId(item) ?? '') === filters.employee || advanceEmployeeName(item) === filters.employee) &&
+    (filters.employeeId === 'all' || String(advanceEmployeeId(item) ?? '') === filters.employeeId) &&
     (!filters.date || advanceCreatedDate(item) === filters.date) &&
     (filters.status === 'all' || advanceStatus(item) === filters.status)
   ))
@@ -3825,16 +3800,15 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       employee_id: employee?.id ?? data.employeeId ?? null,
       employeeName: employee?.name ?? data.employeeName ?? '',
       employee_name: employee?.name ?? data.employeeName ?? '',
-      employee: employee?.name ?? data.employeeName ?? '',
       value: Number(data.value) || 0,
       status: normalizeAdvanceStatus(data.status),
-      date: data.date,
-      createdAt: data.createdAt ?? data.date,
-      created_at: data.createdAt ?? data.date,
-      notes: data.notes ?? data.reason ?? '',
-      reason: data.notes ?? data.reason ?? ''
+      createdAt: data.createdAt,
+      created_at: data.createdAt,
+      cancelledAt: data.cancelledAt ?? null,
+      cancelled_at: data.cancelledAt ?? null,
+      notes: data.notes ?? ''
     }
-    if (!payload.employeeName || payload.value <= 0 || !payload.date) {
+    if (!payload.employeeName || payload.value <= 0 || !payload.createdAt) {
       notify?.('Erro ao salvar: confira Funcionário, valor, data e motivo.', 'error')
       return
     }
@@ -3843,10 +3817,10 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, editing.id, payload))
       setAdvances((current) => current.map((item) => item.id === editing.id ? updatedAdvance : item))
       setCashEntries((current) => {
-        const exists = current.some((entry) => field(entry, 'referenciaTipo', 'referencia_tipo') === 'vale' && String(field(entry, 'referenciaId', 'referencia_id')) === String(editing.id))
+        const exists = current.some((entry) => String(entry.id) === String(`advance-${editing.id}`))
         if (!exists) return [...current, createAdvanceCashEntry(updatedAdvance)]
         return current.map((entry) => (
-          field(entry, 'referenciaTipo', 'referencia_tipo') === 'vale' && String(field(entry, 'referenciaId', 'referencia_id')) === String(editing.id)
+          String(entry.id) === String(`advance-${editing.id}`)
             ? { ...entry, ...createAdvanceCashEntry(updatedAdvance), id: entry.id }
             : entry
         ))
@@ -3878,9 +3852,10 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
   async function removeAdvance(item) {
     if (!window.confirm(`Cancelar o vale de ${advanceEmployeeName(item)}?`)) return
     try {
-    const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'cancelado' }))
+    const cancelledAt = new Date().toISOString()
+    const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'cancelado', cancelledAt, cancelled_at: cancelledAt }))
     setAdvances((current) => current.map((advance) => advance.id === item.id ? updatedAdvance : advance))
-    setCashEntries((current) => current.filter((entry) => !(field(entry, 'referenciaTipo', 'referencia_tipo') === 'vale' && String(field(entry, 'referenciaId', 'referencia_id')) === String(item.id))))
+    setCashEntries((current) => current.filter((entry) => String(entry.id) !== String(`advance-${item.id}`)))
     notify?.('Vale excluído.')
     } catch (error) {
       handleDataActionError(error, notify)
@@ -3899,7 +3874,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
 
       <Panel title="Filtros">
         <div className="grid gap-3 md:grid-cols-3">
-          <Select label="Funcionário" value={filters.employee} onChange={(value) => setFilters({ ...filters, employee: value })} options={['Todos', ...employees.map((item) => item.name)]} values={['all', ...employees.map((item) => item.name)]} />
+          <Select label="Funcionário" value={filters.employeeId} onChange={(value) => setFilters({ ...filters, employeeId: value })} options={['Todos', ...employees.map((item) => item.name)]} values={['all', ...employees.map((item) => String(item.id))]} />
           <Field label="Data" type="date" value={filters.date} onChange={(value) => setFilters({ ...filters, date: value })} />
           <Select label="Status" value={filters.status} onChange={(value) => setFilters({ ...filters, status: value })} options={['Todos', 'Pendente', 'Descontado', 'Cancelado']} values={['all', 'pendente', 'descontado', 'cancelado']} />
         </div>
@@ -3915,7 +3890,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
             <StatusBadge tone={advanceStatusTone(item.status)}>{advanceStatusLabel(item.status)}</StatusBadge>
           </div>
           <p className="mt-4 text-2xl font-bold text-graphite dark:text-gray-100">{money.format(advanceValue(item))}</p>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Observacao: {item.notes || item.reason || '-'}</p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Observacao: {item.notes || '-'}</p>
           {advanceDiscountedDate(item) && <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Descontado em {formatDate(advanceDiscountedDate(item))}</p>}
           <div className="mt-4 flex flex-wrap gap-2">
             <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
@@ -3941,17 +3916,17 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
     employeeId: advanceEmployeeId(advance) ?? '',
     employeeName: advanceEmployeeName(advance),
     value: advanceValue(advance),
-    date: advanceCreatedDate(advance),
+    createdAt: advanceCreatedDate(advance),
     status: advanceStatus(advance),
-    notes: advance.notes ?? advance.reason ?? ''
-  } : { employeeId: employees[0]?.id ?? '', employeeName: employees[0]?.name ?? '', value: 0, date: todayIso, status: 'pendente', notes: '' })
+    notes: advance.notes ?? ''
+  } : { employeeId: employees[0]?.id ?? '', employeeName: employees[0]?.name ?? '', value: 0, createdAt: todayIso, status: 'pendente', notes: '' })
 
   return (
     <Modal title={advance ? 'Editar vale' : 'Novo vale'} onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <Select label="Funcionario" value={form.employeeId} onChange={(value) => setForm({ ...form, employeeId: value, employeeName: employees.find((item) => String(item.id) === String(value))?.name ?? '' })} options={employees.map((item) => item.name)} values={employees.map((item) => String(item.id))} />
         <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
-        <Field label="Criado em" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
+        <Field label="Criado em" type="date" value={form.createdAt} onChange={(value) => setForm({ ...form, createdAt: value })} required />
         <Select label="Status" value={form.status} onChange={(value) => setForm({ ...form, status: value })} options={["Pendente", "Descontado", "Cancelado"]} values={["pendente", "descontado", "cancelado"]} />
         <Field label="Observacoes" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
         <div className="flex justify-end gap-2 pt-2">
@@ -4706,7 +4681,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
 }
 
 function CommissionPaymentModal({ salonId, employee, entries, advances = [], periodStart, periodEnd, setCashEntries, setAdvances, setCommissionPayments, onClose, notify }) {
-  const [form, setForm] = useState({ method: 'pix', notes: '' })
+  const [form, setForm] = useState({ paymentMethod: 'pix', notes: '' })
   const [saving, setSaving] = useState(false)
   const totalPending = entries.reduce((sum, entry) => sum + cashCommissionValue(entry), 0)
   const advancesToDiscount = advances.filter((advance) => advanceStatus(advance) === 'pendente')
@@ -4722,7 +4697,7 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
       const updatedEntries = await Promise.all(entries.map((entry) => updateCashMovementRecord(salonId, entry.id, {
         commissionPaid: true,
         commissionPaidAt: paidAt,
-        commissionPaymentMethod: form.method,
+        commissionPaymentMethod: form.paymentMethod,
         commissionNotes: form.notes
       })))
       const discountedAt = paidAt
@@ -4737,7 +4712,7 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
         amount: netTotal,
         commissionGross: totalPending,
         advancesTotal,
-        paymentMethod: form.method,
+        paymentMethod: form.paymentMethod,
         notes: [form.notes, advancesTotal > 0 ? `Comissao bruta: ${money.format(totalPending)}. Vales descontados: ${money.format(advancesTotal)}. Valor liquido pago: ${money.format(netTotal)}.` : ''].filter(Boolean).join(' '),
         periodStart,
         periodEnd,
@@ -4780,7 +4755,7 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(netTotal)}</p>
           </div>
         </div>
-        <Select label="Forma de pagamento" value={form.method} onChange={(method) => setForm((current) => ({ ...current, method }))} options={['Pix', 'Dinheiro', 'Transferência']} values={['pix', 'dinheiro', 'transferencia']} />
+        <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(paymentMethod) => setForm((current) => ({ ...current, paymentMethod }))} options={['Pix', 'Dinheiro', 'Transferência']} values={['pix', 'dinheiro', 'transferencia']} />
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Observação</span>
           <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
@@ -4823,7 +4798,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
       ) : entries.length ? (
         <Table
           rows={entries}
-          columns={['client', 'service', 'date', 'value', 'commission', 'method', 'status']}
+          columns={['client', 'service', 'date', 'value', 'commission', 'paymentMethod', 'status']}
           labels={['Cliente', 'Serviço', 'Data', 'Valor', 'Comissão', 'Forma de pagamento', 'Status']}
           onRowClick={(row) => setSelectedEntry(row)}
           formatValue={(key, value, row) => {
@@ -4832,7 +4807,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
             if (key === 'date') return formatDate(cashDate(row))
             if (key === 'value') return money.format(cashServiceValue(row))
             if (key === 'commission') return money.format(cashCommissionValue(row))
-            if (key === 'method') return <PaymentMethodBadge method={cashMethod(row)} />
+            if (key === 'paymentMethod') return <PaymentMethodBadge method={cashMethod(row)} />
             if (key === 'status') return <StatusBadge tone="green">Pago</StatusBadge>
             return value
           }}
