@@ -1313,6 +1313,51 @@ function getStoredTheme() {
 const sessionPersistenceKey = 'salon-session-persistence'
 const browserSessionKey = 'salon-browser-session-active'
 
+const premiumSuccessMessages = {
+  saved: '✔ Alterações salvas com sucesso',
+  payment: '✔ Pagamento registrado com sucesso',
+  advance: '✔ Vale criado com sucesso',
+  updated: '✔ Registro atualizado com sucesso'
+}
+
+function getPremiumSuccessMessage(text) {
+  const normalizedText = String(text ?? '').toLowerCase()
+
+  if (normalizedText.includes('pagamento') || normalizedText.includes('recebido')) return premiumSuccessMessages.payment
+  if (normalizedText.includes('vale criado')) return premiumSuccessMessages.advance
+  if (
+    normalizedText.includes('exclu') ||
+    normalizedText.includes('cancel') ||
+    normalizedText.includes('remov') ||
+    normalizedText.includes('desativ') ||
+    normalizedText.includes('marcado como pendente') ||
+    normalizedText.includes('marcado como pago') ||
+    normalizedText.includes('marcada como paga') ||
+    normalizedText.includes('atualizado')
+  ) return premiumSuccessMessages.updated
+  if (
+    normalizedText.includes('salvo') ||
+    normalizedText.includes('salva') ||
+    normalizedText.includes('criado') ||
+    normalizedText.includes('criada') ||
+    normalizedText.includes('fechado')
+  ) return premiumSuccessMessages.saved
+
+  return text
+}
+
+function showSuccess(message, onToast) {
+  if (typeof onToast === 'function') {
+    onToast(message)
+    return
+  }
+  if (typeof window !== 'undefined' && window?.toast?.success) {
+    window.toast.success(message)
+  } else if (typeof window !== 'undefined') {
+    window.alert(message)
+  }
+}
+
 function normalizeRole(role) {
   const normalizedRole = String(role ?? '').trim().toLowerCase()
   if (normalizedRole === 'caixa' || normalizedRole === 'cashier') return 'cashier'
@@ -1607,6 +1652,10 @@ function App() {
   }, [theme])
 
   function notify(text, type = 'success') {
+    if (type === 'success') {
+      showSuccess(getPremiumSuccessMessage(text), (message) => setToast({ text: message, type, id: Date.now() }))
+      return
+    }
     setToast({ text, type, id: Date.now() })
   }
 
@@ -2032,6 +2081,10 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const dayAdvances = activeAdvances.filter((item) => advanceCreatedDate(item) === todayIso).reduce((sum, item) => sum + advanceValue(item), 0)
   const monthAdvances = activeAdvances.filter((item) => advanceCreatedDate(item).startsWith(currentMonth)).reduce((sum, item) => sum + advanceValue(item), 0)
   const pendingAdvances = activeAdvances.filter((item) => advanceStatus(item) === 'pendente').reduce((sum, item) => sum + advanceValue(item), 0)
+  const faturamentoHoje = dayRevenue
+  const resumoMensagem = faturamentoHoje > 0
+    ? `Hoje você já faturou ${faturamentoHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+    : 'Nenhum faturamento registrado hoje. Vamos começar?'
 
   return (
     <div className="space-y-5">
@@ -2039,6 +2092,10 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
         <h3 className="text-xl font-bold text-graphite dark:text-gray-100">{uiText.dashboard.title}</h3>
         <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{uiText.dashboard.subtitle}</p>
       </div>
+      <section className="rounded-2xl border border-[#d9c17a]/70 bg-gradient-to-r from-white via-[#fff8e8] to-[#f7eef8] px-5 py-4 shadow-soft dark:border-[#d9c17a]/30 dark:from-[#1f1b26] dark:via-[#282235] dark:to-[#231c28]">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Resumo de hoje</p>
+        <p className="mt-1 text-lg font-black text-graphite dark:text-gray-100">{resumoMensagem}</p>
+      </section>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric title={uiText.dashboard.todayRevenue} value={money.format(dayRevenue)} detail={uiText.dashboard.todayRevenueHelp} />
         <Metric title={uiText.dashboard.monthRevenue} value={money.format(monthRevenue)} detail={uiText.dashboard.monthRevenueHelp} />
@@ -3650,7 +3707,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
         <Metric title="Comissão dos profissionais" value={money.format(commissionPaid)} detail="Sobre recebidos" />
         <Metric title="Lucro líquido do salão" value={money.format(salonProfit)} detail="Recebido - comissões" />
         <Metric title="Saídas" value={money.format(outcome)} detail="Despesas do dia" />
-        <Metric title="Saldo final" value={money.format(income - outcome)} detail="Recebido - saídas" />
+        <Metric title="Resultado do dia" value={money.format(income - outcome)} detail="Recebido - saídas" />
       </div>
       </section>
 
@@ -3751,7 +3808,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
           <Table
             rows={closures}
             columns={['date', 'totalReceived', 'pix', 'cash', 'outcome', 'commission', 'salonProfit', 'balance']}
-            labels={['Data', 'Recebido', 'Pix', 'Dinheiro', 'Saídas', 'Comissão', 'Lucro do salão', 'Saldo final']}
+            labels={['Data', 'Recebido', 'Pix', 'Dinheiro', 'Saídas', 'Comissão', 'Lucro do salão', 'Resultado do dia']}
             formatValue={(key, value, row) => {
               if (key === 'date') return <StatusBadge tone="cyan">{formatDate(row.date)}</StatusBadge>
               return money.format(Number(value) || 0)
@@ -3789,7 +3846,7 @@ function CashClosureModal({ summary, onClose, onConfirm }) {
     ['Saídas', money.format(summary.outcome)],
     ['Comissão dos profissionais', money.format(summary.commission)],
     ['Lucro líquido do salão', money.format(summary.salonProfit)],
-    ['Saldo final', money.format(summary.balance)]
+    ['Resultado do dia', money.format(summary.balance)]
   ]
 
   return (
@@ -3879,7 +3936,7 @@ function CashEntryModal({ onClose, onSave }) {
         <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value, category: value === 'Retirada do dono' ? 'retirada_dono' : form.category })} options={['Entrada', 'Saida', 'Retirada do dono']} />
         {ownerWithdrawal && (
           <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
-            A retirada do dono sera registrada como saida e reduzira o saldo final do caixa.
+            A retirada do dono sera registrada como saida e reduzira o resultado do dia do caixa.
           </div>
         )}
         <Field label="Descrição" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
@@ -4408,14 +4465,14 @@ function AuditJsonBlock({ title, data }) {
 
 function toFriendlyAuditData(data) {
   const labels = {
-    cash_movements: 'lançamentos financeiros',
-    cash_movement: 'lançamento financeiro',
-    payment_status: 'status do pagamento',
-    payment_method: 'forma de pagamento',
+    cash_movements: 'Lançamentos financeiros',
+    cash_movement: 'Lançamento financeiro',
+    payment_status: 'Status do pagamento',
+    payment_method: 'Forma de pagamento',
     employee_id: 'profissional',
-    service_value: 'valor do serviço',
-    commission_value: 'comissão',
-    salon_value: 'lucro do salão',
+    service_value: 'Valor do serviço',
+    commission_value: 'Comissão',
+    salon_value: 'Lucro do salão',
     employee_name: 'profissional',
     service_name: 'serviço',
     client_name: 'cliente',
@@ -4423,11 +4480,19 @@ function toFriendlyAuditData(data) {
     updated_at: 'atualizado em',
     cancelled_at: 'cancelado em'
   }
+  const values = {
+    service_value: 'Valor do serviço',
+    commission_value: 'Comissão',
+    salon_value: 'Lucro do salão',
+    cash_movements: 'Lançamentos financeiros',
+    payment_method: 'Forma de pagamento',
+    payment_status: 'Status do pagamento'
+  }
   if (Array.isArray(data)) return data.map(toFriendlyAuditData)
   if (!data || typeof data !== 'object') return data
   return Object.fromEntries(Object.entries(data).map(([key, value]) => [
     labels[key] ?? key,
-    toFriendlyAuditData(value)
+    typeof value === 'string' ? values[value] ?? value : toFriendlyAuditData(value)
   ]))
 }
 

@@ -127,9 +127,9 @@ export const uiText = {
     confirm: "Confirmar",
     loading: "Carregando...",
     saving: "Salvando...",
-    successSaved: "Alterações salvas com sucesso.",
-    successPayment: "Pagamento registrado com sucesso.",
-    successAdvance: "Vale criado com sucesso.",
+    successSaved: "✔ Alterações salvas com sucesso",
+    successPayment: "✔ Pagamento registrado com sucesso",
+    successAdvance: "✔ Vale criado com sucesso",
     confirmDelete: "Tem certeza que deseja excluir este registro?",
     confirmDeleteHelp: "Essa ação será registrada na auditoria.",
     empty: "Nenhuma informação encontrada para este período."
