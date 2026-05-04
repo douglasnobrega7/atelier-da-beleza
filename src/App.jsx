@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef, useState } from 'react'
+﻿import { Component, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from './lib/supabase'
 import {
@@ -59,7 +59,7 @@ const employeeFunctionOptions = [
   'Designer de Sobrancelhas / Micropigmentador',
   'Depilador/Depiladora',
   'Barbeiro/Barbeira',
-  'Técnico de Alongamento de Cílios'
+  'TÃ©cnico de Alongamento de CÃ­lios'
 ]
 function getTodayIso() {
   const now = new Date()
@@ -70,19 +70,19 @@ function getTodayIso() {
 const todayIso = getTodayIso()
 const weekDayOptions = [
   { id: 'monday', label: 'Segunda' },
-  { id: 'tuesday', label: 'Terça' },
+  { id: 'tuesday', label: 'TerÃ§a' },
   { id: 'wednesday', label: 'Quarta' },
   { id: 'thursday', label: 'Quinta' },
   { id: 'friday', label: 'Sexta' },
-  { id: 'saturday', label: 'Sábado' },
+  { id: 'saturday', label: 'SÃ¡bado' },
   { id: 'sunday', label: 'Domingo' }
 ]
 const defaultWorkingDays = weekDayOptions.map((day) => day.id)
 const defaultOpeningHours = Object.fromEntries(weekDayOptions.map((day) => [day.id, { open: '09:00', close: '18:00' }]))
 const appointmentSlotInterval = 15
-const paymentMethodOptions = ['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente / pagar depois']
+const paymentMethodOptions = ['Pix', 'Dinheiro', 'DÃ©bito', 'CrÃ©dito', 'Pendente / pagar depois']
 const paymentMethodValues = ['pix', 'dinheiro', 'debito', 'credito', 'pendente']
-const appointmentPaymentOptions = ['Sem pagamento', 'PIX', 'Dinheiro', 'Débito', 'Crédito']
+const appointmentPaymentOptions = ['Sem pagamento', 'PIX', 'Dinheiro', 'DÃ©bito', 'CrÃ©dito']
 const appointmentPaymentValues = ['', 'pix', 'dinheiro', 'debito', 'credito']
 
 function normalizeAppointmentPaymentMethod(value) {
@@ -98,12 +98,12 @@ function normalizeAppointmentPaymentMethod(value) {
 }
 
 function cashPaymentMethodLabel(value) {
-  const labels = { dinheiro: 'Dinheiro', pix: 'Pix', debito: 'Débito', credito: 'Crédito', pendente: 'Pendente' }
+  const labels = { dinheiro: 'Dinheiro', pix: 'Pix', debito: 'DÃ©bito', credito: 'CrÃ©dito', pendente: 'Pendente' }
   return labels[normalizeAppointmentPaymentMethod(value)] ?? 'Pendente'
 }
 
 function paymentMethodLabel(value) {
-  const labels = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Débito', credito: 'Crédito', pendente: 'Pendente' }
+  const labels = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'DÃ©bito', credito: 'CrÃ©dito', pendente: 'Pendente' }
   return labels[normalizeAppointmentPaymentMethod(value)] ?? 'Pendente'
 }
 
@@ -113,7 +113,7 @@ function financialPaymentMethodLabel(value) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-  if (normalized === 'transferencia') return 'Transferência'
+  if (normalized === 'transferencia') return 'TransferÃªncia'
   return paymentMethodLabel(value)
 }
 
@@ -225,7 +225,7 @@ function getSalonHoursForDate(salonSettings, date) {
 
 function formatSalonHoursForDate(salonSettings, date) {
   const hours = getSalonHoursForDate(salonSettings, date)
-  return hours ? `${hours.open} às ${hours.close}` : 'Fechado'
+  return hours ? `${hours.open} Ã s ${hours.close}` : 'Fechado'
 }
 
 function getAppointmentSortKey(appointment) {
@@ -427,7 +427,7 @@ function getAppointmentCommission(appointment, employees) {
 }
 
 function formatCommissionRule(rule) {
-  if (!rule) return 'Sem Comissão'
+  if (!rule) return 'Sem ComissÃ£o'
   const type = rule.type ?? rule.tipoComissao
   const value = Number(rule.value ?? rule.valorComissaoConfigurado ?? 0)
   return type === 'fixed' ? money.format(value) : `${value}%`
@@ -453,7 +453,7 @@ function getSalonDomain(settings) {
 function getSidebarSalonName(salonName) {
   const name = salonName?.trim()
   if (!name) return ''
-  return name.replace(/^salão\s+/i, '').trim()
+  return name.replace(/^salÃ£o\s+/i, '').trim()
 }
 
 function getSuggestedAccessEmail({ name, employeeType = 'professional', salonSettings }) {
@@ -473,11 +473,11 @@ function withCommission(appointment, employees) {
 function getClientInsights(clientName, appointments) {
   const visits = appointments.filter((item) => item.client === clientName && isCompletedStatus(item.status))
   const serviceCounts = visits.reduce((acc, item) => ({ ...acc, [item.service]: (acc[item.service] || 0) + 1 }), {})
-  const favoriteService = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Sem histórico'
+  const favoriteService = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Sem histÃ³rico'
   const lastVisit = visits.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))[0]?.date
   return {
     favoriteService,
-    lastVisit: lastVisit ? formatDate(lastVisit) : 'Sem visita concluída',
+    lastVisit: lastVisit ? formatDate(lastVisit) : 'Sem visita concluÃ­da',
     visitCount: visits.length,
     averageTicket: 0
   }
@@ -578,7 +578,7 @@ const appointmentStatusOptions = [
   { value: 'confirmado', label: 'Confirmado' },
   { value: 'em_atendimento', label: 'Em atendimento' },
   { value: 'aguardando_pagamento', label: 'Aguardando pagamento' },
-  { value: 'concluido', label: 'Concluído' },
+  { value: 'concluido', label: 'ConcluÃ­do' },
   { value: 'cancelado', label: 'Cancelado' }
 ]
 
@@ -587,7 +587,7 @@ const appointmentStatusLabels = {
   confirmado: 'Confirmado',
   em_atendimento: 'Em atendimento',
   aguardando_pagamento: 'Aguardando pagamento',
-  concluido: 'Concluído',
+  concluido: 'ConcluÃ­do',
   cancelado: 'Cancelado'
 }
 
@@ -760,7 +760,7 @@ function createAdvanceCashEntry(advance) {
   return {
     id: advance.id ? `advance-${advance.id}` : Date.now() + 1,
     tipo: 'saida',
-    type: 'Saída',
+    type: 'SaÃ­da',
     categoria: 'Vale',
     category: 'Vale',
     descricao: `Vale - ${employeeName}`,
@@ -863,7 +863,7 @@ function normalizeClientRecord(row) {
     birthday: field(row, 'birthday') ?? '',
     notes: field(row, 'notes') ?? '',
     history: field(row, 'history') ?? [],
-    lastVisit: field(row, 'lastVisit', 'last_visit') ?? 'Sem visita concluída',
+    lastVisit: field(row, 'lastVisit', 'last_visit') ?? 'Sem visita concluÃ­da',
     active: field(row, 'active') ?? true
   }
 }
@@ -1124,9 +1124,9 @@ async function recordAuditLog({ salonId, user, action, entityType, entityId, old
     return null
   }
   try {
-    const savedLog = normalizeAuditLogRecord(await createAuditLogRecord(salonId, {
+    const createdLog = await createAuditLogRecord(salonId, {
       userId: user?.id ?? null,
-      userName: user?.name ?? user?.email ?? 'Usuário',
+      userName: user?.name ?? user?.email ?? 'UsuÃ¡rio',
       action,
       entityType,
       entityId: entityId === undefined || entityId === null ? null : String(entityId),
@@ -1134,7 +1134,9 @@ async function recordAuditLog({ salonId, user, action, entityType, entityId, old
       newData: newData ?? null,
       reason: trimmedReason,
       createdAt: new Date().toISOString()
-    }))
+    })
+    if (!createdLog) return null
+    const savedLog = normalizeAuditLogRecord(createdLog)
     onCreated?.(savedLog)
     return savedLog
   } catch (error) {
@@ -1168,7 +1170,7 @@ function normalizeSalonSettings(row) {
 
 function handleDataActionError(error, notify) {
   console.error('Erro Supabase:', error)
-  const message = error?.message || 'Não foi possível salvar no banco de dados.'
+  const message = error?.message || 'NÃ£o foi possÃ­vel salvar no banco de dados.'
   if (isMissingTableError(error?.original ?? error)) {
     notify?.(error?.message || databaseNotConfiguredMessage, 'error')
     return true
@@ -1178,7 +1180,7 @@ function handleDataActionError(error, notify) {
 }
 
 function getDataActionErrorMessage(error) {
-  return error?.original?.message || error?.message || 'Não foi possível salvar no banco de dados.'
+  return error?.original?.message || error?.message || 'NÃ£o foi possÃ­vel salvar no banco de dados.'
 }
 
 function handleAgendaDataActionError(error, notify) {
@@ -1227,14 +1229,14 @@ const adminMenu = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'agenda', label: 'Agenda' },
   { id: 'clientes', label: 'Clientes' },
-  { id: 'servicos', label: 'Serviços' },
-  { id: 'funcionarios', label: 'Funcionários' },
+  { id: 'servicos', label: 'ServiÃ§os' },
+  { id: 'funcionarios', label: 'FuncionÃ¡rios' },
   { id: 'caixa', label: 'Caixa' },
   { id: 'vales', label: 'Vales' },
   { id: 'estoque', label: 'Estoque' },
-  { id: 'relatorios', label: 'Relatórios' },
+  { id: 'relatorios', label: 'RelatÃ³rios' },
   { id: 'auditoria', label: 'Auditoria' },
-  { id: 'configuracoes', label: 'Configurações' }
+  { id: 'configuracoes', label: 'ConfiguraÃ§Ãµes' }
 ]
 
 const cashierMenu = [
@@ -1295,11 +1297,11 @@ function getAppointmentStatusTextClass(status) {
   return appointmentStatusTextStyles[normalizeAppointmentStatus(status)] ?? appointmentStatusTextStyles.agendado
 }
 
-const employeeStatuses = ['Ativo', 'De folga', 'Horário de almoço']
+const employeeStatuses = ['Ativo', 'De folga', 'HorÃ¡rio de almoÃ§o']
 const employeeStatusStyles = {
   Ativo: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200',
   'De folga': 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200',
-  'Horário de almoço': 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200'
+  'HorÃ¡rio de almoÃ§o': 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200'
 }
 
 function getStoredTheme() {
@@ -1319,7 +1321,7 @@ function normalizeRole(role) {
 
 function getRoleTitle(role) {
   if (role === 'admin') return 'Admin'
-  if (role === 'cashier') return 'Funcionário Caixa'
+  if (role === 'cashier') return 'FuncionÃ¡rio Caixa'
   return 'Profissional'
 }
 
@@ -1332,6 +1334,7 @@ function normalizeUserProfile(profile, employees = []) {
   ))
   return {
     id: profile.id,
+    salon_id: profile.salon_id,
     salonId: profile.salon_id,
     role,
     dbRole: profile.role,
@@ -1347,6 +1350,7 @@ function createAdminFallbackUser(authUser) {
   const email = authUser?.email ?? ''
   return {
     id: authUser?.id ?? 'auth-admin',
+    salon_id: null,
     salonId: null,
     role: 'admin',
     dbRole: 'admin',
@@ -1407,7 +1411,7 @@ function App() {
   async function loadSalonData(salonId) {
     if (!salonId) {
       clearSalonData()
-      setDatabaseStatus({ notConfigured: false, message: 'Salão ainda não vinculado.' })
+      setDatabaseStatus({ notConfigured: false, message: 'SalÃ£o ainda nÃ£o vinculado.' })
       return
     }
 
@@ -1460,10 +1464,10 @@ function App() {
             serviceRows = seededServiceRows
             appointmentRows = seededAppointmentRows
             console.log('resultado de employees apos seed:', employeeRows)
-            notify('Sistema preparado para este salão')
+            notify('Sistema preparado para este salÃ£o')
           }
         } catch (seedError) {
-          console.error('Seed inicial não criado:', seedError)
+          console.error('Seed inicial nÃ£o criado:', seedError)
         }
       }
 
@@ -1541,11 +1545,13 @@ function App() {
     try {
       profile = await ensureAdminSalon(loadedProfile, authUser)
     } catch (error) {
-      console.error('Erro ao criar salão no primeiro login:', error)
+      console.error('Erro ao criar salÃ£o no primeiro login:', error)
     }
 
     const user = normalizeUserProfile(profile) ?? createAdminFallbackUser(authUser)
-    const salonId = user.salonId ?? null
+    console.log("USER:", user)
+    console.log("SALON_ID:", user?.salon_id)
+    const salonId = user.salon_id ?? user.salonId ?? null
 
     setCurrentUser(user)
     setCurrentSalonId(salonId)
@@ -1616,7 +1622,7 @@ function App() {
       }
 
       const authUser = loginData.user
-      if (!authUser?.id) return { success: false, error: 'Login sem usuário retornado pelo Auth.' }
+      if (!authUser?.id) return { success: false, error: 'Login sem usuÃ¡rio retornado pelo Auth.' }
 
       const activeProfile = await loadProfileForAuthUser(authUser, { createMissingProfile: true })
 
@@ -1629,7 +1635,7 @@ function App() {
       }
 
       const user = await startAuthenticatedSession(authUser, { profile: activeProfile })
-      if (!user?.salonId) notify('Salão ainda não vinculado.', 'info')
+      if (!(user?.salon_id ?? user?.salonId)) notify('SalÃ£o ainda nÃ£o vinculado.', 'info')
       return { success: true }
     } catch (error) {
       console.error('Erro no fluxo de login:', error)
@@ -1683,9 +1689,9 @@ function App() {
             onNavigate={setActivePage}
           />
           <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-            {databaseStatus.message === 'Salão ainda não vinculado.' && (
+            {databaseStatus.message === 'SalÃ£o ainda nÃ£o vinculado.' && (
               <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
-                Salão ainda não vinculado.
+                SalÃ£o ainda nÃ£o vinculado.
               </div>
             )}
             {databaseStatus.notConfigured && (
@@ -1769,17 +1775,17 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
                 <ThemeToggle theme={theme} onChange={onThemeChange} />
               </div>
               <div className="mb-10 inline-flex items-center gap-3 rounded-full border border-white/80 bg-white/70 px-4 py-2 text-sm font-semibold text-goldSoft shadow-sm dark:border-white/10 dark:bg-white/10">
-                Sistema inteligente para o seu salão
+                Sistema inteligente para o seu salÃ£o
               </div>
               <h1 className="max-w-xl text-4xl font-bold leading-tight text-graphite sm:text-5xl">
-                Salão Pro
+                SalÃ£o Pro
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-gray-600 dark:text-gray-300">
-                Controle agenda, clientes, serviços, caixa, estoque e equipe em uma interface simples para o dia a dia do seu salão.
+                Controle agenda, clientes, serviÃ§os, caixa, estoque e equipe em uma interface simples para o dia a dia do seu salÃ£o.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              {['Agenda organizada', 'Controle de caixa', 'Gestão de equipe'].map((item) => (
+              {['Agenda organizada', 'Controle de caixa', 'GestÃ£o de equipe'].map((item) => (
                 <div key={item} className="rounded-2xl border border-white/80 bg-white/70 p-4 text-sm font-semibold shadow-sm dark:border-white/10 dark:bg-white/10">
                   {item}
                 </div>
@@ -1841,8 +1847,8 @@ function AuthLoadingScreen({ theme, onThemeChange }) {
           <div className="mb-6 flex justify-end">
             <ThemeToggle theme={theme} onChange={onThemeChange} />
           </div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-goldSoft">Salão Pro</p>
-          <h1 className="mt-3 text-2xl font-bold">Carregando sessão...</h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-goldSoft">SalÃ£o Pro</p>
+          <h1 className="mt-3 text-2xl font-bold">Carregando sessÃ£o...</h1>
         </div>
       </div>
     </div>
@@ -1875,7 +1881,7 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
     <aside className="border-b border-blush/80 bg-white/90 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-[#1a171f]/95 lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
       <div className="flex items-center justify-between gap-4 lg:block">
         <div className="min-w-0 break-words">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃO</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃƒO</p>
           {displaySalonName && <h1 className="text-xl font-bold text-graphite">{displaySalonName}</h1>}
         </div>
           <button onClick={onLogout} className={`${buttonSecondary} px-3 py-2 lg:hidden`}>
@@ -1912,9 +1918,9 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
   const search = query.trim().toLowerCase()
   const results = canSearchGlobal && search ? [
     ...clients.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Cliente', page: 'clientes' })),
-    ...services.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Serviço', page: 'servicos' })),
-    ...employees.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'Funcionário', page: 'funcionarios' })),
-    ...appointments.filter((item) => `${item.client} ${item.service} ${getAppointmentEmployeeName(item, employees)}`.toLowerCase().includes(search)).map((item) => ({ label: `${item.client} · ${item.time}`, detail: `Agenda · ${item.service}`, page: 'agenda' }))
+    ...services.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'ServiÃ§o', page: 'servicos' })),
+    ...employees.filter((item) => item.name.toLowerCase().includes(search)).map((item) => ({ label: item.name, detail: 'FuncionÃ¡rio', page: 'funcionarios' })),
+    ...appointments.filter((item) => `${item.client} ${item.service} ${getAppointmentEmployeeName(item, employees)}`.toLowerCase().includes(search)).map((item) => ({ label: `${item.client} Â· ${item.time}`, detail: `Agenda Â· ${item.service}`, page: 'agenda' }))
   ].slice(0, 8) : []
 
   function openResult(page) {
@@ -1927,14 +1933,14 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
       <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-graphite">{title}</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Hoje, {formatDate(todayIso)} · atendimento rápido e organizado</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Hoje, {formatDate(todayIso)} Â· atendimento rÃ¡pido e organizado</p>
         </div>
         {canSearchGlobal && <div className="relative w-full sm:max-w-xs">
           <input
             className={inputBase}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar clientes, serviços, agenda..."
+            placeholder="Buscar clientes, serviÃ§os, agenda..."
           />
           {results.length > 0 && (
             <div className="absolute right-0 z-30 mt-2 w-full overflow-hidden rounded-2xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#24202c]">
@@ -1950,7 +1956,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
         <div className="flex flex-wrap items-center gap-3">
           <ThemeToggle theme={theme} onChange={onThemeChange} />
           <div className="rounded-full border border-blush bg-white px-4 py-2 text-sm font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
-            {user.role === 'admin' ? 'Perfil Admin' : user.role === 'professional' ? 'Perfil Profissional' : 'Funcionário Caixa'}
+            {user.role === 'admin' ? 'Perfil Admin' : user.role === 'professional' ? 'Perfil Profissional' : 'FuncionÃ¡rio Caixa'}
           </div>
         </div>
       </div>
@@ -2014,9 +2020,9 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
   const topClient = topEntries(countBy(paidAppointmentEntries, (item) => cashClientName(item)), 1)[0]
   const busyHours = topEntries(countBy(appointments.filter((item) => !isCancelledStatus(item.status)), (item) => item.time?.slice(0, 2) + ':00'))
   const bestWeekday = topEntries(paidIncomeEntries.reduce((acc, item) => ({ ...acc, [getWeekdayLabel(cashDate(item))]: (acc[getWeekdayLabel(cashDate(item))] || 0) + cashServiceValue(item) }), {}), 1)[0]
-  const serviceRevenue = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashServiceValue(item) }), {}))
-  const serviceSales = topEntries(countBy(paidAppointmentEntries, (item) => cashServiceName(item) || 'Serviço'))
-  const serviceCommissions = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}))
+  const serviceRevenue = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'ServiÃ§o']: (acc[cashServiceName(item) || 'ServiÃ§o'] || 0) + cashServiceValue(item) }), {}))
+  const serviceSales = topEntries(countBy(paidAppointmentEntries, (item) => cashServiceName(item) || 'ServiÃ§o'))
+  const serviceCommissions = topEntries(paidAppointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'ServiÃ§o']: (acc[cashServiceName(item) || 'ServiÃ§o'] || 0) + cashCommissionValue(item) }), {}))
   const cashIncome = paidIncomeEntries.reduce((sum, item) => sum + cashSalonValue(item), 0)
   const dashboardByMethod = (methods) => paidIncomeEntries.filter((item) => methods.includes(cashMethod(item))).reduce((sum, item) => sum + cashServiceValue(item), 0)
   const pendingPaymentsTotal = cashEntries.filter(isPendingIncomeCashEntry).reduce((sum, item) => sum + cashServiceValue(item), 0)
@@ -2030,61 +2036,61 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
     <div className="space-y-5">
       <div>
         <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo financeiro</h3>
-        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Valores financeiros lidos apenas de lançamentos financeiros pagos.</p>
+        <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Valores financeiros lidos apenas de lanÃ§amentos financeiros pagos.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric title="Faturamento do dia" value={money.format(dayRevenue)} detail="Faturamento pago hoje" />
-        <Metric title="Faturamento do mês" value={money.format(monthRevenue)} detail="Faturamento pago no mês" />
-        <Metric title="Comissões do dia" value={money.format(dayCommissions)} detail="Comissões pagas hoje" />
-        <Metric title="Comissões do mês" value={money.format(monthCommissions)} detail="Comissões pagas no mês" />
+        <Metric title="Faturamento do mÃªs" value={money.format(monthRevenue)} detail="Faturamento pago no mÃªs" />
+        <Metric title="ComissÃµes do dia" value={money.format(dayCommissions)} detail="ComissÃµes pagas hoje" />
+        <Metric title="ComissÃµes do mÃªs" value={money.format(monthCommissions)} detail="ComissÃµes pagas no mÃªs" />
         <Metric title="PIX" value={money.format(dashboardByMethod(['PIX', 'Pix', 'pix']))} detail="Pagamentos pagos" />
         <Metric title="Dinheiro" value={money.format(dashboardByMethod(['Dinheiro', 'dinheiro']))} detail="Pagamentos pagos" />
-        <Metric title="Cartão" value={money.format(dashboardByMethod(['debito', 'credito']))} detail="Débito + crédito pagos" />
+        <Metric title="CartÃ£o" value={money.format(dashboardByMethod(['debito', 'credito']))} detail="DÃ©bito + crÃ©dito pagos" />
         <Metric title="Pendentes" value={money.format(pendingPaymentsTotal)} detail="Entradas pendentes" />
         <Metric title="Vales do dia" value={money.format(dayAdvances)} detail="Adiantamentos criados hoje" />
         <Metric title="Vales do mes" value={money.format(monthAdvances)} detail="Adiantamentos do mes" />
         <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Adiantamentos pendentes" />
-        <Metric title="Saldo líquido" value={money.format(cashIncome - cashOutcome)} detail="Lucro líquido após saídas" />
+        <Metric title="Saldo lÃ­quido" value={money.format(cashIncome - cashOutcome)} detail="Lucro lÃ­quido apÃ³s saÃ­das" />
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Faturamento semanal">
           <WeeklyRevenueChart cashEntries={cashEntries} />
         </Panel>
-        <Panel title="Serviços mais vendidos">
+        <Panel title="ServiÃ§os mais vendidos">
           <CompactList items={serviceSales.map(([label, count]) => `${label}: ${count} venda(s)`)} />
         </Panel>
       </div>
       <div className="grid gap-5 xl:grid-cols-3">
-        <Panel title="Comissão por funcionário">
+        <Panel title="ComissÃ£o por funcionÃ¡rio">
           <div className="space-y-3">
             {commissions.map((item) => <LineItem key={item.name} label={item.name} value={money.format(item.value)} />)}
           </div>
         </Panel>
-        <Panel title="Comissão por serviço">
-          <CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissões calculadas']} />
+        <Panel title="ComissÃ£o por serviÃ§o">
+          <CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissÃµes calculadas']} />
         </Panel>
         <Panel title="Cliente que mais frequenta">
           <CompactList items={[topClient ? `${topClient[0]}: ${topClient[1]} visita(s)` : 'Sem dados suficientes']} />
         </Panel>
-        <Panel title="Horários mais cheios">
+        <Panel title="HorÃ¡rios mais cheios">
           <CompactList items={busyHours.length ? busyHours.map(([label, count]) => `${label}: ${count} agendamento(s)`) : ['Sem dados']} />
         </Panel>
         <Panel title="Dia que mais fatura">
           <CompactList items={[bestWeekday ? `${bestWeekday[0]}: ${money.format(bestWeekday[1])}` : 'Sem dados']} />
         </Panel>
-        <Panel title="Serviços mais lucrativos">
+        <Panel title="ServiÃ§os mais lucrativos">
           <CompactList items={serviceRevenue.length ? serviceRevenue.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem dados']} />
         </Panel>
-        <Panel title="Entradas e saídas">
+        <Panel title="Entradas e saÃ­das">
           <LineItem label="Entradas" value={money.format(cashIncome)} positive />
-          <LineItem label="Saídas" value={money.format(cashOutcome)} negative />
+          <LineItem label="SaÃ­das" value={money.format(cashOutcome)} negative />
           <LineItem label="Saldo do dia" value={money.format(cashIncome - cashOutcome)} />
         </Panel>
-        <Panel title="Próximos agendamentos">
+        <Panel title="PrÃ³ximos agendamentos">
           <div className="space-y-3">
             {appointments.filter((item) => !isCancelledStatus(item.status)).slice(0, 4).map((item) => (
               <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-3 text-sm">
-                <p className="font-semibold">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                <p className="font-semibold">{formatDate(item.date)} Â· {item.time} Â· {item.client}</p>
                 <p className="text-gray-500">{item.service} com {getAppointmentEmployeeName(item, employees)}</p>
               </div>
             ))}
@@ -2236,7 +2242,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     if (user.role !== 'admin' && user.role !== 'cashier') return false
 
     if (isCompletedStatus(appointment.status)) {
-      if (!window.confirm('Este agendamento já foi concluído. Deseja cancelar em vez de excluir?')) return false
+      if (!window.confirm('Este agendamento jÃ¡ foi concluÃ­do. Deseja cancelar em vez de excluir?')) return false
       try {
         const saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, appointment.id, { status: 'cancelado' })) }, allEmployees)
         setAppointments((current) => current.map((item) => item.id === appointment.id ? saved : item))
@@ -2252,7 +2258,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     try {
       await deleteAppointmentRecord(salonId, appointment.id)
       setAppointments((current) => current.filter((item) => item.id !== appointment.id))
-      notify?.('Agendamento excluído com sucesso')
+      notify?.('Agendamento excluÃ­do com sucesso')
       return true
     } catch (error) {
       handleAgendaDataActionError(error, notify)
@@ -2267,23 +2273,23 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
       notify?.('Cliente sem telefone cadastrado.', 'error')
       return
     }
-    const message = `Olá ${appointment.client}\nSeu horário está marcado para dia ${formatDate(appointment.date)} às ${appointment.time} com ${getAppointmentEmployeeName(appointment, allEmployees)}.\nServiço: ${appointment.service}\nQualquer dúvida é só avisar`
+    const message = `OlÃ¡ ${appointment.client}\nSeu horÃ¡rio estÃ¡ marcado para dia ${formatDate(appointment.date)} Ã s ${appointment.time} com ${getAppointmentEmployeeName(appointment, allEmployees)}.\nServiÃ§o: ${appointment.service}\nQualquer dÃºvida Ã© sÃ³ avisar`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
   }
 
   function saveBlock(data) {
     if (!data.employeeName || !data.date || !data.start || !data.end || timeToMinutes(data.end) <= timeToMinutes(data.start)) {
-      notify?.('Erro ao bloquear: confira profissional, data e Horários.', 'error')
+      notify?.('Erro ao bloquear: confira profissional, data e HorÃ¡rios.', 'error')
       return
     }
     setBlockedSlots((current) => [...current, { ...data, id: Date.now() }])
     setBlockModalOpen(false)
-    notify?.('Horário bloqueado com sucesso.')
+    notify?.('HorÃ¡rio bloqueado com sucesso.')
   }
 
   async function saveQuickService(data) {
     if (!data.client.trim() || !data.service || !data.employeeName || Number(data.value) <= 0) {
-      notify?.('Erro ao salvar: confira cliente, serviço, profissional e valor.', 'error')
+      notify?.('Erro ao salvar: confira cliente, serviÃ§o, profissional e valor.', 'error')
       return
     }
     const professional = employees.find((item) => item.name === data.employeeName)
@@ -2331,16 +2337,16 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     event.preventDefault()
     const requiredFields = [
       ['client', 'cliente'],
-      ['service', 'serviço'],
+      ['service', 'serviÃ§o'],
       ['employeeName', 'profissional'],
       ['date', 'data'],
-      ['time', 'horário']
+      ['time', 'horÃ¡rio']
     ]
     const missingField = requiredFields.find(([key]) => !String(form[key] ?? '').trim())
 
     if (missingField) {
       setFormMessage({ type: 'error', text: `Preencha o campo ${missingField[1]} para agendar.` })
-      notify?.('Erro ao salvar: confira os campos obrigatórios.', 'error')
+      notify?.('Erro ao salvar: confira os campos obrigatÃ³rios.', 'error')
       return
     }
 
@@ -2351,14 +2357,14 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     }
 
     if (!selectedService || !isServiceCompatibleWithProfessional(selectedService, selectedEmployee)) {
-      setFormMessage({ type: 'error', text: 'Selecione um serviço disponível para a função deste profissional.' })
-      notify?.('Erro ao salvar: serviço incompatível com o profissional.', 'error')
+      setFormMessage({ type: 'error', text: 'Selecione um serviÃ§o disponÃ­vel para a funÃ§Ã£o deste profissional.' })
+      notify?.('Erro ao salvar: serviÃ§o incompatÃ­vel com o profissional.', 'error')
       return
     }
 
     if (!selectedSlotAvailable) {
-      setFormMessage({ type: 'error', text: 'Escolha um horário disponível para esta data.' })
-      notify?.('Erro ao salvar: horário indisponível.', 'error')
+      setFormMessage({ type: 'error', text: 'Escolha um horÃ¡rio disponÃ­vel para esta data.' })
+      notify?.('Erro ao salvar: horÃ¡rio indisponÃ­vel.', 'error')
       return
     }
 
@@ -2415,17 +2421,17 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           <ClientSearchInput label="Cliente" value={form.client} onChange={(value) => setForm({ ...form, client: value })} clients={clients} />
           {selectedClientInsights && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
-              Última visita: {selectedClientInsights.lastVisit}<br />
-              Serviço mais comum: {selectedClientInsights.favoriteService}
+              Ãšltima visita: {selectedClientInsights.lastVisit}<br />
+              ServiÃ§o mais comum: {selectedClientInsights.favoriteService}
             </div>
           )}
-          <Select label="Serviço" value={form.service} onChange={(value) => {
+          <Select label="ServiÃ§o" value={form.service} onChange={(value) => {
             const selected = compatibleServices.find((item) => item.name === value)
             setForm({ ...form, service: value, value: selected?.price ?? form.value, time: '' })
-          }} options={['Selecione um serviço', ...compatibleServices.map((item) => item.name)]} values={['', ...compatibleServices.map((item) => item.name)]} disabled={!selectedEmployee || compatibleServices.length === 0} />
+          }} options={['Selecione um serviÃ§o', ...compatibleServices.map((item) => item.name)]} values={['', ...compatibleServices.map((item) => item.name)]} disabled={!selectedEmployee || compatibleServices.length === 0} />
           {selectedEmployee && compatibleServices.length === 0 && (
             <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-              Nenhum serviço disponível para a função deste profissional.
+              Nenhum serviÃ§o disponÃ­vel para a funÃ§Ã£o deste profissional.
             </p>
           )}
           <Select label="Profissional" value={form.employeeName} onChange={changeAppointmentProfessional} options={employees.filter((item) => item.active).map((item) => item.name)} />
@@ -2433,7 +2439,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           {selectedEmployee && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
               Expediente: {formatSalonHoursForDate(salonSettings, form.date)}
-              {selectedEmployee.breakStart && selectedEmployee.breakEnd ? ` · intervalo ${selectedEmployee.breakStart} às ${selectedEmployee.breakEnd}` : ''}
+              {selectedEmployee.breakStart && selectedEmployee.breakEnd ? ` Â· intervalo ${selectedEmployee.breakStart} Ã s ${selectedEmployee.breakEnd}` : ''}
             </div>
           )}
           <TimeSlotPicker value={form.time} onChange={(value) => setForm({ ...form, time: value })} slots={availableSlots} />
@@ -2445,14 +2451,14 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           )}
           <button disabled={!selectedSlotAvailable} className={`${buttonPrimary} w-full rounded-2xl px-4 py-3`}>Agendar</button>
           <div className="grid gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => setBlockModalOpen(true)} className={`${buttonSecondary} rounded-2xl px-4 py-3`}>Bloquear horário</button>
+            <button type="button" onClick={() => setBlockModalOpen(true)} className={`${buttonSecondary} rounded-2xl px-4 py-3`}>Bloquear horÃ¡rio</button>
             <button type="button" onClick={() => setQuickModalOpen(true)} className={`${buttonSecondary} rounded-2xl border-lilacSoft px-4 py-3 hover:bg-lilacSoft/20 dark:border-lilacSoft/40`}>Atender agora</button>
           </div>
         </form>
       </Panel>
       <div className="space-y-5">
         <AvailabilityPanel employee={filteredProfessional} date={form.date} service={selectedService} salonSettings={salonSettings} availableSlots={filterAvailableSlots} occupiedSlots={occupiedSlots} />
-        <Panel title={`Agenda do Salão · ${formatDate(form.date)}`}>
+        <Panel title={`Agenda do SalÃ£o Â· ${formatDate(form.date)}`}>
           <div className="mb-4 inline-flex rounded-2xl border border-blush bg-pearl p-1 text-sm font-bold dark:border-white/10 dark:bg-white/5">
             <button type="button" onClick={() => setAgendaView('day')} className={`rounded-xl px-5 py-2 transition ${agendaView === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Dia</button>
             <button type="button" onClick={() => setAgendaView('week')} className={`rounded-xl px-5 py-2 transition ${agendaView === 'week' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Semana</button>
@@ -2462,8 +2468,8 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
           <div className="simple-scrollbar h-[clamp(500px,75vh,880px)] space-y-3 overflow-y-auto overflow-x-visible scroll-smooth pr-2">
             {visibleBlocks.map((block) => (
               <div key={block.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <p className="text-lg font-bold">{block.start} às {block.end} · Horário bloqueado</p>
-                <p className="mt-1">{getBlockEmployeeName(block)} · {block.reason}</p>
+                <p className="text-lg font-bold">{block.start} Ã s {block.end} Â· HorÃ¡rio bloqueado</p>
+                <p className="mt-1">{getBlockEmployeeName(block)} Â· {block.reason}</p>
               </div>
             ))}
             {[...visibleAppointments].sort((a, b) => getAppointmentSortKey(a).localeCompare(getAppointmentSortKey(b))).map((item) => {
@@ -2472,13 +2478,13 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
                 <div key={item.id} className={`${appointmentCardBase} ${getAppointmentStatusClass(item.status)}`}>
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="text-lg font-bold">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                      <p className="text-lg font-bold">{formatDate(item.date)} Â· {item.time} Â· {item.client}</p>
                       <p className={`mt-1 text-sm font-medium ${statusDetailClass}`}>{item.service} com {getAppointmentEmployeeName(item, allEmployees)}</p>
-                      <p className={`mt-2 text-sm ${statusDetailClass}`}>Duração: {getAppointmentDuration(item, allEmployees.find((employee) => isAppointmentForEmployee(item, employee)))} min</p>
+                      <p className={`mt-2 text-sm ${statusDetailClass}`}>DuraÃ§Ã£o: {getAppointmentDuration(item, allEmployees.find((employee) => isAppointmentForEmployee(item, employee)))} min</p>
                       {user.role === 'admin' && <p className={`mt-2 text-sm font-semibold ${statusDetailClass}`}>{money.format(item.value)}</p>}
                     </div>
                     <div className="flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
-                      <button type="button" onClick={() => sendConfirmation(item)} className={`${buttonSecondary} rounded-full px-3 py-2`}>Enviar confirmação</button>
+                      <button type="button" onClick={() => sendConfirmation(item)} className={`${buttonSecondary} rounded-full px-3 py-2`}>Enviar confirmaÃ§Ã£o</button>
                       <AppointmentStatusSelect value={item.status} onChange={(status) => updateStatus(item.id, status)} roundedClass="rounded-full" />
                       {(user.role === 'admin' || user.role === 'cashier') && <button type="button" onClick={() => deleteAppointment(item)} className={`${buttonDanger} rounded-full px-3 py-2`}>Excluir</button>}
                     </div>
@@ -2552,13 +2558,13 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
         <Modal title="Detalhes do agendamento" onClose={() => setSelectedItem(null)}>
           <div className="space-y-3 text-sm">
             <p><strong>Data:</strong> {formatDate(selectedItem.date)}</p>
-            <p><strong>Horário:</strong> {selectedItem.time}</p>
+            <p><strong>HorÃ¡rio:</strong> {selectedItem.time}</p>
             <p><strong>Cliente:</strong> {selectedItem.client}</p>
-            <p><strong>Serviço:</strong> {selectedItem.service}</p>
+            <p><strong>ServiÃ§o:</strong> {selectedItem.service}</p>
             <p><strong>Profissional:</strong> {getAppointmentEmployeeName(selectedItem, employees)}</p>
-            <p><strong>Duração:</strong> {getAppointmentDuration(selectedItem, employees.find((employee) => isAppointmentForEmployee(selectedItem, employee)))} min</p>
+            <p><strong>DuraÃ§Ã£o:</strong> {getAppointmentDuration(selectedItem, employees.find((employee) => isAppointmentForEmployee(selectedItem, employee)))} min</p>
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-              <button type="button" onClick={() => onSendConfirmation(selectedItem)} className={buttonSecondary}>Enviar confirmação</button>
+              <button type="button" onClick={() => onSendConfirmation(selectedItem)} className={buttonSecondary}>Enviar confirmaÃ§Ã£o</button>
               {(user.role === 'admin' || user.role === 'cashier' || getAppointmentEmployeeName(selectedItem, employees) === user.name) && (
                 <AppointmentStatusSelect
                   value={selectedItem.status}
@@ -2582,18 +2588,18 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
 
 function BlockTimeModal({ user, employees, date, onClose, onSave }) {
   const options = user.role === 'admin' || user.role === 'cashier' ? employees.map((item) => item.name) : [user.name]
-  const [form, setForm] = useState({ employeeName: options[0] ?? '', date, start: '09:00', end: '10:00', reason: 'Horário bloqueado' })
+  const [form, setForm] = useState({ employeeName: options[0] ?? '', date, start: '09:00', end: '10:00', reason: 'HorÃ¡rio bloqueado' })
 
   return (
-    <Modal title="Bloquear horário" onClose={onClose}>
+    <Modal title="Bloquear horÃ¡rio" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <Select label="Profissional" value={form.employeeName} onChange={(value) => setForm({ ...form, employeeName: value })} options={options} />
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Horário inicial" type="time" value={form.start} onChange={(value) => setForm({ ...form, start: value })} />
-          <Field label="Horário final" type="time" value={form.end} onChange={(value) => setForm({ ...form, end: value })} />
+          <Field label="HorÃ¡rio inicial" type="time" value={form.start} onChange={(value) => setForm({ ...form, start: value })} />
+          <Field label="HorÃ¡rio final" type="time" value={form.end} onChange={(value) => setForm({ ...form, end: value })} />
         </div>
-        <Select label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} options={['Funcionário vai sair mais cedo', 'Cliente VIP reservado', 'Manutenção', 'Horário bloqueado']} />
+        <Select label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} options={['FuncionÃ¡rio vai sair mais cedo', 'Cliente VIP reservado', 'ManutenÃ§Ã£o', 'HorÃ¡rio bloqueado']} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
           <button className={buttonPrimary}>Bloquear</button>
@@ -2611,7 +2617,7 @@ function QuickServiceModal({ clients, employees, onClose, onSave }) {
     <Modal title="Atender agora" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <ClientSearchInput label="Cliente ou nome avulso" value={form.client} onChange={(value) => setForm({ ...form, client: value })} clients={clients} />
-        <Select label="Serviço" value={form.service} onChange={(value) => {
+        <Select label="ServiÃ§o" value={form.service} onChange={(value) => {
           const selected = services.find((item) => item.name === value)
           setForm({ ...form, service: value, value: selected?.price ?? form.value })
         }} options={services.map((item) => item.name)} />
@@ -2643,7 +2649,7 @@ function DatePickerBar({ value, onChange }) {
             type="date"
           />
         </label>
-        <button type="button" onClick={() => onChange(shiftDate(value, 1))} className={`${buttonSecondary} px-3 py-2 text-lg`} aria-label="Próximo dia">
+        <button type="button" onClick={() => onChange(shiftDate(value, 1))} className={`${buttonSecondary} px-3 py-2 text-lg`} aria-label="PrÃ³ximo dia">
           &gt;
         </button>
         <button type="button" onClick={() => onChange(getTodayIso())} className={buttonSecondary}>
@@ -2660,14 +2666,14 @@ function AvailabilityPanel({ employee, date, service, salonSettings, availableSl
     return (
       <Panel title="Disponibilidade do profissional">
         <div className="rounded-2xl border border-gray-100 bg-pearl px-4 py-5 text-sm font-semibold text-gray-600">
-          Selecione um profissional no filtro para consultar Horários livres e ocupados.
+          Selecione um profissional no filtro para consultar HorÃ¡rios livres e ocupados.
         </div>
       </Panel>
     )
   }
 
   const dayOff = employee.workStatus === 'De folga'
-  const lunchNow = employee.workStatus === 'Horário de almoço'
+  const lunchNow = employee.workStatus === 'HorÃ¡rio de almoÃ§o'
   const salonClosed = !getSalonHoursForDate(salonSettings, date)
 
   return (
@@ -2676,40 +2682,40 @@ function AvailabilityPanel({ employee, date, service, salonSettings, availableSl
         <div className="rounded-2xl border border-blush bg-pearl p-4 text-sm">
           <p><strong>Profissional:</strong> {employee.name}</p>
           <p className="mt-1"><strong>Data:</strong> {formatDate(date)}</p>
-          <p className="mt-1"><strong>Salão:</strong> {formatSalonHoursForDate(salonSettings, date)}</p>
-          <p className="mt-1"><strong>Trabalho:</strong> {employee.workStart} às {employee.workEnd}</p>
-          <p className="mt-1"><strong>Intervalo:</strong> {employee.breakStart && employee.breakEnd ? `${employee.breakStart} às ${employee.breakEnd}` : 'Sem intervalo cadastrado'}</p>
-          <p className="mt-1"><strong>Serviço base:</strong> {service?.name ?? 'Não selecionado'}</p>
+          <p className="mt-1"><strong>SalÃ£o:</strong> {formatSalonHoursForDate(salonSettings, date)}</p>
+          <p className="mt-1"><strong>Trabalho:</strong> {employee.workStart} Ã s {employee.workEnd}</p>
+          <p className="mt-1"><strong>Intervalo:</strong> {employee.breakStart && employee.breakEnd ? `${employee.breakStart} Ã s ${employee.breakEnd}` : 'Sem intervalo cadastrado'}</p>
+          <p className="mt-1"><strong>ServiÃ§o base:</strong> {service?.name ?? 'NÃ£o selecionado'}</p>
         </div>
 
         {dayOff && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-            Este profissional está de folga nesta data
+            Este profissional estÃ¡ de folga nesta data
           </div>
         )}
 
         {salonClosed && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-            O salão não funciona nesta data
+            O salÃ£o nÃ£o funciona nesta data
           </div>
         )}
 
         {lunchNow && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-            Este profissional está em horário de almoço neste momento
+            Este profissional estÃ¡ em horÃ¡rio de almoÃ§o neste momento
           </div>
         )}
 
         <div>
           <h4 className="mb-2 text-sm font-bold text-graphite">Ocupados</h4>
           {occupiedSlots.length === 0 ? (
-            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum horário ocupado nesta data.</p>
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum horÃ¡rio ocupado nesta data.</p>
           ) : (
             <div className="space-y-2">
               {occupiedSlots.map((appointment) => (
                 <div key={appointment.id} className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm">
                   <p className="font-bold text-rose-800">{appointment.time} - {appointment.client} - {appointment.service}</p>
-                  <p className="mt-1 text-rose-700">Duração: {getAppointmentDuration(appointment, employee)} min · {formatAppointmentStatus(appointment.status)}</p>
+                  <p className="mt-1 text-rose-700">DuraÃ§Ã£o: {getAppointmentDuration(appointment, employee)} min Â· {formatAppointmentStatus(appointment.status)}</p>
                 </div>
               ))}
             </div>
@@ -2717,13 +2723,13 @@ function AvailabilityPanel({ employee, date, service, salonSettings, availableSl
         </div>
 
         <div>
-          <h4 className="mb-2 text-sm font-bold text-graphite">Disponíveis</h4>
+          <h4 className="mb-2 text-sm font-bold text-graphite">DisponÃ­veis</h4>
           {salonClosed ? (
-            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horários disponíveis fora do funcionamento do salão.</p>
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem horÃ¡rios disponÃ­veis fora do funcionamento do salÃ£o.</p>
           ) : dayOff ? (
-            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem Horários disponíveis por folga.</p>
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem HorÃ¡rios disponÃ­veis por folga.</p>
           ) : availableSlots.length === 0 ? (
-            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem Horários disponíveis nesta data.</p>
+            <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem HorÃ¡rios disponÃ­veis nesta data.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {availableSlots.map((slot) => (
@@ -2740,10 +2746,10 @@ function AvailabilityPanel({ employee, date, service, salonSettings, availableSl
 function TimeSlotPicker({ value, onChange, slots }) {
   return (
     <div>
-      <span className="mb-2 block text-sm font-semibold text-gray-600">Horário disponível</span>
+      <span className="mb-2 block text-sm font-semibold text-gray-600">HorÃ¡rio disponÃ­vel</span>
       {slots.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">
-          Sem Horários disponíveis nesta data
+          Sem HorÃ¡rios disponÃ­veis nesta data
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -2843,7 +2849,7 @@ function Clients({ salonId, user, clients, setClients, appointments, notify }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xl font-bold">Clientes cadastrados</h3>
-          <p className="text-sm text-gray-500">Admin e Funcionários podem cadastrar e editar clientes.</p>
+          <p className="text-sm text-gray-500">Admin e FuncionÃ¡rios podem cadastrar e editar clientes.</p>
         </div>
         <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Cliente</button>
       </div>
@@ -2857,12 +2863,12 @@ function Clients({ salonId, user, clients, setClients, appointments, notify }) {
             <p className="text-lg font-bold">{item.name}</p>
             <span className={`rounded-full px-3 py-1 text-xs font-bold ${item.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{item.active ? 'Ativo' : 'Inativo'}</span>
           </div>
-          <p className="text-sm text-gray-500">{item.phone} · Aniv. {item.birthday}</p>
+          <p className="text-sm text-gray-500">{item.phone} Â· Aniv. {item.birthday}</p>
           <p className="mt-3 text-sm text-gray-600">{item.notes}</p>
-          <p className="mt-3 text-sm"><strong>Histórico:</strong> {(item.history?.length ? item.history : ['Sem histórico']).join(', ')}</p>
-          <p className="mt-2 text-sm text-goldSoft">Última visita: {formatDate(item.lastVisit)}</p>
+          <p className="mt-3 text-sm"><strong>HistÃ³rico:</strong> {(item.history?.length ? item.history : ['Sem histÃ³rico']).join(', ')}</p>
+          <p className="mt-2 text-sm text-goldSoft">Ãšltima visita: {formatDate(item.lastVisit)}</p>
           <div className="mt-3 rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm">
-            <p><strong>Serviço mais comum:</strong> {insights.favoriteService}</p>
+            <p><strong>ServiÃ§o mais comum:</strong> {insights.favoriteService}</p>
             <p><strong>Total de visitas:</strong> {insights.visitCount}</p>
             <p className="mt-1 text-gray-600">Esse cliente costuma fazer {insights.favoriteService}.</p>
           </div>
@@ -2889,8 +2895,8 @@ function ClientModal({ client, canChangeStatus, onClose, onSave }) {
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <Field label="Nome" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
-        <Field label="Aniversário" value={form.birthday} onChange={(value) => setForm({ ...form, birthday: value })} placeholder="dd/mm" />
-        <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-600 dark:text-gray-300">Observações</span><textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
+        <Field label="AniversÃ¡rio" value={form.birthday} onChange={(value) => setForm({ ...form, birthday: value })} placeholder="dd/mm" />
+        <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-600 dark:text-gray-300">ObservaÃ§Ãµes</span><textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
         {client && canChangeStatus && <Toggle label="Status ativo" checked={form.active} onChange={(checked) => setForm({ ...form, active: checked })} />}
         <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button><button className={buttonPrimary}>Salvar</button></div>
       </form>
@@ -2923,11 +2929,11 @@ function Services({ salonId, user, services, setServices, notify }) {
       responsible: ''
     }
     if (!payload.name) {
-      notify?.('Erro ao salvar: informe o nome do serviço.', 'error')
+      notify?.('Erro ao salvar: informe o nome do serviÃ§o.', 'error')
       return
     }
     if (!payload.category) {
-      notify?.('Erro ao salvar: selecione a função que realiza o serviço.', 'error')
+      notify?.('Erro ao salvar: selecione a funÃ§Ã£o que realiza o serviÃ§o.', 'error')
       return
     }
     try {
@@ -2940,18 +2946,18 @@ function Services({ salonId, user, services, setServices, notify }) {
       const serviceRows = await fetchServicesFromSupabase(salonId)
       setServices((serviceRows ?? []).map(normalizeServiceRecord))
       setModalOpen(false)
-      notify?.('Serviço salvo com sucesso.')
+      notify?.('ServiÃ§o salvo com sucesso.')
     } catch (error) {
       handleDataActionError(error, notify)
     }
   }
 
   async function removeService(item) {
-    if (!window.confirm(`Remover o serviço "${item.name}"?`)) return
+    if (!window.confirm(`Remover o serviÃ§o "${item.name}"?`)) return
     try {
       await deleteServiceRecord(salonId, item.id)
       setServices((current) => current.filter((service) => service.id !== item.id))
-      notify?.('Serviço removido.')
+      notify?.('ServiÃ§o removido.')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -2961,10 +2967,10 @@ function Services({ salonId, user, services, setServices, notify }) {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold">Serviços</h3>
-          <p className="text-sm text-gray-500">{canManage ? 'Cadastre e ajuste os serviços do Salão.' : 'Consulta dos serviços cadastrados.'}</p>
+          <h3 className="text-xl font-bold">ServiÃ§os</h3>
+          <p className="text-sm text-gray-500">{canManage ? 'Cadastre e ajuste os serviÃ§os do SalÃ£o.' : 'Consulta dos serviÃ§os cadastrados.'}</p>
         </div>
-        {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Serviço</button>}
+        {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo ServiÃ§o</button>}
       </div>
       <CardsGrid items={services} render={(item) => (
         <>
@@ -2972,9 +2978,9 @@ function Services({ salonId, user, services, setServices, notify }) {
             <p className="min-w-0 break-words text-lg font-bold">{item.name}</p>
             <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-100 px-4 py-2 text-base font-bold text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300">{money.format(item.price)}</span>
           </div>
-          <p className="mt-2 text-sm text-gray-600">Comissão: <strong>{Number(item.commission_percent ?? item.commissionPercent ?? 0)}%</strong></p>
-          <p className="mt-2 text-sm text-gray-600">Duração: <strong>{item.duration}</strong></p>
-          <p className="mt-3 text-sm">Funções que realizam: <strong>{formatServiceFunctions(item.category) || 'Não informado'}</strong></p>
+          <p className="mt-2 text-sm text-gray-600">ComissÃ£o: <strong>{Number(item.commission_percent ?? item.commissionPercent ?? 0)}%</strong></p>
+          <p className="mt-2 text-sm text-gray-600">DuraÃ§Ã£o: <strong>{item.duration}</strong></p>
+          <p className="mt-3 text-sm">FunÃ§Ãµes que realizam: <strong>{formatServiceFunctions(item.category) || 'NÃ£o informado'}</strong></p>
           {canManage && (
             <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button>
@@ -3012,16 +3018,16 @@ function ServiceModal({ service, onClose, onSave }) {
   }
 
   return (
-    <Modal title={service ? 'Editar serviço' : 'Novo serviço'} onClose={onClose}>
+    <Modal title={service ? 'Editar serviÃ§o' : 'Novo serviÃ§o'} onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
-        <Field label="Nome do serviço" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
+        <Field label="Nome do serviÃ§o" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Valor" type="number" min="0" value={form.price} onChange={(value) => setForm({ ...form, price: value })} required />
-          <Field label="Duração" value={form.duration} onChange={(value) => setForm({ ...form, duration: value })} placeholder="Ex.: 1h 30min" required />
+          <Field label="DuraÃ§Ã£o" value={form.duration} onChange={(value) => setForm({ ...form, duration: value })} placeholder="Ex.: 1h 30min" required />
         </div>
-        <Field label="Comissão do profissional (%)" type="number" min="0" max="100" step="0.01" value={form.commissionPercent} onChange={(value) => setForm({ ...form, commissionPercent: value })} />
+        <Field label="ComissÃ£o do profissional (%)" type="number" min="0" max="100" step="0.01" value={form.commissionPercent} onChange={(value) => setForm({ ...form, commissionPercent: value })} />
         <CheckboxGroup
-          label="Função que realiza"
+          label="FunÃ§Ã£o que realiza"
           options={employeeFunctionOptions}
           selected={selectedFunctions}
           onToggle={toggleFunction}
@@ -3062,11 +3068,11 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     const temporaryPassword = data.temporaryPassword?.trim() ?? ''
     const employeeName = data.name.trim()
     if (!data.name.trim() || !data.phone.trim() || !employeeFunctions) {
-      notify?.('Erro ao salvar: informe nome, telefone e função.', 'error')
+      notify?.('Erro ao salvar: informe nome, telefone e funÃ§Ã£o.', 'error')
       return
     }
     if (wantsLogin && !salonId) {
-      notify?.('Erro ao salvar: admin sem salão vinculado.', 'error')
+      notify?.('Erro ao salvar: admin sem salÃ£o vinculado.', 'error')
       return
     }
     const existingLoginEmail = editing?.accessEmail?.trim().toLowerCase() ?? ''
@@ -3082,7 +3088,10 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     const payload = {
       ...data,
       employeeType,
+      employeeName,
+      employee_name: employeeName,
       role: employeeFunctions,
+      functions: employeeFunctions,
       position: employeeFunctions,
       commission: Number(data.commission) || 0,
       defaultDuration: Number(data.defaultDuration) || 60,
@@ -3134,7 +3143,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
           }
 
         } catch (loginError) {
-          notify?.('Funcionário salvo, mas erro ao criar login', 'error')
+          notify?.('FuncionÃ¡rio salvo, mas erro ao criar login', 'error')
           setModalOpen(false)
           return
         }
@@ -3152,7 +3161,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
       }
 
       setModalOpen(false)
-      notify?.(editing ? 'Funcionário atualizado com sucesso.' : shouldCreateLogin ? 'Funcionário e login criados com sucesso' : 'Funcionário salvo com sucesso')
+      notify?.(editing ? 'FuncionÃ¡rio atualizado com sucesso.' : shouldCreateLogin ? 'FuncionÃ¡rio e login criados com sucesso' : 'FuncionÃ¡rio salvo com sucesso')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -3176,11 +3185,11 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
       employee.accessEmail?.toLowerCase() === user.email?.toLowerCase()
 
     if (isCurrentUser) {
-      notify?.('Você não pode remover seu próprio usuário', 'error')
+      notify?.('VocÃª nÃ£o pode remover seu prÃ³prio usuÃ¡rio', 'error')
       return
     }
 
-    if (!window.confirm('Tem certeza que deseja remover este funcionário?')) return
+    if (!window.confirm('Tem certeza que deseja remover este funcionÃ¡rio?')) return
 
     const hasLinkedFutureAppointments = appointments.some((appointment) => (
       isAppointmentForEmployee(appointment, employee) &&
@@ -3189,11 +3198,11 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     ))
 
     if (hasLinkedFutureAppointments) {
-      if (!window.confirm('Este funcionário possui agendamentos vinculados. Deseja apenas desativá-lo?')) return
+      if (!window.confirm('Este funcionÃ¡rio possui agendamentos vinculados. Deseja apenas desativÃ¡-lo?')) return
       try {
         const saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, employee.id, { active: false }))
         setEmployees((current) => current.map((item) => item.id === employee.id ? saved : item))
-        notify?.('Funcionário desativado com sucesso')
+        notify?.('FuncionÃ¡rio desativado com sucesso')
       } catch (error) {
         handleDataActionError(error, notify)
       }
@@ -3225,7 +3234,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 
       await deleteEmployeeRecord(salonId, employee.id)
       setEmployees((current) => current.filter((item) => item.id !== employee.id))
-      notify?.(hasLogin ? 'Funcionário e login removidos com sucesso.' : 'Funcionário removido com sucesso')
+      notify?.(hasLogin ? 'FuncionÃ¡rio e login removidos com sucesso.' : 'FuncionÃ¡rio removido com sucesso')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -3235,10 +3244,10 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold">Equipe do Salão</h3>
-          <p className="text-sm text-gray-500">{canManage ? 'Cadastro e edição disponíveis para Admin/Dono.' : 'Funcionário Caixa pode visualizar comissões, sem alterar.'}</p>
+          <h3 className="text-xl font-bold">Equipe do SalÃ£o</h3>
+          <p className="text-sm text-gray-500">{canManage ? 'Cadastro e ediÃ§Ã£o disponÃ­veis para Admin/Dono.' : 'FuncionÃ¡rio Caixa pode visualizar comissÃµes, sem alterar.'}</p>
         </div>
-        {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3 sm:shrink-0`}>Novo Funcionário</button>}
+        {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3 sm:shrink-0`}>Novo FuncionÃ¡rio</button>}
       </div>
       <CardsGrid items={employees || []} render={(item) => (
         <div className="min-w-0 space-y-3 break-words">
@@ -3249,7 +3258,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
             <span className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs font-bold ${item.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{item.active ? 'Ativo' : 'Inativo'}</span>
           </div>
           <p className="min-w-0 text-sm text-gray-500">{item.phone}</p>
-          <p className="min-w-0 text-sm text-gray-600">Funções: <strong>{formatEmployeeFunctions(item.role) || 'Não informado'}</strong></p>
+          <p className="min-w-0 text-sm text-gray-600">FunÃ§Ãµes: <strong>{formatEmployeeFunctions(item.role) || 'NÃ£o informado'}</strong></p>
           <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong></p>
           {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className={buttonSecondary}>Editar</button><button onClick={() => deactivateEmployee(item)} disabled={!item.active} className={buttonSecondary}>Desativar</button><button onClick={() => removeEmployee(item)} className={buttonDanger}>Remover</button></div>}
         </div>
@@ -3312,21 +3321,21 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
   }
 
   return (
-    <Modal title={employee ? 'Editar Funcionário' : 'Novo Funcionário'} onClose={onClose}>
+    <Modal title={employee ? 'Editar FuncionÃ¡rio' : 'Novo FuncionÃ¡rio'} onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave({ ...form, selectedFunctions }) }} className="space-y-3">
         <Field label="Nome" value={form.name} onChange={updateName} required />
         <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
-        <CheckboxGroup label="Função" options={employeeFunctionOptions} selected={selectedFunctions} onToggle={toggleFunction} />
+        <CheckboxGroup label="FunÃ§Ã£o" options={employeeFunctionOptions} selected={selectedFunctions} onToggle={toggleFunction} />
         <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h4 className="font-bold">Login do Funcionário</h4>
-              <p className="text-sm text-gray-500">Sugestão: {suggestedAccessEmail}</p>
+              <h4 className="font-bold">Login do FuncionÃ¡rio</h4>
+              <p className="text-sm text-gray-500">SugestÃ£o: {suggestedAccessEmail}</p>
             </div>
-            <button type="button" onClick={generateLogin} className={buttonSecondary}>Usar sugestão</button>
+            <button type="button" onClick={generateLogin} className={buttonSecondary}>Usar sugestÃ£o</button>
           </div>
           <div className="mt-4">
-            <Toggle label="Login do funcionário" checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
+            <Toggle label="Login do funcionÃ¡rio" checked={Boolean(form.loginActive)} onChange={(checked) => setForm({ ...form, loginActive: checked })} />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Field label="E-mail de acesso" value={form.accessEmail ?? ''} onChange={(value) => setForm({ ...form, accessEmail: value })} type="email" />
@@ -3452,7 +3461,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
 
   async function markPendingAsPaid(entry, reason) {
     if (!String(reason ?? '').trim()) {
-      notify?.('Informe o motivo da alteração.', 'error')
+      notify?.('Informe o motivo da alteraÃ§Ã£o.', 'error')
       return
     }
     const appointmentId = cashAppointmentId(entry)
@@ -3496,7 +3505,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
   }
 
   function closeDay() {
-    if (alreadyClosed && !window.confirm('O caixa de hoje já foi fechado. Registrar novo fechamento mesmo assim?')) return
+    if (alreadyClosed && !window.confirm('O caixa de hoje jÃ¡ foi fechado. Registrar novo fechamento mesmo assim?')) return
     setClosures((current) => [...current, { id: Date.now(), date: todayIso, income, outcome, balance: income - outcome }])
     notify?.('Caixa do dia fechado com sucesso.')
   }
@@ -3555,7 +3564,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
   async function saveCashEntry(data) {
     const value = Number(data.value) || 0
     if (!data.description.trim() || value <= 0) {
-      notify?.('Erro ao salvar: informe descrição e valor maior que zero.', 'error')
+      notify?.('Erro ao salvar: informe descriÃ§Ã£o e valor maior que zero.', 'error')
       return
     }
     const ownerWithdrawal = data.type === 'Retirada do dono'
@@ -3596,7 +3605,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       }
       setEntries((current) => [...current, savedEntry])
       setModalOpen(false)
-      notify?.('Movimentação salva com sucesso.')
+      notify?.('MovimentaÃ§Ã£o salva com sucesso.')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -3609,10 +3618,10 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
           <div>
             <p className="text-sm font-black uppercase tracking-[0.18em] text-[#c9a85d]">Centro financeiro</p>
             <h2 className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">Caixa e PDV</h2>
-            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Recebimentos, pendências, comissões e fechamento diário em um só painel.</p>
+            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Recebimentos, pendÃªncias, comissÃµes e fechamento diÃ¡rio em um sÃ³ painel.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl dark:border-white/10 dark:hover:bg-white/10">Nova movimentação</button>
+            <button onClick={() => setModalOpen(true)} className="focus-ring whitespace-nowrap rounded-2xl border border-blush px-4 py-3 text-sm font-bold hover:bg-pearl dark:border-white/10 dark:hover:bg-white/10">Nova movimentaÃ§Ã£o</button>
             <button onClick={openCloseDayModal} disabled={alreadyClosed} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>{alreadyClosed ? 'Caixa fechado' : 'Fechar caixa do dia'}</button>
           </div>
         </div>
@@ -3622,7 +3631,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-xl font-bold text-graphite dark:text-gray-100">Resumo do dia</h3>
-          <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Somente lançamentos financeiros de entrada com status pago entram nos recebidos.</p>
+          <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Somente lanÃ§amentos financeiros de entrada com status pago entram nos recebidos.</p>
         </div>
         <div className="w-full sm:w-56">
           <Field label="Data do caixa" type="date" value={cashDateFilter} onChange={setCashDateFilter} />
@@ -3632,15 +3641,15 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
         <Metric title="Total recebido" value={money.format(income)} detail="Faturamento pago" />
         <Metric title="Pix" value={money.format(summary.pix)} detail="Recebido no dia" />
         <Metric title="Dinheiro" value={money.format(summary.cash)} detail="Recebido no dia" />
-        <Metric title="Débito" value={money.format(byMethod(['Débito', 'debito']))} detail="Recebido hoje" />
-        <Metric title="Crédito" value={money.format(byMethod(['Crédito', 'credito']))} detail="Recebido hoje" />
+        <Metric title="DÃ©bito" value={money.format(byMethod(['DÃ©bito', 'debito']))} detail="Recebido hoje" />
+        <Metric title="CrÃ©dito" value={money.format(byMethod(['CrÃ©dito', 'credito']))} detail="Recebido hoje" />
         <Metric title="Pagamentos pendentes" value={money.format(pendingTotal)} detail="A receber" />
         <Metric title="Vales pagos hoje" value={money.format(paidAdvancesToday)} detail="Adiantamentos do dia" />
         <Metric title="Vales pendentes" value={money.format(pendingAdvances)} detail="Adiantamentos pendentes" />
-        <Metric title="Comissão dos profissionais" value={money.format(commissionPaid)} detail="Sobre recebidos" />
-        <Metric title="Lucro líquido do salão" value={money.format(salonProfit)} detail="Recebido - comissões" />
-        <Metric title="Saídas" value={money.format(outcome)} detail="Despesas do dia" />
-        <Metric title="Saldo final" value={money.format(income - outcome)} detail="Recebido - saídas" />
+        <Metric title="ComissÃ£o dos profissionais" value={money.format(commissionPaid)} detail="Sobre recebidos" />
+        <Metric title="Lucro lÃ­quido do salÃ£o" value={money.format(salonProfit)} detail="Recebido - comissÃµes" />
+        <Metric title="SaÃ­das" value={money.format(outcome)} detail="Despesas do dia" />
+        <Metric title="Saldo final" value={money.format(income - outcome)} detail="Recebido - saÃ­das" />
       </div>
       </section>
 
@@ -3655,14 +3664,14 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
               <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date)} · {item.time} · {item.client}</p>
+                    <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date)} Â· {item.time} Â· {item.client}</p>
                     <StatusBadge tone="cyan">Em atendimento</StatusBadge>
                   </div>
                   <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{item.service} com {getAppointmentEmployeeName(item, employees)}</p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-gray-500 dark:text-gray-400">
                     <span>Valor: {money.format(value)}</span>
-                    <span>Comissão: {money.format(comissaoCalculada)}</span>
-                    <span>Salão: {money.format(salonValue)}</span>
+                    <span>ComissÃ£o: {money.format(comissaoCalculada)}</span>
+                    <span>SalÃ£o: {money.format(salonValue)}</span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -3688,10 +3697,10 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
               <div key={item.id ?? `${cashDescription(item)}-${cashValue(item)}`} className="flex flex-col gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-sm dark:border-amber-400/20 dark:bg-amber-500/10 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date ?? item.data)} · {cashClientName(item) || cashDescription(item)}</p>
+                    <p className="font-bold text-graphite dark:text-gray-100">{formatDate(item.date ?? item.data)} Â· {cashClientName(item) || cashDescription(item)}</p>
                     <StatusBadge tone="amber">Pendente</StatusBadge>
                   </div>
-                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{cashServiceName(item) || cashCategory(item)} · {cashEmployeeName(item) || 'Sem profissional'} · {money.format(cashServiceValue(item))}</p>
+                  <p className="mt-1 font-semibold text-gray-600 dark:text-gray-300">{cashServiceName(item) || cashCategory(item)} Â· {cashEmployeeName(item) || 'Sem profissional'} Â· {money.format(cashServiceValue(item))}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {appointment && <button type="button" onClick={() => setPaymentAppointment(appointment)} className={buttonSecondary}>Receber pagamento</button>}
@@ -3704,11 +3713,11 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
           {pendingPayments.length === 0 && <EmptyState>Nenhum pagamento pendente.</EmptyState>}
         </div>
       </Panel>
-      <Panel title="Movimentações do caixa">
+      <Panel title="MovimentaÃ§Ãµes do caixa">
         <Table
           rows={todayEntries}
           columns={['date', 'client', 'service', 'employee', 'paymentMethod', 'status', 'value', 'commission', 'salon']}
-          labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Forma', 'Status', 'Valor total', 'Comissão', 'Salão']}
+          labels={['Data', 'Cliente', 'ServiÃ§o', 'Profissional', 'Forma', 'Status', 'Valor total', 'ComissÃ£o', 'SalÃ£o']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
             if (key === 'client') return cashClientName(row) || cashDescription(row) || '-'
@@ -3725,23 +3734,23 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
             return value
           }}
         />
-        {todayEntries.length === 0 && <div className="mt-3"><EmptyState>Nenhuma movimentação registrada hoje.</EmptyState></div>}
+        {todayEntries.length === 0 && <div className="mt-3"><EmptyState>Nenhuma movimentaÃ§Ã£o registrada hoje.</EmptyState></div>}
       </Panel>
-      <Panel title="Comissões por profissional">
+      <Panel title="ComissÃµes por profissional">
         <div className="space-y-3">
-          {employeeCommissions.map((item) => <LineItem key={item.name} label={`${item.name} · ${item.count} atendimento(s)`} value={money.format(item.value)} positive />)}
-          {employeeCommissions.length === 0 && <EmptyState>Nenhuma comissão calculada hoje.</EmptyState>}
+          {employeeCommissions.map((item) => <LineItem key={item.name} label={`${item.name} Â· ${item.count} atendimento(s)`} value={money.format(item.value)} positive />)}
+          {employeeCommissions.length === 0 && <EmptyState>Nenhuma comissÃ£o calculada hoje.</EmptyState>}
         </div>
       </Panel>
       <Panel title="Fechamentos registrados">
-        <CompactList items={closures.length ? closures.map((item) => `${formatDate(item.date)} · saldo ${money.format(item.balance)}`) : ['Nenhum fechamento registrado']} />
+        <CompactList items={closures.length ? closures.map((item) => `${formatDate(item.date)} Â· saldo ${money.format(item.balance)}`) : ['Nenhum fechamento registrado']} />
       </Panel>
       <Panel title="Fechamentos registrados - detalhes">
         {closures.length ? (
           <Table
             rows={closures}
             columns={['date', 'totalReceived', 'pix', 'cash', 'outcome', 'commission', 'salonProfit', 'balance']}
-            labels={['Data', 'Recebido', 'Pix', 'Dinheiro', 'Saídas', 'Comissão', 'Lucro do salão', 'Saldo final']}
+            labels={['Data', 'Recebido', 'Pix', 'Dinheiro', 'SaÃ­das', 'ComissÃ£o', 'Lucro do salÃ£o', 'Saldo final']}
             formatValue={(key, value, row) => {
               if (key === 'date') return <StatusBadge tone="cyan">{formatDate(row.date)}</StatusBadge>
               return money.format(Number(value) || 0)
@@ -3757,7 +3766,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       {pendingPaidTarget && (
         <ReasonModal
           title="Marcar pagamento como pago"
-          description="Informe o motivo para alterar o status financeiro deste lançamento."
+          description="Informe o motivo para alterar o status financeiro deste lanÃ§amento."
           confirmLabel="Marcar como pago"
           onClose={() => setPendingPaidTarget(null)}
           onConfirm={(reason) => markPendingAsPaid(pendingPaidTarget, reason)}
@@ -3773,12 +3782,12 @@ function CashClosureModal({ summary, onClose, onConfirm }) {
     ['Total recebido', money.format(summary.totalReceived)],
     ['Pix', money.format(summary.pix)],
     ['Dinheiro', money.format(summary.cash)],
-    ['Débito', money.format(summary.debit)],
-    ['Crédito', money.format(summary.credit)],
+    ['DÃ©bito', money.format(summary.debit)],
+    ['CrÃ©dito', money.format(summary.credit)],
     ['Pendentes', money.format(summary.pending)],
-    ['Saídas', money.format(summary.outcome)],
-    ['Comissão dos profissionais', money.format(summary.commission)],
-    ['Lucro líquido do salão', money.format(summary.salonProfit)],
+    ['SaÃ­das', money.format(summary.outcome)],
+    ['ComissÃ£o dos profissionais', money.format(summary.commission)],
+    ['Lucro lÃ­quido do salÃ£o', money.format(summary.salonProfit)],
     ['Saldo final', money.format(summary.balance)]
   ]
 
@@ -3786,7 +3795,7 @@ function CashClosureModal({ summary, onClose, onConfirm }) {
     <Modal title="Confirmar fechamento de caixa" onClose={onClose} maxWidth="max-w-3xl">
       <div className="space-y-4">
         <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200">
-          Confira os valores antes de confirmar. Depois de salvo, o fechamento desta data não poderá ser duplicado.
+          Confira os valores antes de confirmar. Depois de salvo, o fechamento desta data nÃ£o poderÃ¡ ser duplicado.
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map(([label, value]) => (
@@ -3822,14 +3831,14 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
         <div className="rounded-2xl border border-blush bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
           <div className="grid gap-3 sm:grid-cols-3">
             <div><p className="text-xs font-black uppercase text-gray-400">Cliente</p><p className="mt-1 text-graphite dark:text-gray-100">{appointment.client}</p></div>
-            <div><p className="text-xs font-black uppercase text-gray-400">Serviço</p><p className="mt-1 text-graphite dark:text-gray-100">{service?.name ?? appointment.service}</p></div>
+            <div><p className="text-xs font-black uppercase text-gray-400">ServiÃ§o</p><p className="mt-1 text-graphite dark:text-gray-100">{service?.name ?? appointment.service}</p></div>
             <div><p className="text-xs font-black uppercase text-gray-400">Profissional</p><p className="mt-1 text-graphite dark:text-gray-100">{employee?.name ?? getAppointmentEmployeeName(appointment, employees)}</p></div>
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Metric title="Valor total" value={money.format(serviceValue)} detail="Valor do serviço" />
-          <Metric title="Comissão do profissional" value={money.format(commissionValue)} detail={`${commissionPercent}%`} />
-          <Metric title="Lucro do salão" value={money.format(salonValue)} detail="Valor líquido" />
+          <Metric title="Valor total" value={money.format(serviceValue)} detail="Valor do serviÃ§o" />
+          <Metric title="ComissÃ£o do profissional" value={money.format(commissionValue)} detail={`${commissionPercent}%`} />
+          <Metric title="Lucro do salÃ£o" value={money.format(salonValue)} detail="Valor lÃ­quido" />
         </div>
         <fieldset className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
           <legend className="px-1 text-sm font-semibold text-gray-600 dark:text-gray-300">Forma de pagamento</legend>
@@ -3864,7 +3873,7 @@ function CashEntryModal({ onClose, onSave }) {
   const [form, setForm] = useState({ type: 'Entrada', description: '', category: 'Operacional', paymentMethod: 'Pix', value: 0, date: todayIso })
   const ownerWithdrawal = form.type === 'Retirada do dono'
   return (
-    <Modal title="Nova movimentação" onClose={onClose}>
+    <Modal title="Nova movimentaÃ§Ã£o" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSave(form) }} className="space-y-3">
         <Select label="Tipo" value={form.type} onChange={(value) => setForm({ ...form, type: value, category: value === 'Retirada do dono' ? 'retirada_dono' : form.category })} options={['Entrada', 'Saida', 'Retirada do dono']} />
         {ownerWithdrawal && (
@@ -3872,10 +3881,10 @@ function CashEntryModal({ onClose, onSave }) {
             A retirada do dono sera registrada como saida e reduzira o saldo final do caixa.
           </div>
         )}
-        <Field label="Descrição" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
+        <Field label="DescriÃ§Ã£o" value={form.description} onChange={(value) => setForm({ ...form, description: value })} required />
         <Field label="Categoria" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} />
+          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm({ ...form, paymentMethod: value })} options={['Pix', 'Dinheiro', 'DÃ©bito', 'CrÃ©dito', 'Pendente']} />
           <Field label="Valor" type="number" min="0.01" value={form.value} onChange={(value) => setForm({ ...form, value })} required />
         </div>
         <Field label="Data" type="date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
@@ -3932,11 +3941,11 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       notes: data.notes ?? ''
     }
     if (!payload.employeeName || payload.value <= 0 || !payload.createdAt) {
-      notify?.('Erro ao salvar: confira Funcionário, valor, data e motivo.', 'error')
+      notify?.('Erro ao salvar: confira FuncionÃ¡rio, valor, data e motivo.', 'error')
       return
     }
     if (editing && !String(data.reason ?? '').trim()) {
-      notify?.('Informe o motivo da alteração.', 'error')
+      notify?.('Informe o motivo da alteraÃ§Ã£o.', 'error')
       return
     }
     try {
@@ -3968,7 +3977,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       const newAdvance = normalizeAdvanceRecord(await createAdvanceRecord(salonId, payload))
       setAdvances((current) => [...current, newAdvance])
       setCashEntries((current) => [...current, createAdvanceCashEntry(newAdvance)])
-      notify?.('Vale criado e lançado no caixa.')
+      notify?.('Vale criado e lanÃ§ado no caixa.')
     }
     setModalOpen(false)
     } catch (error) {
@@ -3978,7 +3987,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
 
   async function markDiscounted(item, reason) {
     if (!String(reason ?? '').trim()) {
-      notify?.('Informe o motivo da alteração.', 'error')
+      notify?.('Informe o motivo da alteraÃ§Ã£o.', 'error')
       return
     }
     const discountedAt = new Date().toISOString()
@@ -4025,7 +4034,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
     setAdvances((current) => current.map((advance) => advance.id === item.id ? updatedAdvance : advance))
     setCashEntries((current) => current.filter((entry) => String(entry.id) !== String(`advance-${item.id}`)))
     setCancelTarget(null)
-    notify?.('Vale excluído.')
+    notify?.('Vale excluÃ­do.')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -4036,14 +4045,14 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xl font-bold">Vales</h3>
-          <p className="text-sm text-gray-500">Admin e Funcionário Caixa gerenciam todos os vales.</p>
+          <p className="text-sm text-gray-500">Admin e FuncionÃ¡rio Caixa gerenciam todos os vales.</p>
         </div>
         <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Vale</button>
       </div>
 
       <Panel title="Filtros">
         <div className="grid gap-3 md:grid-cols-3">
-          <Select label="Funcionário" value={filters.employeeId} onChange={(value) => setFilters({ ...filters, employeeId: value })} options={['Todos', ...employees.map((item) => item.name)]} values={['all', ...employees.map((item) => String(item.id))]} />
+          <Select label="FuncionÃ¡rio" value={filters.employeeId} onChange={(value) => setFilters({ ...filters, employeeId: value })} options={['Todos', ...employees.map((item) => item.name)]} values={['all', ...employees.map((item) => String(item.id))]} />
           <Field label="Data" type="date" value={filters.date} onChange={(value) => setFilters({ ...filters, date: value })} />
           <Select label="Status" value={filters.status} onChange={(value) => setFilters({ ...filters, status: value })} options={['Todos', 'Pendente', 'Descontado', 'Cancelado']} values={['all', 'pendente', 'descontado', 'cancelado']} />
         </div>
@@ -4120,7 +4129,7 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
         <Field label="Observacoes" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
         {advance && (
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+            <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteraÃ§Ã£o</span>
             <textarea className={`${inputBase} min-h-24`} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} required />
           </label>
         )}
@@ -4136,7 +4145,7 @@ function AdvanceModal({ employees, advance, onClose, onSave }) {
 function AccessDenied() {
   return (
     <Panel title="Acesso bloqueado">
-      <p className="text-sm font-semibold text-gray-500">Esta área está disponível apenas para Admin e Funcionário Caixa.</p>
+      <p className="text-sm font-semibold text-gray-500">Esta Ã¡rea estÃ¡ disponÃ­vel apenas para Admin e FuncionÃ¡rio Caixa.</p>
     </Panel>
   )
 }
@@ -4144,7 +4153,7 @@ function AccessDenied() {
 function DataLoading() {
   return (
     <Panel title="Carregando dados">
-      <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Buscando informações do salão...</p>
+      <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Buscando informaÃ§Ãµes do salÃ£o...</p>
     </Panel>
   )
 }
@@ -4198,7 +4207,7 @@ function Inventory({ user, items, setItems, notify }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xl font-bold">Estoque</h3>
-          <p className="text-sm text-gray-500">{canManage ? 'Cadastre, edite e acompanhe produtos do Salão.' : 'Visualização dos produtos e alertas de estoque.'}</p>
+          <p className="text-sm text-gray-500">{canManage ? 'Cadastre, edite e acompanhe produtos do SalÃ£o.' : 'VisualizaÃ§Ã£o dos produtos e alertas de estoque.'}</p>
         </div>
         {canManage && <button onClick={openNew} className={`${buttonPrimary} rounded-2xl px-4 py-3`}>Novo Produto</button>}
       </div>
@@ -4208,7 +4217,7 @@ function Inventory({ user, items, setItems, notify }) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold">{item.name}</p>
-              <p className="mt-1 text-sm text-gray-500">{item.category} · {item.unit}</p>
+              <p className="mt-1 text-sm text-gray-500">{item.category} Â· {item.unit}</p>
             </div>
             {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="h-14 w-14 rounded-xl border border-gray-100 object-cover" />}
             {item.quantity <= item.min && <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">Estoque baixo</span>}
@@ -4219,11 +4228,11 @@ function Inventory({ user, items, setItems, notify }) {
               <p className="font-bold">{item.quantity} {item.unit}</p>
             </div>
             <div className="rounded-2xl bg-pearl px-4 py-3">
-              <p className="text-gray-500">Mínimo</p>
+              <p className="text-gray-500">MÃ­nimo</p>
               <p className="font-bold">{item.min} {item.unit}</p>
             </div>
           </div>
-          <p className="mt-3 text-sm">Custo unitário: <strong>{money.format(item.cost)}</strong></p>
+          <p className="mt-3 text-sm">Custo unitÃ¡rio: <strong>{money.format(item.cost)}</strong></p>
           <p className="mt-2 text-sm text-gray-500">Fornecedor: {item.supplier}</p>
           {item.notes && <p className="mt-2 text-sm text-gray-600">Obs.: {item.notes}</p>}
           {canManage && (
@@ -4270,17 +4279,17 @@ function InventoryModal({ product, onClose, onSave }) {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Quantidade atual" type="number" value={form.quantity} onChange={(value) => setForm({ ...form, quantity: value })} />
           <Select label="Unidade" value={form.unit} onChange={(value) => setForm({ ...form, unit: value })} options={units} />
-          <Field label="Custo unitário" type="number" value={form.cost} onChange={(value) => setForm({ ...form, cost: value })} />
-          <Field label="Estoque mínimo" type="number" value={form.min} onChange={(value) => setForm({ ...form, min: value })} />
+          <Field label="Custo unitÃ¡rio" type="number" value={form.cost} onChange={(value) => setForm({ ...form, cost: value })} />
+          <Field label="Estoque mÃ­nimo" type="number" value={form.min} onChange={(value) => setForm({ ...form, min: value })} />
         </div>
         <Field label="Fornecedor" value={form.supplier} onChange={(value) => setForm({ ...form, supplier: value })} />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-gray-600">Imagem do produto</span>
           <input type="file" accept="image/*" onChange={handleImage} className={inputBase} />
         </label>
-        {form.imageUrl && <img src={form.imageUrl} alt="Prévia do produto" className="h-28 w-28 rounded-2xl border border-gray-200 object-cover" />}
+        {form.imageUrl && <img src={form.imageUrl} alt="PrÃ©via do produto" className="h-28 w-28 rounded-2xl border border-gray-200 object-cover" />}
         <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-gray-600">Observações</span>
+          <span className="mb-2 block text-sm font-semibold text-gray-600">ObservaÃ§Ãµes</span>
           <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
@@ -4294,11 +4303,11 @@ function InventoryModal({ product, onClose, onSave }) {
 
 function auditActionLabel(action) {
   const labels = {
-    edicao_vale: 'Edição de vale',
+    edicao_vale: 'EdiÃ§Ã£o de vale',
     cancelamento_vale: 'Cancelamento de vale',
-    edicao_lancamento_financeiro: 'Edição de lançamento financeiro',
-    cancelamento_lancamento_financeiro: 'Cancelamento de lançamento financeiro',
-    pagamento_comissao: 'Pagamento de comissão',
+    edicao_lancamento_financeiro: 'EdiÃ§Ã£o de lanÃ§amento financeiro',
+    cancelamento_lancamento_financeiro: 'Cancelamento de lanÃ§amento financeiro',
+    pagamento_comissao: 'Pagamento de comissÃ£o',
     fechamento_caixa: 'Fechamento de caixa',
     retirada_dono: 'Retirada do dono'
   }
@@ -4308,8 +4317,8 @@ function auditActionLabel(action) {
 function auditEntityLabel(type) {
   const labels = {
     advance: 'Vale',
-    cash_movement: 'Lançamento financeiro',
-    commission_payment: 'Pagamento de comissão',
+    cash_movement: 'LanÃ§amento financeiro',
+    commission_payment: 'Pagamento de comissÃ£o',
     cash_closure: 'Fechamento de caixa'
   }
   return labels[type] ?? type
@@ -4332,7 +4341,7 @@ function AuditTrail({ auditLogs = [] }) {
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Controle profissional</p>
             <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">Auditoria</h2>
-            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">Histórico financeiro com motivo, usuário e comparação antes/depois.</p>
+            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">HistÃ³rico financeiro com motivo, usuÃ¡rio e comparaÃ§Ã£o antes/depois.</p>
           </div>
           <div className="flex gap-2">
             <button type="button" disabled className="focus-ring rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#24202c]">Exportar PDF</button>
@@ -4340,12 +4349,12 @@ function AuditTrail({ auditLogs = [] }) {
           </div>
         </div>
       </section>
-      <Panel title="Histórico de auditoria">
+      <Panel title="HistÃ³rico de auditoria">
         {rows.length ? (
           <Table
             rows={rows}
             columns={['createdAt', 'userName', 'action', 'entityType', 'reason', 'details']}
-            labels={['Data', 'Usuário', 'Ação', 'Tipo', 'Motivo', 'Ver detalhes']}
+            labels={['Data', 'UsuÃ¡rio', 'AÃ§Ã£o', 'Tipo', 'Motivo', 'Ver detalhes']}
             formatValue={(key, value, row) => {
               if (key === 'createdAt') return formatAuditDate(row.createdAt ?? row.created_at)
               if (key === 'userName') return row.userName || row.user_name || '-'
@@ -4372,8 +4381,8 @@ function AuditDetailsModal({ log, onClose }) {
     <Modal title="Detalhes da auditoria" onClose={onClose} maxWidth="max-w-5xl" zClass="z-50">
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Metric title="Ação" value={auditActionLabel(log.action)} detail={auditEntityLabel(log.entityType ?? log.entity_type)} />
-          <Metric title="Usuário" value={log.userName || log.user_name || '-'} detail={formatAuditDate(log.createdAt ?? log.created_at)} />
+          <Metric title="AÃ§Ã£o" value={auditActionLabel(log.action)} detail={auditEntityLabel(log.entityType ?? log.entity_type)} />
+          <Metric title="UsuÃ¡rio" value={log.userName || log.user_name || '-'} detail={formatAuditDate(log.createdAt ?? log.created_at)} />
           <Metric title="Motivo" value={log.reason || '-'} detail={`ID ${log.entityId ?? log.entity_id ?? '-'}`} />
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -4414,8 +4423,8 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
   const pendingReportEntries = reportData.pendingEntries
   const commissions = reportData.totals.commission
   const employeeCommissions = reportData.employeeRows.map((item) => ({ name: item.employeeName, value: item.commission, count: item.appointments }))
-  const serviceCommissions = topEntries(appointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'Serviço']: (acc[cashServiceName(item) || 'Serviço'] || 0) + cashCommissionValue(item) }), {}), 8)
-  const serviceSales = topEntries(countBy(appointmentEntries, (item) => cashServiceName(item) || 'Serviço'))
+  const serviceCommissions = topEntries(appointmentEntries.reduce((acc, item) => ({ ...acc, [cashServiceName(item) || 'ServiÃ§o']: (acc[cashServiceName(item) || 'ServiÃ§o'] || 0) + cashCommissionValue(item) }), {}), 8)
+  const serviceSales = topEntries(countBy(appointmentEntries, (item) => cashServiceName(item) || 'ServiÃ§o'))
   const frequentClients = topEntries(countBy(appointmentEntries, (item) => cashClientName(item) || 'Cliente'), 5)
   const revenue = reportData.totals.revenue
 
@@ -4426,8 +4435,8 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
       if (format === 'excel') await exportReportsExcel(reportData, salonSettings)
       notify?.(format === 'pdf' ? 'PDF exportado.' : 'Excel exportado.')
     } catch (error) {
-      console.error('Erro ao exportar relatório:', error)
-      notify?.('Não foi possível exportar o relatório.', 'error')
+      console.error('Erro ao exportar relatÃ³rio:', error)
+      notify?.('NÃ£o foi possÃ­vel exportar o relatÃ³rio.', 'error')
     } finally {
       setExporting(null)
     }
@@ -4437,13 +4446,13 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
       <section className="rounded-2xl border border-[#d9c17a]/70 bg-white p-5 shadow-soft dark:border-[#d9c17a]/30 dark:bg-[#1f1b26]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Relatórios premium</p>
-            <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">Exportações financeiras</h2>
-            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">PDF e Excel respeitam período, data inicial e funcionário selecionado.</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">RelatÃ³rios premium</p>
+            <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">ExportaÃ§Ãµes financeiras</h2>
+            <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">PDF e Excel respeitam perÃ­odo, data inicial e funcionÃ¡rio selecionado.</p>
           </div>
           <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[560px]">
             <Select
-              label="Funcionário"
+              label="FuncionÃ¡rio"
               value={selectedReportEmployee}
               onChange={setSelectedReportEmployee}
               options={['Todos', ...employees.map((item) => item.name)]}
@@ -4482,22 +4491,22 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
       )}
 
       <div className="grid gap-5 lg:grid-cols-2">
-      {user.role === 'admin' && <Panel title="Faturamento por período"><CompactList items={[`Mês atual: ${money.format(revenue)}`, `Ticket médio: ${money.format(completed.length ? revenue / completed.length : 0)}`]} /></Panel>}
-      <Panel title={user.role === 'admin' ? 'Comissões gerais' : 'Minha Comissão'}><CompactList items={[money.format(commissions)]} /></Panel>
-      <Panel title="Comissão por funcionário"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissões calculadas']} /></Panel>
+      {user.role === 'admin' && <Panel title="Faturamento por perÃ­odo"><CompactList items={[`MÃªs atual: ${money.format(revenue)}`, `Ticket mÃ©dio: ${money.format(completed.length ? revenue / completed.length : 0)}`]} /></Panel>}
+      <Panel title={user.role === 'admin' ? 'ComissÃµes gerais' : 'Minha ComissÃ£o'}><CompactList items={[money.format(commissions)]} /></Panel>
+      <Panel title="ComissÃ£o por funcionÃ¡rio"><CompactList items={employeeCommissions.length ? employeeCommissions.map((item) => `${item.name}: ${money.format(item.value)}`) : ['Sem comissÃµes calculadas']} /></Panel>
       <Panel title="Vales descontados"><CompactList items={[money.format(reportData.totals.advancesDiscounted)]} /></Panel>
       <Panel title="Adiantamentos pendentes"><CompactList items={[money.format(reportData.totals.advancesPending)]} /></Panel>
-      <Panel title="Saldo líquido a pagar"><CompactList items={[money.format(reportData.totals.netCommission)]} /></Panel>
-      <Panel title="Comissão por serviço"><CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissões calculadas']} /></Panel>
-      <Panel title="Serviços mais vendidos"><CompactList items={serviceSales.length ? serviceSales.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
+      <Panel title="Saldo lÃ­quido a pagar"><CompactList items={[money.format(reportData.totals.netCommission)]} /></Panel>
+      <Panel title="ComissÃ£o por serviÃ§o"><CompactList items={serviceCommissions.length ? serviceCommissions.map(([label, value]) => `${label}: ${money.format(value)}`) : ['Sem comissÃµes calculadas']} /></Panel>
+      <Panel title="ServiÃ§os mais vendidos"><CompactList items={serviceSales.length ? serviceSales.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
       <Panel title="Clientes mais frequentes"><CompactList items={frequentClients.length ? frequentClients.map(([label, count]) => `${label}: ${count}`) : ['Sem dados']} /></Panel>
       {user.role === 'admin' && <Panel title="Pagamentos pendentes"><CompactList items={pendingReportEntries.length ? pendingReportEntries.map((item) => `${cashClientName(item) || cashDescription(item)}: ${money.format(cashServiceValue(item))}`) : ['Sem pagamentos pendentes']} /></Panel>}
       </div>
-      <Panel title="Vales por funcionário">
+      <Panel title="Vales por funcionÃ¡rio">
         <Table
           rows={reportData.employeeRows.filter((row) => row.advancesTotal > 0 || row.commission > 0)}
           columns={['employeeName', 'advancesTotal', 'advancesPending', 'advancesDiscounted', 'netCommission']}
-          labels={['Funcionário', 'Total de vales no período', 'Vales pendentes', 'Vales descontados', 'Saldo líquido da comissão']}
+          labels={['FuncionÃ¡rio', 'Total de vales no perÃ­odo', 'Vales pendentes', 'Vales descontados', 'Saldo lÃ­quido da comissÃ£o']}
           formatValue={(key, value) => key === 'employeeName' ? value : money.format(Number(value) || 0)}
         />
       </Panel>
@@ -4509,12 +4518,12 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
 function CommissionPaymentHistory({ payments = [] }) {
   const rows = [...payments].sort((a, b) => String(b.paidAt ?? b.paid_at ?? '').localeCompare(String(a.paidAt ?? a.paid_at ?? '')))
   return (
-    <Panel title="Histórico de pagamentos de comissão">
+    <Panel title="HistÃ³rico de pagamentos de comissÃ£o">
       {rows.length ? (
         <Table
           rows={rows}
           columns={['paidAt', 'employeeName', 'commissionGross', 'advancesTotal', 'amount', 'paymentMethod', 'notes', 'period']}
-          labels={['Data do pagamento', 'Funcionário', 'Comissão bruta', 'Vales descontados', 'Valor líquido pago', 'Forma de pagamento', 'Observação', 'Período referente']}
+          labels={['Data do pagamento', 'FuncionÃ¡rio', 'ComissÃ£o bruta', 'Vales descontados', 'Valor lÃ­quido pago', 'Forma de pagamento', 'ObservaÃ§Ã£o', 'PerÃ­odo referente']}
           formatValue={(key, value, row) => {
             if (key === 'paidAt') return formatDate(String(row.paidAt ?? row.paid_at ?? '').slice(0, 10))
             if (key === 'employeeName') return row.employeeName || row.employee_name || '-'
@@ -4522,12 +4531,12 @@ function CommissionPaymentHistory({ payments = [] }) {
             if (key === 'advancesTotal') return money.format(Number(row.advancesTotal ?? row.advances_total) || 0)
             if (key === 'amount') return money.format(Number(row.amount) || 0)
             if (key === 'paymentMethod') return <StatusBadge tone="cyan">{financialPaymentMethodLabel(row.paymentMethod ?? row.payment_method)}</StatusBadge>
-            if (key === 'period') return `${formatDate(row.periodStart ?? row.period_start)} até ${formatDate(row.periodEnd ?? row.period_end)}`
+            if (key === 'period') return `${formatDate(row.periodStart ?? row.period_start)} atÃ© ${formatDate(row.periodEnd ?? row.period_end)}`
             return value || '-'
           }}
         />
       ) : (
-        <EmptyState>Nenhum pagamento de comissão registrado.</EmptyState>
+        <EmptyState>Nenhum pagamento de comissÃ£o registrado.</EmptyState>
       )}
     </Panel>
   )
@@ -4560,7 +4569,7 @@ function buildFinancialReportData({ cashEntries = [], advances = [], employees =
     acc[key] = acc[key] ?? {
       id: key,
       employeeId: employeeId ? String(employeeId) : '',
-      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionário',
+      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'FuncionÃ¡rio',
       appointments: 0,
       revenue: 0,
       commission: 0,
@@ -4617,7 +4626,7 @@ function buildFinancialReportData({ cashEntries = [], advances = [], employees =
     endDate,
     periodType,
     selectedEmployeeId: employeeFilter,
-    selectedEmployeeName: employeeFilter === 'todos' ? 'Todos' : selectedEmployee?.name ?? 'Funcionário',
+    selectedEmployeeName: employeeFilter === 'todos' ? 'Todos' : selectedEmployee?.name ?? 'FuncionÃ¡rio',
     periodEntries,
     appointmentEntries,
     pendingEntries,
@@ -4628,7 +4637,7 @@ function buildFinancialReportData({ cashEntries = [], advances = [], employees =
 }
 
 function reportPeriodLabel(reportData) {
-  return `${formatDate(reportData.startDate)} até ${formatDate(reportData.endDate)}`
+  return `${formatDate(reportData.startDate)} atÃ© ${formatDate(reportData.endDate)}`
 }
 
 function reportMoney(value) {
@@ -4647,7 +4656,7 @@ function movementExportRows(entries) {
     Valor: cashServiceValue(entry),
     'Comissao': cashCommissionValue(entry),
     'Salao': cashSalonValue(entry),
-    'Comissão paga': cashCommissionPaid(entry) ? 'Sim' : 'Não',
+    'ComissÃ£o paga': cashCommissionPaid(entry) ? 'Sim' : 'NÃ£o',
     'Pago em': cashCommissionPaidAt(entry) ? formatDate(String(cashCommissionPaidAt(entry)).slice(0, 10)) : ''
   }))
 }
@@ -4657,10 +4666,10 @@ function employeeExportRows(rows) {
     'Funcionario': row.employeeName,
     Atendimentos: row.appointments,
     Faturamento: row.revenue,
-    'Comissão total': row.commission,
-    'Comissão paga': row.commissionPaid,
-    'Comissão pendente': row.commissionPending,
-    'Lucro do salão': row.salonProfit
+    'ComissÃ£o total': row.commission,
+    'ComissÃ£o paga': row.commissionPaid,
+    'ComissÃ£o pendente': row.commissionPending,
+    'Lucro do salÃ£o': row.salonProfit
   }))
 }
 
@@ -4671,16 +4680,16 @@ async function exportReportsPdf(reportData, salonSettings) {
   ])
   const autoTable = autoTableModule.default
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
-  const salonName = salonSettings?.salonName || 'Salão'
+  const salonName = salonSettings?.salonName || 'SalÃ£o'
   doc.setFontSize(16)
   doc.text(salonName, 40, 36)
   doc.setFontSize(10)
-  doc.text(`Período analisado: ${reportPeriodLabel(reportData)}`, 40, 54)
-  doc.text(`Funcionário: ${reportData.selectedEmployeeName}`, 40, 70)
+  doc.text(`PerÃ­odo analisado: ${reportPeriodLabel(reportData)}`, 40, 54)
+  doc.text(`FuncionÃ¡rio: ${reportData.selectedEmployeeName}`, 40, 70)
 
   autoTable(doc, {
     startY: 88,
-    head: [['Total faturado', 'Total de comissões', 'Lucro do salão', 'Comissão paga', 'Comissão pendente']],
+    head: [['Total faturado', 'Total de comissÃµes', 'Lucro do salÃ£o', 'ComissÃ£o paga', 'ComissÃ£o pendente']],
     body: [[
       reportMoney(reportData.totals.revenue),
       reportMoney(reportData.totals.commission),
@@ -4693,7 +4702,7 @@ async function exportReportsPdf(reportData, salonSettings) {
 
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 18,
-    head: [['Funcionário', 'Atendimentos', 'Faturamento', 'Comissão', 'Pago', 'Pendente', 'Lucro do salão']],
+    head: [['FuncionÃ¡rio', 'Atendimentos', 'Faturamento', 'ComissÃ£o', 'Pago', 'Pendente', 'Lucro do salÃ£o']],
     body: reportData.employeeRows.length ? reportData.employeeRows.map((row) => [
       row.employeeName,
       row.appointments,
@@ -4708,7 +4717,7 @@ async function exportReportsPdf(reportData, salonSettings) {
 
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 18,
-    head: [['Pagamentos pendentes', 'Serviço', 'Funcionário', 'Valor']],
+    head: [['Pagamentos pendentes', 'ServiÃ§o', 'FuncionÃ¡rio', 'Valor']],
     body: reportData.pendingEntries.length ? reportData.pendingEntries.map((entry) => [
       cashClientName(entry) || cashDescription(entry),
       cashServiceName(entry) || cashCategory(entry),
@@ -4720,7 +4729,7 @@ async function exportReportsPdf(reportData, salonSettings) {
 
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 18,
-    head: [['Data', 'Cliente', 'Serviço', 'Funcionário', 'Forma', 'Status', 'Valor', 'Comissão', 'Salão']],
+    head: [['Data', 'Cliente', 'ServiÃ§o', 'FuncionÃ¡rio', 'Forma', 'Status', 'Valor', 'ComissÃ£o', 'SalÃ£o']],
     body: reportData.periodEntries.length ? reportData.periodEntries.map((entry) => [
       formatDate(cashDate(entry)),
       cashClientName(entry) || cashDescription(entry),
@@ -4731,7 +4740,7 @@ async function exportReportsPdf(reportData, salonSettings) {
       reportMoney(cashServiceValue(entry)),
       reportMoney(cashCommissionValue(entry)),
       reportMoney(cashSalonValue(entry))
-    ]) : [['Sem movimentações', '-', '-', '-', '-', '-', '-', '-', '-']],
+    ]) : [['Sem movimentaÃ§Ãµes', '-', '-', '-', '-', '-', '-', '-', '-']],
     styles: { fontSize: 7 }
   })
 
@@ -4742,24 +4751,24 @@ async function exportReportsExcel(reportData, salonSettings) {
   const XLSX = await import('xlsx')
   const workbook = XLSX.utils.book_new()
   const summaryRows = [
-    { Indicador: 'Salão', Valor: salonSettings?.salonName || 'Salão' },
-    { Indicador: 'Período', Valor: reportPeriodLabel(reportData) },
-    { Indicador: 'Funcionário', Valor: reportData.selectedEmployeeName },
+    { Indicador: 'SalÃ£o', Valor: salonSettings?.salonName || 'SalÃ£o' },
+    { Indicador: 'PerÃ­odo', Valor: reportPeriodLabel(reportData) },
+    { Indicador: 'FuncionÃ¡rio', Valor: reportData.selectedEmployeeName },
     { Indicador: 'Total faturado', Valor: reportData.totals.revenue },
-    { Indicador: 'Total de comissões', Valor: reportData.totals.commission },
-    { Indicador: 'Lucro do salão', Valor: reportData.totals.salonProfit },
-    { Indicador: 'Comissão paga', Valor: reportData.totals.commissionPaid },
-    { Indicador: 'Comissão pendente', Valor: reportData.totals.commissionPending }
+    { Indicador: 'Total de comissÃµes', Valor: reportData.totals.commission },
+    { Indicador: 'Lucro do salÃ£o', Valor: reportData.totals.salonProfit },
+    { Indicador: 'ComissÃ£o paga', Valor: reportData.totals.commissionPaid },
+    { Indicador: 'ComissÃ£o pendente', Valor: reportData.totals.commissionPending }
   ]
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Resumo')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows)), 'Funcionários')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows)), 'FuncionÃ¡rios')
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows).map((row) => ({
     'Funcionario': row.Funcionario,
-    'Comissão total': row['Comissão total'],
-    'Comissão paga': row['Comissão paga'],
-    'Comissão pendente': row['Comissão pendente']
-  }))), 'Comissões')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.periodEntries)), 'Movimentações')
+    'ComissÃ£o total': row['ComissÃ£o total'],
+    'ComissÃ£o paga': row['ComissÃ£o paga'],
+    'ComissÃ£o pendente': row['ComissÃ£o pendente']
+  }))), 'ComissÃµes')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.periodEntries)), 'MovimentaÃ§Ãµes')
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.pendingEntries)), 'Pendentes')
   XLSX.writeFile(workbook, `relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.xlsx`)
 }
@@ -4791,7 +4800,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
     acc[key] = acc[key] ?? {
       id: key,
       employeeId: key,
-      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionário',
+      employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'FuncionÃ¡rio',
       appointments: 0,
       revenue: 0,
       commission: 0,
@@ -4857,25 +4866,25 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
     <section className="min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26] sm:p-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-goldSoft">Lançamentos financeiros</p>
-          <h3 className="mt-1 text-2xl font-bold text-graphite dark:text-gray-100">Resultado dos funcionários</h3>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-goldSoft">LanÃ§amentos financeiros</p>
+          <h3 className="mt-1 text-2xl font-bold text-graphite dark:text-gray-100">Resultado dos funcionÃ¡rios</h3>
           <div className="mt-3 flex flex-wrap gap-2">
-            <StatusBadge tone="cyan">{formatDate(startDate)} até {formatDate(endDate)}</StatusBadge>
+            <StatusBadge tone="cyan">{formatDate(startDate)} atÃ© {formatDate(endDate)}</StatusBadge>
             <StatusBadge tone="green">{totals.appointments} atendimentos pagos</StatusBadge>
           </div>
         </div>
 
         <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[640px] xl:grid-cols-3">
           <Select
-            label="Tipo de período"
+            label="Tipo de perÃ­odo"
             value={periodType}
             onChange={onPeriodTypeChange}
-            options={['Semana', 'Quinzena', 'Mês']}
+            options={['Semana', 'Quinzena', 'MÃªs']}
             values={['semana', 'quinzena', 'mes']}
           />
           <Field label="Data inicial" type="date" value={startDate} onChange={onStartDateChange} />
           <Select
-            label="Funcionário"
+            label="FuncionÃ¡rio"
             value={selectedEmployeeId}
             onChange={onSelectedEmployeeChange}
             options={['Todos', ...employees.map((item) => item.name)]}
@@ -4890,11 +4899,11 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
           <p className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">{money.format(totals.revenue)}</p>
         </div>
         <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
-          <p className="text-sm font-bold text-amber-800 dark:text-amber-200">Total de comissões</p>
+          <p className="text-sm font-bold text-amber-800 dark:text-amber-200">Total de comissÃµes</p>
           <p className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">{money.format(totals.commission)}</p>
         </div>
         <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4 dark:border-cyan-400/20 dark:bg-cyan-500/10">
-          <p className="text-sm font-bold text-cyan-800 dark:text-cyan-200">Lucro do salão</p>
+          <p className="text-sm font-bold text-cyan-800 dark:text-cyan-200">Lucro do salÃ£o</p>
           <p className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">{money.format(totals.salonProfit)}</p>
         </div>
       </div>
@@ -4904,7 +4913,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
           <Table
             rows={rows}
             columns={['employeeName', 'appointments', 'revenue', 'commission', 'salonProfit']}
-            labels={['Funcionário', 'Atendimentos concluídos', 'Faturamento bruto', 'Comissão total', 'Valor líquido do salão']}
+            labels={['FuncionÃ¡rio', 'Atendimentos concluÃ­dos', 'Faturamento bruto', 'ComissÃ£o total', 'Valor lÃ­quido do salÃ£o']}
             onRowClick={(row) => setSelectedEmployee(row)}
             formatValue={(column, value) => {
               if (column === 'appointments') return <StatusBadge tone="gray">{value}</StatusBadge>
@@ -4913,21 +4922,21 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
             }}
           />
         ) : (
-          <EmptyState>Nenhum resultado encontrado para este período.</EmptyState>
+          <EmptyState>Nenhum resultado encontrado para este perÃ­odo.</EmptyState>
         )}
       </div>
       <div className="mt-6 rounded-2xl border border-gray-100 bg-pearl/70 p-4 dark:border-white/10 dark:bg-white/5">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-goldSoft">controle financeiro</p>
-            <h4 className="mt-1 text-xl font-black text-graphite dark:text-gray-100">Valores a receber por funcionário</h4>
+            <h4 className="mt-1 text-xl font-black text-graphite dark:text-gray-100">Valores a receber por funcionÃ¡rio</h4>
           </div>
           <div className="w-full sm:w-64">
             <Select
               label="Filtro"
               value={commissionStatusFilter}
               onChange={setCommissionStatusFilter}
-              options={['Todos', 'Comissão pendente', 'Comissão paga']}
+              options={['Todos', 'ComissÃ£o pendente', 'ComissÃ£o paga']}
               values={['todos', 'pendente', 'paga']}
             />
           </div>
@@ -4936,20 +4945,20 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
           <Table
             rows={receivableRows}
             columns={['employeeName', 'appointments', 'revenue', 'commission', 'advancesDiscounted', 'netCommission', 'commissionPaid', 'commissionPending', 'action']}
-            labels={['Nome', 'Atendimentos concluídos', 'Faturamento gerado', 'Comissão total', 'Vales descontados', 'Saldo líquido a pagar', 'Comissão já paga', 'Comissão pendente', 'Ação']}
+            labels={['Nome', 'Atendimentos concluÃ­dos', 'Faturamento gerado', 'ComissÃ£o total', 'Vales descontados', 'Saldo lÃ­quido a pagar', 'ComissÃ£o jÃ¡ paga', 'ComissÃ£o pendente', 'AÃ§Ã£o']}
             formatValue={(column, value, row) => {
               if (column === 'appointments') return <StatusBadge tone="gray">{value}</StatusBadge>
               if (['revenue', 'commission', 'advancesDiscounted', 'netCommission', 'commissionPaid', 'commissionPending'].includes(column)) return money.format(value)
               if (column === 'action') return (
                 <button type="button" disabled={row.commissionPending <= 0} onClick={() => setPaymentEmployee(row)} className="focus-ring rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
-                  Marcar comissão como paga
+                  Marcar comissÃ£o como paga
                 </button>
               )
               return value
             }}
           />
         ) : (
-          <EmptyState>Nenhum valor de comissão encontrado para este filtro.</EmptyState>
+          <EmptyState>Nenhum valor de comissÃ£o encontrado para este filtro.</EmptyState>
         )}
       </div>
       {selectedEmployee && (
@@ -4997,7 +5006,7 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
     event.preventDefault()
     if (totalPending <= 0) return
     if (!String(form.notes ?? '').trim()) {
-      notify?.('Informe o motivo da alteração.', 'error')
+      notify?.('Informe o motivo da alteraÃ§Ã£o.', 'error')
       return
     }
     setSaving(true)
@@ -5045,7 +5054,7 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
       setCashEntries?.((current) => current.map((entry) => normalized.find((updated) => String(updated.id) === String(entry.id)) ?? entry))
       setAdvances?.((current) => current.map((advance) => normalizedAdvances.find((updated) => String(updated.id) === String(advance.id)) ?? advance))
       setCommissionPayments?.((current) => [paymentRecord, ...(current || [])])
-      notify?.('Comissão marcada como paga com vales descontados.')
+      notify?.('ComissÃ£o marcada como paga com vales descontados.')
       onClose()
     } catch (error) {
       handleDataActionError(error, notify)
@@ -5055,15 +5064,15 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
   }
 
   return (
-    <Modal title="Marcar comissão como paga" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
+    <Modal title="Marcar comissÃ£o como paga" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
       <form onSubmit={confirmPayment} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
-            <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Funcionário</p>
+            <p className="text-sm font-bold text-gray-500 dark:text-gray-400">FuncionÃ¡rio</p>
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{employee.employeeName}</p>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-500/10">
-            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Comissão pendente</p>
+            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">ComissÃ£o pendente</p>
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(totalPending)}</p>
           </div>
           <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
@@ -5071,13 +5080,13 @@ function CommissionPaymentModal({ salonId, employee, entries, advances = [], per
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(advancesTotal)}</p>
           </div>
           <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4 dark:border-cyan-400/20 dark:bg-cyan-500/10">
-            <p className="text-sm font-bold text-cyan-800 dark:text-cyan-200">Saldo líquido a pagar</p>
+            <p className="text-sm font-bold text-cyan-800 dark:text-cyan-200">Saldo lÃ­quido a pagar</p>
             <p className="mt-1 text-xl font-black text-graphite dark:text-gray-100">{money.format(netTotal)}</p>
           </div>
         </div>
-        <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(paymentMethod) => setForm((current) => ({ ...current, paymentMethod }))} options={['Pix', 'Dinheiro', 'Transferência']} values={['pix', 'dinheiro', 'transferencia']} />
+        <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(paymentMethod) => setForm((current) => ({ ...current, paymentMethod }))} options={['Pix', 'Dinheiro', 'TransferÃªncia']} values={['pix', 'dinheiro', 'transferencia']} />
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteraÃ§Ã£o</span>
           <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} required />
         </label>
         <div className="flex justify-end gap-2">
@@ -5104,7 +5113,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
   }
 
   return (
-    <Modal title="Atendimentos do funcionário" onClose={onClose} maxWidth="max-w-5xl">
+    <Modal title="Atendimentos do funcionÃ¡rio" onClose={onClose} maxWidth="max-w-5xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-lg font-black text-graphite dark:text-gray-100">{employee.employeeName}</p>
@@ -5119,7 +5128,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
         <Table
           rows={entries}
           columns={['client', 'service', 'date', 'value', 'commission', 'paymentMethod', 'status']}
-          labels={['Cliente', 'Serviço', 'Data', 'Valor', 'Comissão', 'Forma de pagamento', 'Status']}
+          labels={['Cliente', 'ServiÃ§o', 'Data', 'Valor', 'ComissÃ£o', 'Forma de pagamento', 'Status']}
           onRowClick={(row) => setSelectedEntry(row)}
           formatValue={(key, value, row) => {
             if (key === 'client') return cashClientName(row) || '-'
@@ -5133,7 +5142,7 @@ function EmployeeAppointmentsModal({ salonId, employee, entries, setCashEntries,
           }}
         />
       ) : (
-        <EmptyState>Nenhum atendimento pago encontrado para este funcionário no período.</EmptyState>
+        <EmptyState>Nenhum atendimento pago encontrado para este funcionÃ¡rio no perÃ­odo.</EmptyState>
       )}
 
       {selectedEntry && (
@@ -5186,7 +5195,7 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
       status: form.paymentStatus
     }
     if (!String(form.reason ?? '').trim()) {
-      notify?.('Informe o motivo da alteração.', 'error')
+      notify?.('Informe o motivo da alteraÃ§Ã£o.', 'error')
       return
     }
 
@@ -5215,7 +5224,7 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
 
   async function removeEntry() {
     if (!String(form.reason ?? '').trim()) {
-      notify?.('Informe o motivo da alteração.', 'error')
+      notify?.('Informe o motivo da alteraÃ§Ã£o.', 'error')
       return
     }
     setRemoving(true)
@@ -5233,7 +5242,7 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
         onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
       })
       onRemoved(savedEntry)
-      notify?.('Lançamento removido dos cálculos.')
+      notify?.('LanÃ§amento removido dos cÃ¡lculos.')
     } catch (error) {
       handleDataActionError(error, notify)
     } finally {
@@ -5245,20 +5254,20 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
     <Modal title="Editar atendimento" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
       <form onSubmit={save} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Valor do serviço" type="number" min="0" value={form.serviceValue} onChange={(value) => setForm((current) => ({ ...current, serviceValue: value }))} />
-          <Field label="Comissão (%)" type="number" min="0" value={form.commissionPercent} onChange={(value) => setForm((current) => ({ ...current, commissionPercent: value }))} />
-          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm((current) => ({ ...current, paymentMethod: value }))} options={['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Pendente']} values={['pix', 'dinheiro', 'debito', 'credito', 'pendente']} />
+          <Field label="Valor do serviÃ§o" type="number" min="0" value={form.serviceValue} onChange={(value) => setForm((current) => ({ ...current, serviceValue: value }))} />
+          <Field label="ComissÃ£o (%)" type="number" min="0" value={form.commissionPercent} onChange={(value) => setForm((current) => ({ ...current, commissionPercent: value }))} />
+          <Select label="Forma de pagamento" value={form.paymentMethod} onChange={(value) => setForm((current) => ({ ...current, paymentMethod: value }))} options={['Pix', 'Dinheiro', 'DÃ©bito', 'CrÃ©dito', 'Pendente']} values={['pix', 'dinheiro', 'debito', 'credito', 'pendente']} />
           <Select label="Status" value={form.paymentStatus} onChange={(value) => setForm((current) => ({ ...current, paymentStatus: value }))} options={['Pago', 'Pendente']} values={['pago', 'pendente']} />
         </div>
         <div className="rounded-2xl border border-gray-100 bg-pearl p-4 text-sm font-semibold text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
-          Comissão recalculada: {money.format(((Number(form.serviceValue) || 0) * (Number(form.commissionPercent) || 0)) / 100)}
+          ComissÃ£o recalculada: {money.format(((Number(form.serviceValue) || 0) * (Number(form.commissionPercent) || 0)) / 100)}
         </div>
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteraÃ§Ã£o</span>
           <textarea className={`${inputBase} min-h-24`} value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} required />
         </label>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <button type="button" onClick={removeEntry} disabled={saving || removing} className={buttonDanger}>{removing ? 'Removendo...' : 'Remover lançamento'}</button>
+          <button type="button" onClick={removeEntry} disabled={saving || removing} className={buttonDanger}>{removing ? 'Removendo...' : 'Remover lanÃ§amento'}</button>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={saving || removing} className={buttonSecondary}>Cancelar</button>
             <button type="submit" disabled={saving || removing} className={buttonPrimary}>{saving ? 'Salvando...' : 'Salvar atendimento'}</button>
@@ -5289,43 +5298,43 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
 
   function requestSlot(data) {
     if (!data.client.trim() || !data.service.trim()) {
-      notify?.('Erro ao solicitar: informe cliente e serviço.', 'error')
+      notify?.('Erro ao solicitar: informe cliente e serviÃ§o.', 'error')
       return
     }
     const phone = normalizePhone(salonSettings.receptionWhatsapp)
     if (!phone) {
-      notify?.('Cadastre o WhatsApp da recepção nas configurações do Salão.', 'error')
+      notify?.('Cadastre o WhatsApp da recepÃ§Ã£o nas configuraÃ§Ãµes do SalÃ£o.', 'error')
       return
     }
     const message = [
-      'Olá, gostaria de marcar uma cliente.',
+      'OlÃ¡, gostaria de marcar uma cliente.',
       '',
       `Profissional: ${employee.name}`,
       `Cliente: ${data.client}`,
-      `Serviço: ${data.service}`,
+      `ServiÃ§o: ${data.service}`,
       `Data: ${formatDate(date)}`,
-      `Horário: ${selectedSlot}`,
+      `HorÃ¡rio: ${selectedSlot}`,
       data.phone ? `Telefone: ${data.phone}` : '',
-      data.notes ? `Observação: ${data.notes}` : ''
+      data.notes ? `ObservaÃ§Ã£o: ${data.notes}` : ''
     ].filter(Boolean).join('\n')
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
     setSelectedSlot(null)
-    notify?.('Solicitação enviada para a recepção.')
+    notify?.('SolicitaÃ§Ã£o enviada para a recepÃ§Ã£o.')
   }
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
         <Metric title="Minha agenda" value={formatDate(date)} detail={employee.name} />
-        <Metric title="Horários livres" value={availableSlots.length} detail={selectedService?.name ?? 'Serviço'} />
+        <Metric title="HorÃ¡rios livres" value={availableSlots.length} detail={selectedService?.name ?? 'ServiÃ§o'} />
         <Metric title="Agendamentos do dia" value={dayAppointments.length} detail="Somente meus atendimentos" />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-        <Panel title="Meus Horários disponíveis">
+        <Panel title="Meus HorÃ¡rios disponÃ­veis">
           <div className="space-y-4">
             <DatePickerBar value={date} onChange={setDate} />
-            <Select label="Serviço desejado" value={serviceName} onChange={setServiceName} options={serviceOptions.length ? serviceOptions : services.map((item) => item.name)} />
+            <Select label="ServiÃ§o desejado" value={serviceName} onChange={setServiceName} options={serviceOptions.length ? serviceOptions : services.map((item) => item.name)} />
             <div className="inline-flex rounded-2xl border border-blush bg-pearl p-1 text-sm font-bold dark:border-white/10 dark:bg-white/5">
               <button type="button" onClick={() => setView('day')} className={`rounded-xl px-5 py-2 transition ${view === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Dia</button>
               <button type="button" onClick={() => setView('week')} className={`rounded-xl px-5 py-2 transition ${view === 'week' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Semana</button>
@@ -5333,10 +5342,10 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
             <div className="flex flex-wrap gap-2">
               {availableSlots.map((slot) => (
                 <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100">
-                  {slot} · Solicitar agendamento
+                  {slot} Â· Solicitar agendamento
                 </button>
               ))}
-              {availableSlots.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem Horários disponíveis nesta data.</p>}
+              {availableSlots.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem HorÃ¡rios disponÃ­veis nesta data.</p>}
             </div>
           </div>
         </Panel>
@@ -5344,7 +5353,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
         <Panel title={view === 'day' ? 'Meus agendamentos do dia' : 'Minha semana'}>
           {view === 'day' ? (
             <div className="space-y-3">
-              {dayAppointments.map((item) => <LineItem key={item.id} label={`${item.time} · ${item.client} · ${item.service}`} value={formatAppointmentStatus(item.status)} />)}
+              {dayAppointments.map((item) => <LineItem key={item.id} label={`${item.time} Â· ${item.client} Â· ${item.service}`} value={formatAppointmentStatus(item.status)} />)}
               {dayAppointments.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum agendamento nesta data.</p>}
             </div>
           ) : (
@@ -5355,7 +5364,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
                   <div key={weekDate} className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
                     <p className="font-bold capitalize">{formatDate(weekDate)}</p>
                     <div className="mt-3 space-y-2">
-                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#17141c]">{item.time} · {item.client}</p>)}
+                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#17141c]">{item.time} Â· {item.client}</p>)}
                       {dayItems.length === 0 && <p className="text-sm font-semibold text-gray-500">Sem agendamentos.</p>}
                     </div>
                   </div>
@@ -5380,13 +5389,13 @@ function ScheduleRequestModal({ employee, slot, date, serviceName, onClose, onSu
     <Modal title="Solicitar agendamento" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); onSubmit(form) }} className="space-y-3">
         <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
-          {employee.name} · {formatDate(date)} · {slot}
+          {employee.name} Â· {formatDate(date)} Â· {slot}
         </div>
         <Field label="Nome da cliente" value={form.client} onChange={(value) => setForm({ ...form, client: value })} required />
         <Field label="Telefone da cliente (opcional)" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />
-        <Select label="Serviço desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employeeServices.length ? employeeServices : services.map((item) => item.name)} />
+        <Select label="ServiÃ§o desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employeeServices.length ? employeeServices : services.map((item) => item.name)} />
         <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-gray-600">Observação (opcional)</span>
+          <span className="mb-2 block text-sm font-semibold text-gray-600">ObservaÃ§Ã£o (opcional)</span>
           <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
@@ -5403,12 +5412,12 @@ function MyAppointments({ user, appointments }) {
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
         <Metric title="Atendimentos hoje" value={appointments.length} detail={user.name} />
-        <Metric title="Concluídos" value={appointments.filter((item) => isCompletedStatus(item.status)).length} detail="Sem valores financeiros" />
-        <Metric title="Confirmados" value={appointments.filter((item) => normalizeAppointmentStatus(item.status) === 'confirmado').length} detail="Próximos Horários" />
+        <Metric title="ConcluÃ­dos" value={appointments.filter((item) => isCompletedStatus(item.status)).length} detail="Sem valores financeiros" />
+        <Metric title="Confirmados" value={appointments.filter((item) => normalizeAppointmentStatus(item.status) === 'confirmado').length} detail="PrÃ³ximos HorÃ¡rios" />
       </div>
       <Panel title="Meus atendimentos">
         <div className="space-y-3">
-          {appointments.map((item) => <LineItem key={item.id} label={`${formatDate(item.date)} · ${item.time} · ${item.client}`} value={formatAppointmentStatus(item.status)} />)}
+          {appointments.map((item) => <LineItem key={item.id} label={`${formatDate(item.date)} Â· ${item.time} Â· ${item.client}`} value={formatAppointmentStatus(item.status)} />)}
         </div>
       </Panel>
     </div>
@@ -5435,7 +5444,7 @@ function EmployeeProfile({ user, appointments, employees, setEmployees }) {
         </div>
       </Panel>
       <Panel title="Rotina de hoje">
-        <CompactList items={appointments.map((item) => `${formatDate(item.date)} · ${item.time} · ${item.client} · ${item.service}`)} />
+        <CompactList items={appointments.map((item) => `${formatDate(item.date)} Â· ${item.time} Â· ${item.client} Â· ${item.service}`)} />
       </Panel>
     </div>
   )
@@ -5524,24 +5533,24 @@ function Settings({ salonId, settings, setSettings, notify }) {
     <div className="mx-auto max-w-4xl">
       <form onSubmit={saveSalonSettings} className="space-y-6 rounded-2xl border border-blush bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#1c1922] sm:p-8">
         <div>
-          <h3 className="text-xl font-bold">Dados do Salão</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Edite as informações básicas usadas na identificação do sistema.</p>
+          <h3 className="text-xl font-bold">Dados do SalÃ£o</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Edite as informaÃ§Ãµes bÃ¡sicas usadas na identificaÃ§Ã£o do sistema.</p>
         </div>
 
         <div className="space-y-4">
-          <Field label="Nome do salão" value={form.salonName} onChange={(value) => setForm((current) => ({ ...current, salonName: value }))} placeholder="Ex.: Salão Belas" />
-          <Field label="WhatsApp da recepção/caixa" value={form.receptionWhatsapp} onChange={(value) => setForm((current) => ({ ...current, receptionWhatsapp: value }))} placeholder="Ex.: 5511999999999" />
+          <Field label="Nome do salÃ£o" value={form.salonName} onChange={(value) => setForm((current) => ({ ...current, salonName: value }))} placeholder="Ex.: SalÃ£o Belas" />
+          <Field label="WhatsApp da recepÃ§Ã£o/caixa" value={form.receptionWhatsapp} onChange={(value) => setForm((current) => ({ ...current, receptionWhatsapp: value }))} placeholder="Ex.: 5511999999999" />
         </div>
 
         <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h4 className="text-base font-bold text-graphite dark:text-gray-100">Horário de funcionamento</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Dias desmarcados não aparecem como disponíveis na agenda.</p>
+              <h4 className="text-base font-bold text-graphite dark:text-gray-100">HorÃ¡rio de funcionamento</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Dias desmarcados nÃ£o aparecem como disponÃ­veis na agenda.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setQuickDays(['monday', 'tuesday', 'wednesday', 'thursday', 'friday'])} className={buttonSecondary}>Segunda a sexta</button>
-              <button type="button" onClick={() => setQuickDays(['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'])} className={buttonSecondary}>Terça a sábado</button>
+              <button type="button" onClick={() => setQuickDays(['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'])} className={buttonSecondary}>TerÃ§a a sÃ¡bado</button>
               <button type="button" onClick={() => setQuickDays(defaultWorkingDays)} className={buttonSecondary}>Todos os dias</button>
             </div>
           </div>
@@ -5563,7 +5572,7 @@ function Settings({ salonId, settings, setSettings, notify }) {
 
         <div className="flex justify-end">
           <button type="submit" disabled={saving} className={`${buttonPrimary} rounded-2xl px-5 py-3`}>
-            {saving ? 'Salvando...' : 'Salvar alterações'}
+            {saving ? 'Salvando...' : 'Salvar alteraÃ§Ãµes'}
           </button>
         </div>
       </form>
@@ -5597,7 +5606,7 @@ function Modal({ title, children, onClose, maxWidth = 'max-w-xl', zClass = 'z-40
   )
 }
 
-function ReasonModal({ title = 'Motivo da alteração', description, confirmLabel = 'Confirmar', danger = false, onClose, onConfirm }) {
+function ReasonModal({ title = 'Motivo da alteraÃ§Ã£o', description, confirmLabel = 'Confirmar', danger = false, onClose, onConfirm }) {
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -5617,7 +5626,7 @@ function ReasonModal({ title = 'Motivo da alteração', description, confirmLabe
       <form onSubmit={submit} className="space-y-4">
         {description && <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">{description}</p>}
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteração</span>
+          <span className="mb-1 block text-sm font-semibold text-gray-600 dark:text-gray-300">Motivo da alteraÃ§Ã£o</span>
           <textarea className={`${inputBase} min-h-28`} value={reason} onChange={(event) => setReason(event.target.value)} required />
         </label>
         <div className="flex justify-end gap-2">
@@ -5785,7 +5794,7 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
         onClick={() => setOpen((current) => !current)}
       >
         <span>{formatAppointmentStatus(normalizedValue)}</span>
-        <span className="text-xs opacity-80" aria-hidden="true">▾</span>
+        <span className="text-xs opacity-80" aria-hidden="true">â–¾</span>
       </button>
 
       {open && menuPosition && createPortal(
@@ -5808,7 +5817,7 @@ function AppointmentStatusSelect({ value, onChange, roundedClass = 'rounded-xl' 
                 onClick={() => selectStatus(status)}
               >
                 <span>{label}</span>
-                {selected && <span className="text-xs font-black text-white" aria-hidden="true">✓</span>}
+                {selected && <span className="text-xs font-black text-white" aria-hidden="true">âœ“</span>}
               </button>
             )
           })}
@@ -5906,3 +5915,4 @@ function Table({ rows, columns, labels, formatValue, onRowClick }) {
 }
 
 export default App
+

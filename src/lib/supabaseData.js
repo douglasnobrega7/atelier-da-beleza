@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+﻿import { supabase } from './supabase'
 
 export const TABLES = {
   salons: 'salons',
@@ -15,7 +15,7 @@ export const TABLES = {
   stockItems: 'stock_items'
 }
 
-export const databaseNotConfiguredMessage = 'Banco ainda não configurado para esta tela.'
+export const databaseNotConfiguredMessage = 'Banco ainda nÃ£o configurado para esta tela.'
 export const missingSalonIdMessage = 'salon_id ausente'
 
 export function isMissingTableError(error) {
@@ -94,11 +94,14 @@ function employeePayload(payload = {}, salonId, includeSalon = false) {
   const rawRole = String(payload.role ?? '').trim().toLowerCase()
   const employeeType = payload.employeeType ?? (rawRole === 'cashier' || rawRole === 'caixa' ? 'cashier' : 'professional')
   const employeeFunctions = payload.functions ?? payload.role ?? payload.position ?? ''
+  const employeeName = payload.name ?? payload.employeeName ?? payload.employee_name ?? ''
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
-    name: includeSalon || hasField(payload, 'name') ? payload.name : undefined,
+    name: includeSalon || hasField(payload, 'name') || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? employeeName : undefined,
+    employee_name: hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? employeeName : undefined,
     phone: includeSalon || hasField(payload, 'phone') ? payload.phone : undefined,
     role: includeSalon || hasField(payload, 'role') || hasField(payload, 'functions') || hasField(payload, 'position') ? employeeFunctions : undefined,
+    functions: hasField(payload, 'functions') ? employeeFunctions : undefined,
     status: includeSalon || hasField(payload, 'status') || hasField(payload, 'workStatus') || hasField(payload, 'active')
       ? payload.status ?? payload.workStatus ?? (payload.active === false ? 'Inativo' : 'Ativo')
       : undefined,
@@ -366,6 +369,11 @@ function isAdminProfile(profile) {
   return String(profile?.role ?? '').trim().toLowerCase() === 'admin'
 }
 
+function isMissingPayloadColumnError(error, columns = []) {
+  const message = String(error?.original?.message ?? error?.message ?? '').toLowerCase()
+  return error?.code === 'PGRST204' || columns.some((column) => message.includes(`'${column.toLowerCase()}'`) || message.includes(column.toLowerCase()))
+}
+
 export async function fetchUserProfileById(id) {
   const data = await runQuery(
     supabase
@@ -397,7 +405,7 @@ export async function createSalonForAdmin(profile, authUser) {
   const salon = await runQuery(
     supabase
       .from(TABLES.salons)
-      .insert({ name: 'Meu Salão' })
+      .insert({ name: 'Meu SalÃ£o' })
       .select('*')
       .single()
   )
@@ -425,7 +433,7 @@ export async function createEmployeeUserProfile(salonId, payload) {
 
   const email = payload.email?.trim().toLowerCase()
   if (!email) {
-    throw new Error('E-mail do funcionário não informado.')
+    throw new Error('E-mail do funcionÃ¡rio nÃ£o informado.')
   }
 
   const role = payload.role === 'cashier' ? 'caixa' : 'profissional'
@@ -532,11 +540,25 @@ export async function fetchEmployees(salonId) {
 }
 
 export async function createEmployee(salonId, payload) {
-  return insertRow(TABLES.employees, salonId, payload, employeePayload)
+  try {
+    return await insertRow(TABLES.employees, salonId, payload, employeePayload)
+  } catch (error) {
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions'])) throw error
+    console.error('erro real do Supabase:', error?.original ?? error)
+    const { employeeName, employee_name, functions, ...compatiblePayload } = payload
+    return insertRow(TABLES.employees, salonId, compatiblePayload, employeePayload)
+  }
 }
 
 export async function updateEmployee(salonId, id, payload) {
-  return updateRow(TABLES.employees, salonId, id, payload, employeePayload)
+  try {
+    return await updateRow(TABLES.employees, salonId, id, payload, employeePayload)
+  } catch (error) {
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions'])) throw error
+    console.error('erro real do Supabase:', error?.original ?? error)
+    const { employeeName, employee_name, functions, ...compatiblePayload } = payload
+    return updateRow(TABLES.employees, salonId, id, compatiblePayload, employeePayload)
+  }
 }
 
 export async function deleteEmployee(salonId, id) {
@@ -656,7 +678,7 @@ export async function seedInitialSalonData(salonId) {
         .from(TABLES.employees)
         .insert([
           employeePayload({
-            name: 'Caixa/Recepção',
+            name: 'Caixa/RecepÃ§Ã£o',
             phone: '',
             role: 'cashier',
             position: 'caixa',
@@ -784,13 +806,18 @@ export async function fetchAuditLogs(salonId) {
     const data = await runQuery(bySalon(TABLES.auditLogs, salonId).order('created_at', { ascending: false }))
     return Array.isArray(data) ? data : []
   } catch (error) {
-    if (isMissingTableError(error?.original ?? error)) return []
-    throw error
+    console.error('Erro audit_logs Supabase:', error?.original ?? error)
+    return []
   }
 }
 
 export async function createAuditLog(salonId, payload) {
-  return insertRow(TABLES.auditLogs, salonId, payload, auditLogPayload)
+  try {
+    return await insertRow(TABLES.auditLogs, salonId, payload, auditLogPayload)
+  } catch (error) {
+    console.error('Erro audit_logs Supabase:', error?.original ?? error)
+    return null
+  }
 }
 
 export async function fetchCashMovementByAppointment(salonId, appointmentId) {
@@ -830,3 +857,4 @@ export async function updateAdvance(salonId, id, payload) {
 export async function fetchStockItems(salonId) {
   return runQuery(bySalon(TABLES.stockItems, salonId).order('name', { ascending: true }))
 }
+
