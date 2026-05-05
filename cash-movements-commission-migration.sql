@@ -1,4 +1,5 @@
 alter table public.cash_movements
+  add column if not exists amount numeric not null default 0,
   add column if not exists service_value numeric not null default 0,
   add column if not exists commission_percent numeric not null default 0,
   add column if not exists commission_value numeric not null default 0,
@@ -13,16 +14,31 @@ alter table public.cash_movements
   add column if not exists payment_status text not null default 'pago',
   add column if not exists payment_method text,
   add column if not exists cancelled_at timestamptz,
+  add column if not exists cancelled_reason text,
+  add column if not exists updated_at timestamptz,
   add column if not exists commission_paid boolean not null default false,
   add column if not exists commission_paid_at timestamptz,
   add column if not exists commission_payment_method text,
   add column if not exists commission_notes text;
 
-alter table public.cash_movements
-  drop column if exists forma_pagamento,
-  drop column if exists method,
-  drop column if exists referencia_id,
-  drop column if exists referencia_tipo;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'cash_movements'
+      and column_name = 'value'
+  ) then
+    update public.cash_movements
+    set amount = coalesce(nullif(amount, 0), nullif(service_value, 0), value, 0)
+    where true;
+  else
+    update public.cash_movements
+    set amount = coalesce(nullif(amount, 0), nullif(service_value, 0), 0)
+    where true;
+  end if;
+end $$;
 
 create unique index if not exists cash_movements_unique_appointment
   on public.cash_movements (salon_id, appointment_id)

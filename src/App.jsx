@@ -125,6 +125,7 @@ function normalizePaymentStatus(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 
+  if (normalized === 'cancelado' || normalized === 'cancelada') return 'cancelado'
   return normalized === 'pago' || normalized === 'concluido' ? 'pago' : 'pendente'
 }
 
@@ -524,7 +525,7 @@ function cashType(entry) {
 }
 
 function cashValue(entry) {
-  return Number(entry?.valor ?? entry?.value ?? 0)
+  return Number(field(entry, 'amount') ?? field(entry, 'serviceValue', 'service_value') ?? field(entry, 'value') ?? field(entry, 'valor') ?? 0)
 }
 
 function cashDiscount(entry) {
@@ -536,12 +537,12 @@ function cashDate(entry) {
 }
 
 function cashServiceValue(entry) {
-  return Number(field(entry, 'serviceValue', 'service_value') ?? cashValue(entry))
+  return Number(field(entry, 'serviceValue', 'service_value') ?? field(entry, 'amount') ?? cashValue(entry))
 }
 
 function cashMethod(movimento) {
   if (!movimento) return null
-  return normalizeAppointmentPaymentMethod(movimento?.payment_method ?? movimento?.paymentMethod)
+  return normalizeAppointmentPaymentMethod(movimento?.payment_method ?? movimento?.paymentMethod ?? movimento?.method)
 }
 
 function cashDescription(entry) {
@@ -553,7 +554,7 @@ function cashCategory(entry) {
 }
 
 function cashStatus(entry) {
-  return normalizePaymentStatus(field(entry, 'paymentStatus', 'payment_status') ?? field(entry, 'status') ?? '')
+  return normalizePaymentStatus(field(entry, 'status') ?? field(entry, 'paymentStatus', 'payment_status') ?? 'pendente')
 }
 
 function cashCancelledAt(entry) {
@@ -561,7 +562,7 @@ function cashCancelledAt(entry) {
 }
 
 function isActiveCashEntry(entry) {
-  return !cashCancelledAt(entry)
+  return cashStatus(entry) !== 'cancelado'
 }
 
 function isPaidIncomeCashEntry(entry) {
@@ -684,11 +685,11 @@ function advanceEmployeeId(advance) {
 }
 
 function advanceEmployeeName(advance) {
-  return field(advance, 'employeeName', 'employee_name') ?? ''
+  return field(advance, 'employeeName', 'employee_name') ?? field(advance, 'employee') ?? ''
 }
 
 function advanceValue(advance) {
-  return Number(field(advance, 'value') ?? 0)
+  return Number(field(advance, 'amount') ?? field(advance, 'value') ?? 0)
 }
 
 function advanceCreatedDate(advance) {
@@ -709,7 +710,7 @@ function advanceCancelledAt(advance) {
 }
 
 function isValidAdvance(advance) {
-  return advanceStatus(advance) !== 'cancelado' && !advanceCancelledAt(advance)
+  return advanceStatus(advance) !== 'cancelado'
 }
 
 function isAdvanceForEmployee(advance, employeeId, employeeName) {
@@ -752,23 +753,17 @@ function createCompletedAppointmentCashEntry(appointment, employees = [], servic
   const commissionValue = (serviceValue * commissionPercent) / 100
   const salonValue = serviceValue - commissionValue
   const paymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod ?? appointment.payment_method) ?? 'pendente'
-  const paymentStatus = paymentMethod === 'pendente' ? 'pendente' : normalizePaymentStatus(appointment.paymentStatus ?? appointment.payment_status ?? 'pago')
+  const paymentStatus = paymentMethod === 'pendente' ? 'pendente' : 'pago'
   const createdAt = new Date().toISOString()
   return {
     type: 'entrada',
-    tipo: 'entrada',
-    category: 'Atendimento',
-    categoria: 'Atendimento',
+    category: 'service',
     description: `Atendimento - ${appointment.client}`,
-    descricao: `Atendimento - ${appointment.client}`,
     notes: appointment.notes ?? appointment.observacao ?? '',
-    observacao: appointment.notes ?? appointment.observacao ?? '',
     paymentMethod,
     payment_method: paymentMethod,
-    paymentStatus,
-    payment_status: paymentStatus,
+    amount: serviceValue,
     date: appointment.date ?? todayIso,
-    data: appointment.date ?? todayIso,
     status: paymentStatus,
     clientName: appointment.client ?? '',
     client_name: appointment.client ?? '',
@@ -802,18 +797,14 @@ function createAdvanceCashEntry(advance) {
   const createdDate = advanceCreatedDate(advance)
   return {
     id: advance.id ? `advance-${advance.id}` : Date.now() + 1,
-    tipo: 'saida',
-    type: 'Saída',
-    categoria: 'Vale',
-    category: 'Vale',
-    descricao: `Vale - ${employeeName}`,
+    type: 'saida',
+    category: 'advance',
     description: `Vale - ${employeeName}`,
-    valor: advanceValue(advance),
-    value: advanceValue(advance),
-    data: createdDate,
+    amount: advanceValue(advance),
     date: createdDate,
     paymentMethod: 'dinheiro',
     payment_method: 'dinheiro',
+    status: advanceStatus(advance) === 'cancelado' ? 'cancelado' : 'pago',
     employeeId: advanceEmployeeId(advance),
     employee_id: advanceEmployeeId(advance),
     employeeName,
@@ -914,7 +905,7 @@ function normalizeClientRecord(row) {
 function normalizeEmployeeRecord(row) {
   const rawRole = field(row, 'role')
   const employeeType = toEmployeeType(field(row, 'employeeType', 'employee_type') ?? field(row, 'tipoUsuario', 'tipo_usuario') ?? (['cashier', 'caixa'].includes(rawRole) ? 'cashier' : 'professional'))
-  const rawFunctions = employeeType === 'cashier' ? [] : (field(row, 'functions') ?? field(row, 'funcoes') ?? field(row, 'position') ?? rawRole ?? '')
+  const rawFunctions = employeeType === 'cashier' ? [] : (field(row, 'functions') ?? field(row, 'funcoes') ?? field(row, 'position') ?? (!['admin', 'cashier', 'professional', 'caixa', 'profissional'].includes(String(rawRole ?? '').toLowerCase()) ? rawRole : '') ?? '')
   const professional = employeeType === 'professional'
   const status = field(row, 'status') || 'ativo'
   const loginStatus = field(row, 'loginStatus', 'login_status') ?? ''
@@ -929,8 +920,9 @@ function normalizeEmployeeRecord(row) {
     phone: field(row, 'phone') ?? '',
     status,
     position: field(row, 'position') || rawFunctions,
-    role: rawFunctions,
+    role: employeeType,
     functions: field(row, 'functions') ?? rawFunctions,
+    email: field(row, 'email') ?? field(row, 'accessEmail', 'access_email') ?? field(row, 'login_email') ?? '',
     active: field(row, 'active') ?? status.toLowerCase() !== 'inativo',
     commission_percent: commissionPercent,
     commission: Number(field(row, 'commission') ?? commissionPercent ?? 0),
@@ -1005,31 +997,35 @@ function normalizeAppointmentRecord(row, employees = []) {
 
 function normalizeCashMovementRecord(row) {
   if (!row) return null
-  const serviceValue = Number(field(row, 'serviceValue', 'service_value') ?? field(row, 'value') ?? field(row, 'valor') ?? 0)
+  const amount = Number(field(row, 'amount') ?? field(row, 'serviceValue', 'service_value') ?? field(row, 'value') ?? field(row, 'valor') ?? 0)
+  const serviceValue = Number(field(row, 'serviceValue', 'service_value') ?? amount)
   const commissionValue = Number(field(row, 'commissionValue', 'commission_value') ?? 0)
-  const rawPaymentMethod = field(row, 'paymentMethod', 'payment_method') ?? null
+  const rawPaymentMethod = field(row, 'paymentMethod', 'payment_method') ?? field(row, 'method') ?? null
   const normalizedPaymentMethod = normalizeAppointmentPaymentMethod(rawPaymentMethod)
+  const cancelledAt = field(row, 'cancelledAt', 'cancelled_at')
+  const status = cancelledAt ? 'cancelado' : normalizePaymentStatus(field(row, 'status') ?? field(row, 'paymentStatus', 'payment_status') ?? 'pendente')
   return {
     ...row,
-    type: field(row, 'type') ?? field(row, 'tipo') ?? 'Entrada',
-    tipo: field(row, 'tipo') ?? String(field(row, 'type') ?? 'Entrada').toLowerCase(),
+    type: cashType({ type: field(row, 'type') ?? field(row, 'tipo') }) || 'entrada',
+    tipo: cashType({ type: field(row, 'type') ?? field(row, 'tipo') }) || 'entrada',
     description: field(row, 'description') ?? field(row, 'descricao') ?? '',
     descricao: field(row, 'descricao') ?? field(row, 'description') ?? '',
-    category: field(row, 'category') ?? field(row, 'categoria') ?? '',
-    categoria: field(row, 'categoria') ?? field(row, 'category') ?? '',
+    category: field(row, 'category') ?? field(row, 'categoria') ?? 'manual',
+    categoria: field(row, 'categoria') ?? field(row, 'category') ?? 'manual',
     paymentMethod: normalizedPaymentMethod,
     payment_method: normalizedPaymentMethod,
-    value: Number(field(row, 'value') ?? field(row, 'valor') ?? 0),
-    valor: Number(field(row, 'valor') ?? field(row, 'value') ?? 0),
+    amount,
+    amountFinal: amount,
     discount: Number(field(row, 'discount') ?? field(row, 'desconto') ?? 0),
     desconto: Number(field(row, 'desconto') ?? field(row, 'discount') ?? 0),
     notes: field(row, 'notes') ?? field(row, 'observacao') ?? '',
     observacao: field(row, 'observacao') ?? field(row, 'notes') ?? '',
     date: field(row, 'date') ?? field(row, 'data') ?? todayIso,
     data: field(row, 'data') ?? field(row, 'date') ?? todayIso,
-    status: normalizePaymentStatus(field(row, 'paymentStatus', 'payment_status') ?? field(row, 'status') ?? ''),
-    paymentStatus: normalizePaymentStatus(field(row, 'paymentStatus', 'payment_status') ?? field(row, 'status') ?? ''),
-    payment_status: normalizePaymentStatus(field(row, 'paymentStatus', 'payment_status') ?? field(row, 'status') ?? ''),
+    status,
+    statusFinal: status,
+    paymentStatus: status,
+    payment_status: status,
     clientName: field(row, 'clientName', 'client_name') ?? '',
     client_name: field(row, 'client_name') ?? field(row, 'clientName') ?? '',
     serviceName: field(row, 'serviceName', 'service_name') ?? '',
@@ -1052,8 +1048,13 @@ function normalizeCashMovementRecord(row) {
     appointment_id: field(row, 'appointment_id') ?? field(row, 'appointmentId'),
     createdAt: field(row, 'createdAt', 'created_at'),
     created_at: field(row, 'created_at') ?? field(row, 'createdAt'),
-    cancelledAt: field(row, 'cancelledAt', 'cancelled_at'),
+    paymentMethodFinal: normalizedPaymentMethod ?? '',
+    cancelledAt,
     cancelled_at: field(row, 'cancelled_at') ?? field(row, 'cancelledAt'),
+    cancelledReason: field(row, 'cancelledReason', 'cancelled_reason') ?? '',
+    cancelled_reason: field(row, 'cancelled_reason') ?? field(row, 'cancelledReason') ?? '',
+    updatedAt: field(row, 'updatedAt', 'updated_at'),
+    updated_at: field(row, 'updated_at') ?? field(row, 'updatedAt'),
     commissionPaid: Boolean(field(row, 'commissionPaid', 'commission_paid')),
     commission_paid: Boolean(field(row, 'commission_paid') ?? field(row, 'commissionPaid')),
     commissionPaidAt: field(row, 'commissionPaidAt', 'commission_paid_at'),
@@ -1125,18 +1126,21 @@ function normalizeCommissionPaymentRecord(row) {
 }
 
 function normalizeAdvanceRecord(row) {
-  const employeeName = field(row, 'employeeName', 'employee_name') ?? ''
+  const employeeName = field(row, 'employeeName', 'employee_name') ?? field(row, 'employee') ?? ''
   const cancelledAt = field(row, 'cancelledAt', 'cancelled_at')
   const status = cancelledAt ? 'cancelado' : normalizeAdvanceStatus(field(row, 'status'))
   const createdAt = field(row, 'createdAt', 'created_at') ?? todayIso
-  const notes = field(row, 'notes') ?? ''
+  const amount = Number(field(row, 'amount') ?? field(row, 'value') ?? 0)
+  const notes = field(row, 'notes') ?? field(row, 'description') ?? ''
   return {
     ...row,
     employeeId: field(row, 'employeeId', 'employee_id'),
     employee_id: field(row, 'employee_id') ?? field(row, 'employeeId'),
     employeeName,
+    employeeNameFinal: employeeName,
     employee_name: employeeName,
-    value: Number(field(row, 'value') ?? 0),
+    amount,
+    amountFinal: amount,
     createdAt,
     created_at: field(row, 'created_at') ?? field(row, 'createdAt') ?? createdAt,
     status,
@@ -1144,7 +1148,10 @@ function normalizeAdvanceRecord(row) {
     discounted_at: field(row, 'discounted_at') ?? field(row, 'discountedAt'),
     cancelledAt,
     cancelled_at: field(row, 'cancelled_at') ?? field(row, 'cancelledAt'),
-    notes
+    cancelledReason: field(row, 'cancelledReason', 'cancelled_reason') ?? '',
+    cancelled_reason: field(row, 'cancelled_reason') ?? field(row, 'cancelledReason') ?? '',
+    notes,
+    notesFinal: notes
   }
 }
 
@@ -2371,14 +2378,14 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     if (user.role !== 'admin' && user.role !== 'cashier' && getAppointmentEmployeeName(appointment, allEmployees) !== user.name) return false
     const normalizedStatus = normalizeAppointmentStatus(status)
     const paidCashEntry = cashEntries.find((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id) && cashStatus(entry) === 'pago')
-    if (isCompletedStatus(normalizedStatus) && !isPaymentPaid(appointment.paymentStatus ?? appointment.payment_status) && !paidCashEntry) {
+    if (isCompletedStatus(normalizedStatus) && !paidCashEntry) {
       notify?.('Receba o pagamento no caixa antes de concluir o atendimento.', 'error')
       return false
     }
     const optimistic = normalizeAppointmentRecord({ ...appointment, status: normalizedStatus }, allEmployees)
     setAppointments((current) => current.map((item) => item.id === id ? optimistic : item))
     const selectedPaymentMethod = normalizeAppointmentPaymentMethod(appointment.paymentMethod ?? cashMethod(paidCashEntry))
-    const updatePayload = isCompletedStatus(normalizedStatus) ? { status: normalizedStatus, paymentMethod: selectedPaymentMethod, payment_method: selectedPaymentMethod || null, paymentStatus: 'pago', payment_status: 'pago' } : { status: normalizedStatus }
+    const updatePayload = { status: normalizedStatus }
     let saved = optimistic
     try {
       saved = normalizeAppointmentRecord({ ...appointment, ...(await updateAppointmentRecord(salonId, id, updatePayload)) }, allEmployees)
@@ -3253,7 +3260,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
       tipo_usuario: employeeType === 'cashier' ? 'caixa' : 'profissional',
       employeeName,
       employee_name: employeeName,
-      role: employeeFunctions,
+      role: employeeType,
       functions: employeeFunctions,
       funcoes: employeeType === 'professional' ? selectedFunctions : [],
       position: employeeFunctions,
@@ -3423,7 +3430,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
           </div>
           <p className="min-w-0 text-sm text-gray-500">{item.phone}</p>
           <p className="min-w-0 text-sm text-gray-600">Tipo de usuário: <strong>{item.employeeType === 'cashier' ? 'Caixa' : 'Profissional'}</strong></p>
-          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Funções profissionais: <strong>{formatEmployeeFunctions(item.role) || 'Não informado'}</strong></p>}
+          {isProfessional(item) && <p className="min-w-0 text-sm text-gray-600">Funções profissionais: <strong>{formatEmployeeFunctions(item.functions) || 'Não informado'}</strong></p>}
           <p className="min-w-0 text-sm text-gray-600">Login: <strong>{item.loginActive ? 'ativo' : 'inativo'}</strong></p>
           {canManage && <div className="mt-4 flex min-w-0 flex-wrap gap-2"><button onClick={() => openEdit(item)} className={buttonSecondary}>{uiText.common.edit}</button><button onClick={() => deactivateEmployee(item)} disabled={!item.active} className={buttonSecondary}>Desativar</button><button onClick={() => removeEmployee(item)} className={buttonDanger}>{uiText.common.remove}</button></div>}
         </div>
@@ -3439,7 +3446,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
   const [form, setForm] = useState(employee ? {
     ...employee,
     employeeType: initialEmployeeType,
-    role: formatEmployeeFunctions(employee.role),
+    role: formatEmployeeFunctions(employee.functions),
     workStatus: employee.workStatus ?? 'Ativo',
     workStart: employee.workStart ?? '09:00',
     workEnd: employee.workEnd ?? '18:00',
@@ -3454,7 +3461,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     services: toList(employee.services)
   } : { name: '', phone: '', role: '', employeeType: 'professional', accessEmail: getSuggestedAccessEmail({ employeeType: 'professional', salonSettings }), temporaryPassword: '', loginActive: true, commission: 0, serviceCommissions: [], services: [], active: true, workStatus: 'Ativo', workStart: '09:00', workEnd: '18:00', breakStart: '', breakEnd: '', defaultDuration: 60, scheduleInterval: 60 })
   const [selectedFunctions, setSelectedFunctions] = useState(() => (
-    toList(employee ? employee.role : '').filter((option) => employeeFunctionOptions.includes(option))
+    toList(employee ? employee.functions : '').filter((option) => employeeFunctionOptions.includes(option))
   ))
   const suggestedAccessEmail = getSuggestedAccessEmail({ name: form.name, employeeType: form.employeeType, salonSettings })
 
@@ -3554,7 +3561,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
   const awaitingPaymentAppointments = appointments.filter((item) => {
     const entry = entries.find((cashEntry) => String(cashAppointmentId(cashEntry) ?? '') === String(item.id))
     const status = normalizeAppointmentStatus(item.status)
-    return (status === 'em_atendimento' || status === 'aguardando_pagamento') && !isPaymentPaid(item.paymentStatus ?? item.payment_status) && !entry
+    return (status === 'em_atendimento' || status === 'aguardando_pagamento') && !entry
   })
   const cashDayAppointments = appointments
     .filter((item) => item.date === cashDateFilter && !isCancelledStatus(item.status))
@@ -3607,10 +3614,6 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       const updatedAppointment = normalizeAppointmentRecord({
         ...appointment,
         ...(await updateAppointmentRecord(salonId, appointment.id, {
-          paymentMethod: normalizedMethod,
-          payment_method: normalizedMethod,
-          paymentStatus,
-          payment_status: paymentStatus,
           status: appointmentStatus
         }))
       }, employees)
@@ -3634,10 +3637,6 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
             const updatedAppointment = normalizeAppointmentRecord({
               ...appointment,
               ...(await updateAppointmentRecord(salonId, appointment.id, {
-                paymentMethod: normalizedMethod,
-                payment_method: normalizedMethod,
-                paymentStatus,
-                payment_status: paymentStatus,
                 status: appointmentStatus
               }))
             }, employees)
@@ -3687,10 +3686,6 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
         const updatedAppointment = normalizeAppointmentRecord({
           ...appointment,
           ...(await updateAppointmentRecord(salonId, appointment.id, {
-            paymentMethod: normalizedMethod,
-            payment_method: normalizedMethod,
-            paymentStatus: 'pago',
-            payment_status: 'pago',
             status: 'concluido'
           }))
         }, employees)
@@ -3776,18 +3771,12 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
     const payload = {
       id: Date.now(),
       type: data.type === 'Sangria' ? 'sangria' : cashOut ? 'saida' : 'entrada',
-      tipo: data.type === 'Sangria' ? 'sangria' : cashOut ? 'saida' : 'entrada',
       description: data.description.trim(),
-      descricao: data.description.trim(),
-      category: ownerWithdrawal ? 'retirada_dono' : data.type === 'Sangria' ? 'sangria' : data.category.trim() || 'Operacional',
-      categoria: ownerWithdrawal ? 'retirada_dono' : data.type === 'Sangria' ? 'sangria' : data.category.trim() || 'Operacional',
+      category: ownerWithdrawal ? 'withdrawal' : data.type === 'Sangria' ? 'withdrawal' : data.category.trim() || 'manual',
       paymentMethod: selectedMethod,
       payment_method: selectedMethod,
       status: paymentStatus,
-      paymentStatus,
-      payment_status: paymentStatus,
-      value,
-      valor: value,
+      amount: value,
       date: data.date
     }
     try {
@@ -3940,7 +3929,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       <Panel title={uiText.cash.movements}>
         <Table
           rows={todayEntries}
-          columns={['date', 'client', 'service', 'employee', 'paymentMethod', 'status', 'discount', 'value', 'commission', 'salon']}
+          columns={['date', 'client', 'service', 'employee', 'paymentMethod', 'status', 'discount', 'amount', 'commission', 'salon']}
           labels={['Data', 'Cliente', 'Serviço', 'Profissional', 'Forma', 'Status', 'Desconto', 'Valor total', 'Comissão', 'Salão']}
           formatValue={(key, value, row) => {
             if (key === 'date') return formatDate(row.date ?? row.data ?? todayIso)
@@ -3951,9 +3940,12 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
               const paymentMethod = cashMethod(row)
               return paymentMethod ? <PaymentMethodBadge method={paymentMethod} /> : '-'
             }
-            if (key === 'status') return <StatusBadge tone={cashStatus(row) === 'pago' ? 'green' : 'amber'}>{cashStatus(row) === 'pago' ? 'Pago' : 'Pendente'}</StatusBadge>
+            if (key === 'status') {
+              const status = cashStatus(row)
+              return <StatusBadge tone={status === 'pago' ? 'green' : status === 'cancelado' ? 'rose' : 'amber'}>{status === 'pago' ? 'Pago' : status === 'cancelado' ? 'Cancelado' : 'Pendente'}</StatusBadge>
+            }
             if (key === 'discount') return money.format(cashDiscount(row))
-            if (key === 'value') return money.format(cashType(row) === 'entrada' ? cashServiceValue(row) : cashValue(row))
+            if (key === 'amount') return money.format(cashType(row) === 'entrada' ? cashServiceValue(row) : cashValue(row))
             if (key === 'commission') return isAppointmentCashEntry(row) ? money.format(cashCommissionValue(row)) : '-'
             if (key === 'salon') return isAppointmentCashEntry(row) ? money.format(cashSalonValue(row)) : '-'
             return value
@@ -4168,20 +4160,21 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       ? (data.cancelledAt ?? advanceCancelledAt(editing) ?? new Date().toISOString())
       : null
     const payload = {
-      ...data,
       employeeId: employee?.id ?? data.employeeId ?? null,
       employee_id: employee?.id ?? data.employeeId ?? null,
       employeeName: employee?.name ?? data.employeeName ?? '',
       employee_name: employee?.name ?? data.employeeName ?? '',
-      value: Number(data.value) || 0,
+      amount: Number(data.value) || Number(data.amount) || 0,
       status,
       createdAt: data.createdAt,
       created_at: data.createdAt,
       cancelledAt,
       cancelled_at: cancelledAt,
+      cancelledReason: status === 'cancelado' ? data.reason ?? data.cancelledReason ?? data.cancelled_reason ?? '' : '',
+      cancelled_reason: status === 'cancelado' ? data.reason ?? data.cancelledReason ?? data.cancelled_reason ?? '' : '',
       notes: data.notes ?? ''
     }
-    if (!payload.employeeName || payload.value <= 0 || !payload.createdAt) {
+    if (!payload.employeeName || payload.amount <= 0 || !payload.createdAt) {
       notify?.('Erro ao salvar: confira Funcionário, valor, data e motivo.', 'error')
       return
     }
@@ -4265,7 +4258,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
     }
     try {
     const cancelledAt = new Date().toISOString()
-    const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'cancelado', cancelledAt, cancelled_at: cancelledAt }))
+    const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'cancelado', cancelledAt, cancelled_at: cancelledAt, cancelledReason: reason, cancelled_reason: reason }))
     await recordAuditLog({
       salonId,
       user,
@@ -5465,12 +5458,11 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
     const salonValue = serviceValue - commissionValue
     const payload = {
       serviceValue,
-      value: serviceValue,
+      amount: serviceValue,
       commissionPercent,
       commissionValue,
       salonValue,
       paymentMethod: form.paymentMethod,
-      paymentStatus: form.paymentStatus,
       status: form.paymentStatus
     }
     if (!String(form.reason ?? '').trim()) {
@@ -5508,7 +5500,7 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
     }
     setRemoving(true)
     try {
-      const savedEntry = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, { cancelledAt: new Date().toISOString() }))
+      const savedEntry = normalizeCashMovementRecord(await updateCashMovementRecord(salonId, entry.id, { status: 'cancelado', cancelledAt: new Date().toISOString(), cancelledReason: form.reason, cancelled_reason: form.reason }))
       await recordAuditLog({
         salonId,
         user,

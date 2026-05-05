@@ -9,7 +9,8 @@ export const TABLES = {
   appointments: 'appointments',
   cashMovements: 'cash_movements',
   cashClosures: 'cash_closures',
-  commissionPayments: 'commission_payments',
+  commissionPayments: 'employee_commission_payments',
+  legacyCommissionPayments: 'commission_payments',
   advances: 'advances',
   auditLogs: 'audit_logs',
   stockItems: 'stock_items'
@@ -113,8 +114,11 @@ function employeePayload(payload = {}, salonId, includeSalon = false) {
     phone: includeSalon || hasField(payload, 'phone') ? payload.phone : undefined,
     employee_type: includeSalon || hasField(payload, 'employeeType') || hasField(payload, 'employee_type') || hasField(payload, 'tipoUsuario') || hasField(payload, 'tipo_usuario') ? normalizedEmployeeType : undefined,
     tipo_usuario: includeSalon || hasField(payload, 'employeeType') || hasField(payload, 'employee_type') || hasField(payload, 'tipoUsuario') || hasField(payload, 'tipo_usuario') ? dbUserType : undefined,
-    role: includeSalon || hasField(payload, 'role') || hasField(payload, 'functions') || hasField(payload, 'position') ? employeeFunctionsText : undefined,
-    functions: hasField(payload, 'functions') ? employeeFunctionsText : undefined,
+    role: includeSalon || hasField(payload, 'role') || hasField(payload, 'employeeType') || hasField(payload, 'employee_type') || hasField(payload, 'tipoUsuario') || hasField(payload, 'tipo_usuario') ? normalizedEmployeeType : undefined,
+    functions: includeSalon || hasField(payload, 'functions') || hasField(payload, 'funcoes') || hasField(payload, 'role') || hasField(payload, 'position') ? employeeFunctionsText : undefined,
+    email: includeSalon || hasField(payload, 'email') || hasField(payload, 'loginEmail') || hasField(payload, 'accessEmail') || hasField(payload, 'login_email') ? payload.email ?? payload.loginEmail ?? payload.accessEmail ?? payload.login_email ?? '' : undefined,
+    login_active: includeSalon || hasField(payload, 'loginActive') || hasField(payload, 'login_active') || hasField(payload, 'loginStatus') || hasField(payload, 'login_status') ? Boolean(payload.loginActive ?? payload.login_active ?? String(payload.loginStatus ?? payload.login_status).toLowerCase() === 'ativo') : undefined,
+    active: includeSalon || hasField(payload, 'active') || hasField(payload, 'status') || hasField(payload, 'workStatus') ? Boolean(payload.active ?? String(payload.status ?? payload.workStatus ?? 'ativo').toLowerCase() !== 'inativo') : undefined,
     funcoes: includeSalon || hasField(payload, 'functions') || hasField(payload, 'funcoes') || hasField(payload, 'role') || hasField(payload, 'position') ? employeeFunctionsList : undefined,
     status: includeSalon || hasField(payload, 'status') || hasField(payload, 'workStatus') || hasField(payload, 'active')
       ? payload.status ?? payload.workStatus ?? (payload.active === false ? 'Inativo' : 'Ativo')
@@ -222,39 +226,47 @@ function normalizePaymentStatus(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 
+  if (normalized === 'cancelado' || normalized === 'cancelada') return 'cancelado'
   return normalized === 'pago' || normalized === 'concluido' ? 'pago' : 'pendente'
 }
 
 function cashMovementPayload(payload = {}, salonId, includeSalon = false) {
-  const type = String(payload.type ?? payload.tipo ?? 'entrada').toLowerCase()
-  const value = Number(payload.value ?? payload.valor ?? payload.serviceValue ?? payload.service_value ?? 0)
-  const paymentMethod = payload.paymentMethod ?? payload.payment_method ?? ''
-  const paymentStatus = normalizePaymentStatus(payload.paymentStatus ?? payload.payment_status ?? payload.status)
+  const rawType = String(payload.type ?? payload.tipo ?? 'entrada')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  const type = rawType === 'saida' || rawType === 'sangria' ? 'saida' : 'entrada'
+  const amount = Number(payload.amount ?? payload.serviceValue ?? payload.service_value ?? payload.value ?? payload.valor ?? 0)
+  const paymentMethod = payload.paymentMethod ?? payload.payment_method ?? payload.method ?? ''
+  const status = normalizePaymentStatus(payload.status ?? payload.paymentStatus ?? payload.payment_status)
+  const category = payload.category ?? payload.categoria ?? 'manual'
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     type,
     description: includeSalon || hasField(payload, 'description') || hasField(payload, 'descricao') ? payload.description ?? payload.descricao ?? '' : undefined,
     notes: includeSalon || hasField(payload, 'notes') || hasField(payload, 'observacao') ? payload.notes ?? payload.observacao ?? '' : undefined,
     observacao: includeSalon || hasField(payload, 'notes') || hasField(payload, 'observacao') ? payload.notes ?? payload.observacao ?? '' : undefined,
-    category: includeSalon || hasField(payload, 'category') || hasField(payload, 'categoria') ? payload.category ?? payload.categoria ?? '' : undefined,
+    category: includeSalon || hasField(payload, 'category') || hasField(payload, 'categoria') ? category : undefined,
     payment_method: includeSalon || hasField(payload, 'paymentMethod') || hasField(payload, 'payment_method') ? paymentMethod : undefined,
-    value: hasField(payload, 'value') || hasField(payload, 'valor') ? value : undefined,
+    amount: includeSalon || hasField(payload, 'amount') || hasField(payload, 'value') || hasField(payload, 'valor') || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? amount : undefined,
     discount: includeSalon || hasField(payload, 'discount') || hasField(payload, 'desconto') ? Number(payload.discount ?? payload.desconto ?? 0) : undefined,
     desconto: includeSalon || hasField(payload, 'discount') || hasField(payload, 'desconto') ? Number(payload.discount ?? payload.desconto ?? 0) : undefined,
     date: includeSalon || hasField(payload, 'date') || hasField(payload, 'data') ? payload.date ?? payload.data : undefined,
-    status: includeSalon || hasField(payload, 'status') || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') ? paymentStatus : undefined,
-    payment_status: includeSalon || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') || hasField(payload, 'status') ? paymentStatus : undefined,
+    status: includeSalon || hasField(payload, 'status') || hasField(payload, 'paymentStatus') || hasField(payload, 'payment_status') ? status : undefined,
     cancelled_at: includeSalon || hasField(payload, 'cancelledAt') || hasField(payload, 'cancelled_at') ? payload.cancelledAt ?? payload.cancelled_at : undefined,
     client_name: includeSalon || hasField(payload, 'clientName') || hasField(payload, 'client_name') ? payload.clientName ?? payload.client_name ?? '' : undefined,
     service_name: includeSalon || hasField(payload, 'serviceName') || hasField(payload, 'service_name') ? payload.serviceName ?? payload.service_name ?? '' : undefined,
     employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? payload.employeeName ?? payload.employee_name ?? '' : undefined,
-    service_value: includeSalon || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? Number(payload.serviceValue ?? payload.service_value ?? value) : undefined,
+    service_value: includeSalon || hasField(payload, 'serviceValue') || hasField(payload, 'service_value') ? Number(payload.serviceValue ?? payload.service_value ?? amount) : undefined,
     commission_percent: includeSalon || hasField(payload, 'commissionPercent') || hasField(payload, 'commission_percent') ? Number(payload.commissionPercent ?? payload.commission_percent ?? 0) : undefined,
     commission_value: includeSalon || hasField(payload, 'commissionValue') || hasField(payload, 'commission_value') ? Number(payload.commissionValue ?? payload.commission_value ?? 0) : undefined,
     salon_value: includeSalon || hasField(payload, 'salonValue') || hasField(payload, 'salon_value') ? Number(payload.salonValue ?? payload.salon_value ?? 0) : undefined,
     employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
     service_id: includeSalon || hasField(payload, 'serviceId') || hasField(payload, 'service_id') ? payload.serviceId ?? payload.service_id ?? null : undefined,
     appointment_id: includeSalon || hasField(payload, 'appointmentId') || hasField(payload, 'appointment_id') ? payload.appointmentId ?? payload.appointment_id ?? null : undefined,
+    cancelled_reason: includeSalon || hasField(payload, 'cancelledReason') || hasField(payload, 'cancelled_reason') ? payload.cancelledReason ?? payload.cancelled_reason ?? '' : undefined,
+    updated_at: includeSalon || hasField(payload, 'updatedAt') || hasField(payload, 'updated_at') ? payload.updatedAt ?? payload.updated_at : undefined,
     commission_paid: includeSalon || hasField(payload, 'commissionPaid') || hasField(payload, 'commission_paid') ? Boolean(payload.commissionPaid ?? payload.commission_paid) : undefined,
     commission_paid_at: includeSalon || hasField(payload, 'commissionPaidAt') || hasField(payload, 'commission_paid_at') ? payload.commissionPaidAt ?? payload.commission_paid_at ?? null : undefined,
     commission_payment_method: includeSalon || hasField(payload, 'commissionPaymentMethod') || hasField(payload, 'commission_payment_method') ? payload.commissionPaymentMethod ?? payload.commission_payment_method ?? '' : undefined,
@@ -338,18 +350,20 @@ function normalizeAdvanceStatusValue(status) {
 }
 
 function advancePayload(payload = {}, salonId, includeSalon = false) {
-  const employeeName = payload.employeeName ?? payload.employee_name ?? ''
+  const employeeName = payload.employeeName ?? payload.employee_name ?? payload.employee ?? ''
   const createdAt = payload.createdAt ?? payload.created_at
+  const amount = Number(payload.amount ?? payload.value ?? 0)
   return pickDefined({
     ...(includeSalon ? { salon_id: salonId } : {}),
     employee_id: includeSalon || hasField(payload, 'employeeId') || hasField(payload, 'employee_id') ? payload.employeeId ?? payload.employee_id ?? null : undefined,
-    employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') ? employeeName : undefined,
-    value: includeSalon || hasField(payload, 'value') ? Number(payload.value ?? 0) : undefined,
+    employee_name: includeSalon || hasField(payload, 'employeeName') || hasField(payload, 'employee_name') || hasField(payload, 'employee') ? employeeName : undefined,
+    amount: includeSalon || hasField(payload, 'amount') || hasField(payload, 'value') ? amount : undefined,
     status: includeSalon || hasField(payload, 'status') ? normalizeAdvanceStatusValue(payload.status) : undefined,
     created_at: includeSalon || hasField(payload, 'createdAt') || hasField(payload, 'created_at') ? createdAt : undefined,
     discounted_at: includeSalon || hasField(payload, 'discountedAt') || hasField(payload, 'discounted_at') ? payload.discountedAt ?? payload.discounted_at ?? null : undefined,
     cancelled_at: includeSalon || hasField(payload, 'cancelledAt') || hasField(payload, 'cancelled_at') ? payload.cancelledAt ?? payload.cancelled_at ?? null : undefined,
-    notes: includeSalon || hasField(payload, 'notes') ? payload.notes ?? '' : undefined
+    cancelled_reason: includeSalon || hasField(payload, 'cancelledReason') || hasField(payload, 'cancelled_reason') ? payload.cancelledReason ?? payload.cancelled_reason ?? '' : undefined,
+    notes: includeSalon || hasField(payload, 'notes') || hasField(payload, 'description') ? payload.notes ?? payload.description ?? '' : undefined
   })
 }
 
@@ -586,9 +600,9 @@ export async function createEmployee(salonId, payload) {
   try {
     return await insertRow(TABLES.employees, salonId, payload, employeePayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes'])) throw error
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes', 'email', 'login_active', 'active'])) throw error
     console.error('erro real do Supabase:', error?.original ?? error)
-    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, ...compatiblePayload } = payload
+    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, email, loginActive, login_active, active, ...compatiblePayload } = payload
     return insertRow(TABLES.employees, salonId, compatiblePayload, legacyEmployeePayload)
   }
 }
@@ -597,9 +611,9 @@ export async function updateEmployee(salonId, id, payload) {
   try {
     return await updateRow(TABLES.employees, salonId, id, payload, employeePayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes'])) throw error
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes', 'email', 'login_active', 'active'])) throw error
     console.error('erro real do Supabase:', error?.original ?? error)
-    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, ...compatiblePayload } = payload
+    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, email, loginActive, login_active, active, ...compatiblePayload } = payload
     return updateRow(TABLES.employees, salonId, id, compatiblePayload, legacyEmployeePayload)
   }
 }
@@ -835,13 +849,30 @@ export async function fetchCommissionPayments(salonId) {
     const data = await runQuery(bySalon(TABLES.commissionPayments, salonId).order('paid_at', { ascending: false }))
     return Array.isArray(data) ? data : []
   } catch (error) {
-    if (isMissingTableError(error?.original ?? error)) return []
+    if (isMissingTableError(error?.original ?? error)) {
+      try {
+        const data = await runQuery(bySalon(TABLES.legacyCommissionPayments, salonId).order('paid_at', { ascending: false }))
+        return Array.isArray(data) ? data : []
+      } catch (fallbackError) {
+        if (isMissingTableError(fallbackError?.original ?? fallbackError)) return []
+        throw fallbackError
+      }
+    }
     throw error
   }
 }
 
 export async function createCommissionPayment(salonId, payload) {
-  return insertRow(TABLES.commissionPayments, salonId, payload, commissionPaymentPayload)
+  try {
+    return await insertRow(TABLES.commissionPayments, salonId, payload, commissionPaymentPayload)
+  } catch (error) {
+    if (isMissingPayloadColumnError(error, ['commission_gross', 'advances_total', 'advance_ids'])) {
+      const { commissionGross, commission_gross, advancesTotal, advances_total, advanceIds, advance_ids, ...compatiblePayload } = payload
+      return insertRow(TABLES.commissionPayments, salonId, compatiblePayload, commissionPaymentPayload)
+    }
+    if (!isMissingTableError(error?.original ?? error)) throw error
+    return insertRow(TABLES.legacyCommissionPayments, salonId, payload, commissionPaymentPayload)
+  }
 }
 
 export async function fetchAuditLogs(salonId) {
@@ -878,11 +909,24 @@ export async function fetchCashMovementByAppointment(salonId, appointmentId) {
 }
 
 export async function createCashMovement(salonId, payload) {
-  return insertRow(TABLES.cashMovements, salonId, payload, cashMovementPayload)
+  try {
+    return await insertRow(TABLES.cashMovements, salonId, payload, cashMovementPayload)
+  } catch (error) {
+    if (!isMissingPayloadColumnError(error, ['cancelled_reason', 'updated_at'])) throw error
+    const { cancelledReason, cancelled_reason, updatedAt, updated_at, ...compatiblePayload } = payload
+    return insertRow(TABLES.cashMovements, salonId, compatiblePayload, cashMovementPayload)
+  }
 }
 
 export async function updateCashMovement(salonId, id, payload) {
-  return updateRow(TABLES.cashMovements, salonId, id, payload, cashMovementPayload)
+  const timestampedPayload = { ...payload, updatedAt: payload.updatedAt ?? payload.updated_at ?? new Date().toISOString() }
+  try {
+    return await updateRow(TABLES.cashMovements, salonId, id, timestampedPayload, cashMovementPayload)
+  } catch (error) {
+    if (!isMissingPayloadColumnError(error, ['cancelled_reason', 'updated_at'])) throw error
+    const { cancelledReason, cancelled_reason, updatedAt, updated_at, ...compatiblePayload } = timestampedPayload
+    return updateRow(TABLES.cashMovements, salonId, id, compatiblePayload, cashMovementPayload)
+  }
 }
 
 export async function fetchAdvances(salonId) {
@@ -890,11 +934,23 @@ export async function fetchAdvances(salonId) {
 }
 
 export async function createAdvance(salonId, payload) {
-  return insertRow(TABLES.advances, salonId, payload, advancePayload)
+  try {
+    return await insertRow(TABLES.advances, salonId, payload, advancePayload)
+  } catch (error) {
+    if (!isMissingPayloadColumnError(error, ['cancelled_reason'])) throw error
+    const { cancelledReason, cancelled_reason, ...compatiblePayload } = payload
+    return insertRow(TABLES.advances, salonId, compatiblePayload, advancePayload)
+  }
 }
 
 export async function updateAdvance(salonId, id, payload) {
-  return updateRow(TABLES.advances, salonId, id, payload, advancePayload)
+  try {
+    return await updateRow(TABLES.advances, salonId, id, payload, advancePayload)
+  } catch (error) {
+    if (!isMissingPayloadColumnError(error, ['cancelled_reason'])) throw error
+    const { cancelledReason, cancelled_reason, ...compatiblePayload } = payload
+    return updateRow(TABLES.advances, salonId, id, compatiblePayload, advancePayload)
+  }
 }
 
 export async function fetchStockItems(salonId) {

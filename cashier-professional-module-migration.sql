@@ -58,21 +58,6 @@ begin
   end if;
 end $$;
 
-alter table if exists public.funcionarios
-  add column if not exists tipo_usuario text default 'profissional',
-  add column if not exists funcoes text[];
-
-do $$
-begin
-  if to_regclass('public.funcionarios') is not null and not exists (
-    select 1 from pg_constraint where conname = 'funcionarios_tipo_usuario_check'
-  ) then
-    alter table public.funcionarios
-      add constraint funcionarios_tipo_usuario_check
-      check (tipo_usuario in ('admin', 'caixa', 'profissional'));
-  end if;
-end $$;
-
 alter table if exists public.cash_movements
   add column if not exists discount numeric(10,2) not null default 0,
   add column if not exists desconto numeric(10,2) not null default 0,
@@ -123,67 +108,5 @@ begin
       for all
       using (salon_id in (select salon_id from public.users where id = auth.uid()))
       with check (salon_id in (select salon_id from public.users where id = auth.uid()));
-  end if;
-end $$;
-
--- Tabelas em portugues solicitadas. Mantidas separadas para quem usa outro cliente,
--- sem substituir as tabelas atuais do app.
-create table if not exists public.caixa_movimentos (
-  id uuid primary key default gen_random_uuid(),
-  salao_id uuid not null,
-  funcionario_id uuid,
-  atendimento_id uuid,
-  tipo text not null check (tipo in ('entrada', 'saida', 'sangria', 'ajuste')),
-  metodo_pagamento text check (metodo_pagamento in ('dinheiro', 'pix', 'debito', 'credito', 'cartao', 'outro')),
-  valor numeric(10,2) not null default 0,
-  desconto numeric(10,2) not null default 0,
-  descricao text,
-  observacao text,
-  criado_em timestamp with time zone default now()
-);
-
-create table if not exists public.caixa_fechamentos (
-  id uuid primary key default gen_random_uuid(),
-  salao_id uuid not null,
-  funcionario_id uuid,
-  data date not null default current_date,
-  total_dinheiro numeric(10,2) default 0,
-  total_pix numeric(10,2) default 0,
-  total_debito numeric(10,2) default 0,
-  total_credito numeric(10,2) default 0,
-  total_entradas numeric(10,2) default 0,
-  total_saidas numeric(10,2) default 0,
-  total_final numeric(10,2) default 0,
-  observacao text,
-  fechado_em timestamp with time zone default now()
-);
-
-create index if not exists caixa_movimentos_salao_criado_idx
-  on public.caixa_movimentos (salao_id, criado_em desc);
-
-create index if not exists caixa_fechamentos_salao_data_idx
-  on public.caixa_fechamentos (salao_id, data desc);
-
-alter table public.caixa_movimentos enable row level security;
-alter table public.caixa_fechamentos enable row level security;
-
-do $$
-begin
-  if not exists (
-    select 1 from pg_policies where schemaname = 'public' and tablename = 'caixa_movimentos' and policyname = 'caixa_movimentos_por_salao'
-  ) then
-    create policy caixa_movimentos_por_salao on public.caixa_movimentos
-      for all
-      using (salao_id in (select salon_id from public.users where id = auth.uid()))
-      with check (salao_id in (select salon_id from public.users where id = auth.uid()));
-  end if;
-
-  if not exists (
-    select 1 from pg_policies where schemaname = 'public' and tablename = 'caixa_fechamentos' and policyname = 'caixa_fechamentos_por_salao'
-  ) then
-    create policy caixa_fechamentos_por_salao on public.caixa_fechamentos
-      for all
-      using (salao_id in (select salon_id from public.users where id = auth.uid()))
-      with check (salao_id in (select salon_id from public.users where id = auth.uid()));
   end if;
 end $$;
