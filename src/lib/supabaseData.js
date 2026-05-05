@@ -538,7 +538,6 @@ export async function fetchSalon(salonId) {
 
 export async function updateSalon(salonId, payload) {
   requireSalonId(salonId)
-  console.log('salon atual carregado para update:', { id: salonId, payload })
   const data = await runQuery(
     supabase
       .from(TABLES.salons)
@@ -567,10 +566,8 @@ export async function deleteClient(salonId, id) {
 }
 
 export async function fetchEmployees(salonId) {
-  console.log('salon_id usado nas buscas:', salonId)
   try {
     const data = await runQuery(bySalon(TABLES.employees, salonId).order('name', { ascending: true }))
-    console.log('resultado de employees:', data)
     return Array.isArray(data) ? data : []
   } catch (error) {
     console.error('erro real do Supabase:', error?.original ?? error)
@@ -585,7 +582,6 @@ export async function fetchEmployees(salonId) {
             .eq('salon_id', salonId)
             .order('employee_name', { ascending: true })
         )
-        console.log('resultado de employees:', fallbackData)
         return Array.isArray(fallbackData) ? fallbackData : []
       } catch (fallbackError) {
         console.error('erro real do Supabase:', fallbackError?.original ?? fallbackError)

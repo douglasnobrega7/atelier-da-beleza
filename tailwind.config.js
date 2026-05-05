@@ -5,15 +5,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        blush: '#F9DDE8',
-        roseSoft: '#F5BFD3',
-        lilacSoft: '#DED4F4',
-        goldSoft: '#C9A85D',
-        pearl: '#FFF9FB',
-        graphite: '#4B4650'
+        blush: '#D8E2EA',
+        roseSoft: '#7AA7A9',
+        lilacSoft: '#DDE4FF',
+        goldSoft: '#2F8C8F',
+        pearl: '#F5F7FA',
+        graphite: '#17212B'
       },
       boxShadow: {
-        soft: '0 12px 32px rgba(126, 86, 116, 0.12)'
+        soft: '0 16px 40px rgba(23, 33, 43, 0.10)'
       }
     }
   },

@@ -43,14 +43,14 @@ import {
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 let services = []
 
-const cardBase = 'min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]'
-const panelBase = 'min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]'
-const inputBase = 'focus-ring w-full min-w-0 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-graphite shadow-sm placeholder:text-gray-400 disabled:bg-gray-100 disabled:text-gray-500 dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100 dark:placeholder:text-white/40 dark:disabled:bg-white/5 dark:disabled:text-white/40'
-const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl bg-graphite px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#343039] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-lilacSoft dark:text-graphite dark:hover:bg-[#cfc1ef]'
-const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-pearl dark:border-white/10 dark:bg-[#24202c] dark:text-gray-100 dark:hover:bg-white/10'
+const cardBase = 'min-w-0 overflow-hidden rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]'
+const panelBase = 'min-w-0 overflow-hidden rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]'
+const inputBase = 'focus-ring w-full min-w-0 rounded-xl border border-[#cdd8e1] bg-white px-4 py-3 text-graphite shadow-sm placeholder:text-gray-400 disabled:bg-gray-100 disabled:text-gray-500 dark:border-white/10 dark:bg-[#101821] dark:text-gray-100 dark:placeholder:text-white/40 dark:disabled:bg-white/5 dark:disabled:text-white/40'
+const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl bg-[#17212b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#253341] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#8fd4d2] dark:text-[#101821] dark:hover:bg-[#a7dfdd]'
+const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-[#cdd8e1] bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-pearl dark:border-white/10 dark:bg-[#182331] dark:text-gray-100 dark:hover:bg-white/10'
 const buttonDanger = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25'
 const badgeBase = 'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-bold'
-const appointmentCardBase = 'min-w-0 overflow-visible rounded-2xl border p-4 shadow-soft transition'
+const appointmentCardBase = 'min-w-0 overflow-visible rounded-xl border p-4 shadow-soft transition'
 const employeeFunctionOptions = [
   'Cabeleireiro/Cabeleireira',
   'Colorista',
@@ -464,6 +464,21 @@ function normalizeLoginPart(value, fallback) {
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
   return normalized || fallback
+}
+
+function generateTemporaryPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*'
+  const values = new Uint32Array(12)
+
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(values)
+  } else {
+    values.forEach((_, index) => {
+      values[index] = Math.floor(Math.random() * alphabet.length)
+    })
+  }
+
+  return Array.from(values, (value) => alphabet[value % alphabet.length]).join('')
 }
 
 function getSalonDomain(settings) {
@@ -1421,6 +1436,18 @@ function showSuccess(message, onToast) {
   }
 }
 
+async function getAuthenticatedApiHeaders() {
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !data.session?.access_token) {
+    throw new Error('Sessão expirada. Entre novamente.')
+  }
+
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${data.session.access_token}`
+  }
+}
+
 function normalizeRole(role) {
   const normalizedRole = String(role ?? '').trim().toLowerCase()
   if (normalizedRole === 'caixa' || normalizedRole === 'cashier') return 'cashier'
@@ -1525,7 +1552,6 @@ function App() {
       return
     }
 
-    console.log('salon_id usado nas buscas:', salonId)
     setDataLoading(true)
     try {
       let [
@@ -1554,9 +1580,6 @@ function App() {
         fetchStockItemsFromSupabase(salonId)
       ])
 
-      console.log('salon atual carregado:', salonRow)
-      console.log('resultado de employees:', employeeRows)
-
       if ((employeeRows?.length ?? 0) === 0) {
         try {
           const seedResult = await seedSalonData(salonId)
@@ -1573,7 +1596,6 @@ function App() {
             employeeRows = seededEmployeeRows
             serviceRows = seededServiceRows
             appointmentRows = seededAppointmentRows
-            console.log('resultado de employees apos seed:', employeeRows)
             notify('Sistema preparado para este salão')
           }
         } catch (seedError) {
@@ -1659,8 +1681,6 @@ function App() {
     }
 
     const user = normalizeUserProfile(profile) ?? createAdminFallbackUser(authUser)
-    console.log("USER:", user)
-    console.log("SALON_ID:", user?.salon_id)
     const salonId = user.salon_id ?? user.salonId ?? null
 
     setCurrentUser(user)
@@ -1787,7 +1807,7 @@ function App() {
   const safePage = allowedPages.includes(activePage) ? activePage : allowedPages[0]
 
   return (
-    <div className="min-h-screen bg-pearl text-graphite transition-colors dark:bg-[#121016] dark:text-gray-100">
+    <div className="min-h-screen bg-pearl text-graphite transition-colors dark:bg-[#0f151c] dark:text-gray-100">
       <div className="flex min-h-screen flex-col lg:flex-row">
         <Sidebar user={currentUser} menu={menu} activePage={safePage} salonName={salonSettings.salonName} onNavigate={setActivePage} onLogout={handleLogout} />
         <main className="flex-1 overflow-hidden">
@@ -1880,27 +1900,27 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#f9dde8,transparent_34%),linear-gradient(135deg,#fff9fb,#f7f0ff_55%,#ffffff)] px-4 py-8 text-graphite transition-colors dark:bg-[radial-gradient(circle_at_top_left,rgba(245,191,211,0.16),transparent_34%),linear-gradient(135deg,#121016,#1d1a24_55%,#15131a)] dark:text-gray-100">
+    <div className="min-h-screen bg-[linear-gradient(135deg,#f5f7fa,#e9eef5_52%,#f8fafc)] px-4 py-8 text-graphite transition-colors dark:bg-[linear-gradient(135deg,#0f151c,#141d26_52%,#101821)] dark:text-gray-100">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center justify-center">
-        <div className="grid w-full overflow-hidden rounded-[28px] bg-white shadow-soft dark:border dark:border-white/10 dark:bg-[#1c1922] lg:grid-cols-[1fr_0.92fr]">
-          <div className="flex min-h-[520px] flex-col justify-between bg-gradient-to-br from-white via-blush/70 to-lilacSoft/70 p-8 dark:from-[#24202c] dark:via-[#2a2029] dark:to-[#26213a] sm:p-10">
+        <div className="grid w-full overflow-hidden rounded-2xl border border-blush/80 bg-white shadow-soft dark:border-white/10 dark:bg-[#141d26] lg:grid-cols-[1fr_0.92fr]">
+          <div className="flex min-h-[520px] flex-col justify-between bg-[linear-gradient(135deg,#ffffff,#eef3f7_55%,#dde4ff)] p-8 dark:bg-[linear-gradient(135deg,#182331,#111a24_58%,#1b2440)] sm:p-10">
             <div>
               <div className="mb-6 flex justify-end">
                 <ThemeToggle theme={theme} onChange={onThemeChange} />
               </div>
-              <div className="mb-10 inline-flex items-center gap-3 rounded-full border border-white/80 bg-white/70 px-4 py-2 text-sm font-semibold text-goldSoft shadow-sm dark:border-white/10 dark:bg-white/10">
-                Sistema inteligente para o seu salão
+              <div className="mb-10 inline-flex items-center gap-3 rounded-full border border-[#cdd8e1] bg-white/80 px-4 py-2 text-sm font-semibold text-goldSoft shadow-sm dark:border-white/10 dark:bg-white/10">
+                Sistema inteligente para gestão de salão
               </div>
               <h1 className="max-w-xl text-4xl font-bold leading-tight text-graphite sm:text-5xl">
                 Salão Pro
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-gray-600 dark:text-gray-300">
-                Controle agenda, clientes, serviços, caixa, estoque e equipe em uma interface simples para o dia a dia do seu salão.
+                Controle agenda, clientes, serviços, caixa, estoque e equipe em uma interface objetiva, moderna e preparada para operação diária.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               {['Agenda organizada', 'Controle de caixa', 'Gestão de equipe'].map((item) => (
-                <div key={item} className="rounded-2xl border border-white/80 bg-white/70 p-4 text-sm font-semibold shadow-sm dark:border-white/10 dark:bg-white/10">
+                <div key={item} className="rounded-xl border border-white/80 bg-white/75 p-4 text-sm font-semibold shadow-sm dark:border-white/10 dark:bg-white/10">
                   {item}
                 </div>
               ))}
@@ -1943,7 +1963,7 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
               Manter conectado
             </label>
             {error && <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-            <button type="button" onClick={handleLogin} disabled={loading} className={`${buttonPrimary} mt-6 w-full rounded-2xl px-5 py-3`}>
+            <button type="button" onClick={handleLogin} disabled={loading} className={`${buttonPrimary} mt-6 w-full rounded-xl px-5 py-3`}>
               {loading ? 'Entrando...' : 'Entrar no sistema'}
             </button>
           </form>
@@ -1955,9 +1975,9 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
 
 function AuthLoadingScreen({ theme, onThemeChange }) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#f9dde8,transparent_34%),linear-gradient(135deg,#fff9fb,#f7f0ff_55%,#ffffff)] px-4 py-8 text-graphite transition-colors dark:bg-[radial-gradient(circle_at_top_left,rgba(245,191,211,0.16),transparent_34%),linear-gradient(135deg,#121016,#1d1a24_55%,#15131a)] dark:text-gray-100">
+    <div className="min-h-screen bg-[linear-gradient(135deg,#f5f7fa,#e9eef5_52%,#f8fafc)] px-4 py-8 text-graphite transition-colors dark:bg-[linear-gradient(135deg,#0f151c,#141d26_52%,#101821)] dark:text-gray-100">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center justify-center">
-        <div className="w-full max-w-md rounded-[28px] bg-white p-8 text-center shadow-soft dark:border dark:border-white/10 dark:bg-[#1c1922]">
+        <div className="w-full max-w-md rounded-2xl border border-blush/80 bg-white p-8 text-center shadow-soft dark:border-white/10 dark:bg-[#141d26]">
           <div className="mb-6 flex justify-end">
             <ThemeToggle theme={theme} onChange={onThemeChange} />
           </div>
@@ -1992,7 +2012,7 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
   const displaySalonName = getSidebarSalonName(salonName)
 
   return (
-    <aside className="border-b border-blush/80 bg-white/90 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-[#1a171f]/95 lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+    <aside className="border-b border-blush/80 bg-white/90 px-4 py-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#101821]/95 lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
       <div className="flex items-center justify-between gap-4 lg:block">
         <div className="min-w-0 break-words">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃO</p>
@@ -2007,15 +2027,15 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
-            className={`focus-ring min-w-max rounded-2xl px-4 py-3 text-left text-sm font-semibold transition lg:w-full ${
-              activePage === item.id ? 'bg-blush text-graphite shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'text-gray-600 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'
+            className={`focus-ring min-w-max rounded-xl px-4 py-3 text-left text-sm font-semibold transition lg:w-full ${
+              activePage === item.id ? 'bg-[#dfeaf0] text-graphite shadow-sm dark:bg-[#8fd4d2] dark:text-[#101821]' : 'text-gray-600 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'
             }`}
           >
             {item.label}
           </button>
         ))}
       </nav>
-      <div className="mt-6 hidden rounded-2xl border border-blush bg-pearl p-4 dark:border-white/10 dark:bg-white/5 lg:block">
+      <div className="mt-6 hidden rounded-xl border border-blush bg-pearl p-4 dark:border-white/10 dark:bg-white/5 lg:block">
         <p className="font-semibold">{user.name}</p>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{user.title}</p>
         <button onClick={onLogout} className={`${buttonSecondary} mt-4 w-full`}>
@@ -2043,7 +2063,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
   }
 
   return (
-    <header className="border-b border-blush/70 bg-white/75 px-4 py-4 backdrop-blur dark:border-white/10 dark:bg-[#17141c]/80 sm:px-6 lg:px-8">
+    <header className="border-b border-blush/70 bg-white/80 px-4 py-4 backdrop-blur dark:border-white/10 dark:bg-[#101821]/84 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-graphite">{title}</h2>
@@ -2057,7 +2077,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
             placeholder="Buscar clientes, serviços, agenda..."
           />
           {results.length > 0 && (
-            <div className="absolute right-0 z-30 mt-2 w-full overflow-hidden rounded-2xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#24202c]">
+            <div className="absolute right-0 z-30 mt-2 w-full overflow-hidden rounded-xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#182331]">
               {results.map((result, index) => (
                 <button key={`${result.page}-${result.label}-${index}`} type="button" onClick={() => openResult(result.page)} className="block w-full px-4 py-3 text-left text-sm hover:bg-pearl dark:hover:bg-white/10">
                   <span className="block font-bold">{result.label}</span>
@@ -2080,11 +2100,11 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
 
 function ThemeToggle({ theme, onChange }) {
   return (
-    <div className="inline-flex rounded-full border border-blush bg-white p-1 text-xs font-bold shadow-sm dark:border-white/10 dark:bg-[#24202c]">
-      <button type="button" onClick={() => onChange('light')} className={`rounded-full px-3 py-2 transition ${theme === 'light' ? 'bg-blush text-graphite' : 'text-gray-500 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'}`}>
+    <div className="inline-flex rounded-full border border-blush bg-white p-1 text-xs font-bold shadow-sm dark:border-white/10 dark:bg-[#182331]">
+      <button type="button" onClick={() => onChange('light')} className={`rounded-full px-3 py-2 transition ${theme === 'light' ? 'bg-[#dfeaf0] text-graphite' : 'text-gray-500 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'}`}>
         Modo claro
       </button>
-      <button type="button" onClick={() => onChange('dark')} className={`rounded-full px-3 py-2 transition ${theme === 'dark' ? 'bg-lilacSoft text-graphite' : 'text-gray-500 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'}`}>
+      <button type="button" onClick={() => onChange('dark')} className={`rounded-full px-3 py-2 transition ${theme === 'dark' ? 'bg-[#8fd4d2] text-[#101821]' : 'text-gray-500 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'}`}>
         Modo escuro
       </button>
     </div>
@@ -2202,8 +2222,8 @@ function AdminDashboard({ appointments, employees, clients, cashEntries, advance
         <h3 className="text-xl font-bold text-graphite dark:text-gray-100">{uiText.dashboard.title}</h3>
         <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{uiText.dashboard.subtitle}</p>
       </div>
-      <section className="rounded-2xl border border-[#d9c17a]/70 bg-gradient-to-r from-white via-[#fff8e8] to-[#f7eef8] px-5 py-4 shadow-soft dark:border-[#d9c17a]/30 dark:from-[#1f1b26] dark:via-[#282235] dark:to-[#231c28]">
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">Resumo de hoje</p>
+      <section className="rounded-xl border border-[#b8c8d4] bg-[linear-gradient(90deg,#ffffff,#eef6f6_52%,#eef2ff)] px-5 py-4 shadow-soft dark:border-white/10 dark:bg-[linear-gradient(90deg,#141d26,#16252c_52%,#1b2440)]">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2f8c8f]">Resumo de hoje</p>
         <p className="mt-1 text-lg font-black text-graphite dark:text-gray-100">{resumoMensagem}</p>
       </section>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -2285,19 +2305,19 @@ function WeeklyRevenueChart({ cashEntries }) {
 
   return (
     <div className="relative">
-      <div className="flex h-64 items-end gap-3 rounded-2xl bg-pearl p-4 dark:bg-white/5">
+      <div className="flex h-64 items-end gap-3 rounded-xl bg-pearl p-4 dark:bg-white/5">
         {chartData.map((item) => (
           <div key={item.date} className="flex h-full flex-1 flex-col justify-end gap-2 text-center text-xs font-semibold text-gray-500">
             <button
               type="button"
-              className="relative flex flex-1 items-end rounded-t-2xl focus:outline-none"
+              className="relative flex flex-1 items-end rounded-t-xl focus:outline-none"
               onMouseEnter={() => setTooltip(item)}
               onMouseLeave={() => setTooltip(null)}
               onFocus={() => setTooltip(item)}
               onBlur={() => setTooltip(null)}
             >
               <span
-                className="block w-full rounded-t-2xl bg-gradient-to-t from-roseSoft to-lilacSoft transition hover:brightness-105"
+                className="block w-full rounded-t-xl bg-[linear-gradient(0deg,#2f8c8f,#536ad1)] transition hover:brightness-105"
                 style={{ height: `${Math.max((item.value / maxRevenue) * 100, 4)}%` }}
               />
             </button>
@@ -2307,7 +2327,7 @@ function WeeklyRevenueChart({ cashEntries }) {
       </div>
 
       {tooltip && (
-        <div className="pointer-events-none absolute left-1/2 top-3 z-20 w-56 -translate-x-1/2 rounded-2xl border border-blush bg-white p-4 text-sm font-semibold text-graphite shadow-soft dark:border-white/10 dark:bg-[#24202c] dark:text-gray-100">
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 w-56 -translate-x-1/2 rounded-xl border border-blush bg-white p-4 text-sm font-semibold text-graphite shadow-soft dark:border-white/10 dark:bg-[#182331] dark:text-gray-100">
           <p className="font-bold">{formatDate(tooltip.date).replace('-feira', '')}</p>
           <p className="mt-2">Faturamento: {money.format(tooltip.value)}</p>
           <p>Atendimentos: {tooltip.appointments}</p>
@@ -2689,7 +2709,7 @@ function WeeklyAgenda({ weekDates, appointments, blocks, employees, user, onStat
             const shortDate = fullDate?.slice(0, 5) ?? ''
             return (
               <div key={date} className="rounded-2xl border border-gray-100 bg-pearl dark:border-white/10 dark:bg-white/5">
-                <div className="sticky top-0 z-10 rounded-t-2xl border-b border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#1f1b26]">
+                <div className="sticky top-0 z-10 rounded-t-2xl border-b border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#141d26]">
                   <p className="text-sm font-extrabold capitalize">{weekday?.slice(0, 3)}</p>
                   <p className="text-xs font-semibold text-gray-500">{shortDate}</p>
                 </div>
@@ -2954,7 +2974,7 @@ function ClientSearchInput({ label, value, onChange, clients }) {
         <input className={inputBase} value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} placeholder="Digite o nome da cliente" />
       </label>
       {focused && suggestions.length > 0 && (
-        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#24202c]">
+        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#182331]">
           {suggestions.map((client) => (
             <button key={client.id} type="button" onMouseDown={() => { onChange(client.name); setFocused(false) }} className="block w-full px-4 py-3 text-left text-sm font-semibold text-graphite hover:bg-pearl dark:text-gray-100 dark:hover:bg-white/10">
               <span className="block text-graphite">{client.name}</span>
@@ -3294,9 +3314,10 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 
       if (shouldCreateLogin) {
         try {
+          const headers = await getAuthenticatedApiHeaders()
           const response = await fetch('/api/create-user', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
               email: loginEmail,
               password: temporaryPassword,
@@ -3386,9 +3407,10 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
       const hasLogin = Boolean(loginUserId || loginEmail)
 
       if (hasLogin) {
+        const headers = await getAuthenticatedApiHeaders()
         const response = await fetch('/api/delete-user', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             user_id: loginUserId,
             email: loginEmail
@@ -3503,7 +3525,7 @@ function EmployeeModal({ employee, salonSettings, onClose, onSave }) {
     setForm((current) => ({
       ...current,
       accessEmail: getSuggestedAccessEmail({ name: current.name, employeeType: current.employeeType, salonSettings }),
-      temporaryPassword: current.temporaryPassword || String(Math.floor(100000 + Math.random() * 900000)),
+      temporaryPassword: current.temporaryPassword || generateTemporaryPassword(),
       loginActive: true
     }))
   }
@@ -3804,10 +3826,10 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[1.75rem] border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]">
+      <section className="rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#c9a85d]">{uiText.cash.title}</p>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#2f8c8f]">{uiText.cash.title}</p>
             <h2 className="mt-2 text-2xl font-black text-graphite dark:text-gray-100">{uiText.cash.pdv}</h2>
             <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{uiText.cash.subtitle}</p>
           </div>
@@ -3918,7 +3940,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
                 <div className="flex flex-wrap gap-2">
                   {appointment && <button type="button" onClick={() => setPaymentAppointment(appointment)} className={buttonSecondary}>Receber pagamento</button>}
                   <button type="button" onClick={() => setPendingPaidTarget(item)} className="focus-ring rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">Marcar como pago</button>
-                  <button type="button" className="focus-ring rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-sm font-bold text-amber-800 transition hover:bg-amber-50 dark:border-amber-400/30 dark:bg-[#24202c] dark:text-amber-200">Manter pendente</button>
+                  <button type="button" className="focus-ring rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-sm font-bold text-amber-800 transition hover:bg-amber-50 dark:border-amber-400/30 dark:bg-[#182331] dark:text-amber-200">Manter pendente</button>
                 </div>
               </div>
             )
@@ -4075,8 +4097,8 @@ function ReceivePaymentModal({ appointment, employees, serviceItems, existingEnt
               const value = paymentMethodValues[index]
               const selected = paymentMethod === value
               return (
-                <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm font-bold transition ${selected ? 'border-graphite bg-graphite text-white dark:border-lilacSoft dark:bg-lilacSoft dark:text-graphite' : 'border-gray-100 bg-white text-graphite hover:bg-pearl dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100 dark:hover:bg-white/10'}`}>
-                  <input type="radio" name="paymentMethod" checked={selected} onChange={() => setPaymentMethod(value)} className="h-4 w-4 accent-[#c9a85d]" />
+                <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm font-bold transition ${selected ? 'border-graphite bg-graphite text-white dark:border-[#8fd4d2] dark:bg-[#8fd4d2] dark:text-[#101821]' : 'border-gray-100 bg-white text-graphite hover:bg-pearl dark:border-white/10 dark:bg-[#101821] dark:text-gray-100 dark:hover:bg-white/10'}`}>
+                  <input type="radio" name="paymentMethod" checked={selected} onChange={() => setPaymentMethod(value)} className="h-4 w-4 accent-[#2f8c8f]" />
                   <span>{option}</span>
                 </label>
               )
@@ -4575,16 +4597,16 @@ function AuditTrail({ auditLogs = [] }) {
   const rows = [...auditLogs].sort((a, b) => String(b.createdAt ?? b.created_at ?? '').localeCompare(String(a.createdAt ?? a.created_at ?? '')))
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-[#d9c17a]/70 bg-white p-5 shadow-soft dark:border-[#d9c17a]/30 dark:bg-[#1f1b26]">
+      <section className="rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">{uiText.audit.title}</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2f8c8f]">{uiText.audit.title}</p>
             <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">{uiText.audit.title}</h2>
             <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{uiText.audit.subtitle}</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" disabled className="focus-ring rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#24202c]">Exportar PDF</button>
-            <button type="button" disabled className="focus-ring rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#24202c]">Exportar Excel</button>
+            <button type="button" disabled className="focus-ring rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#182331]">Exportar PDF</button>
+            <button type="button" disabled className="focus-ring rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#182331]">Exportar Excel</button>
           </div>
         </div>
       </section>
@@ -4637,7 +4659,7 @@ function AuditJsonBlock({ title, data }) {
   return (
     <div className="min-w-0 rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
       <p className="mb-3 text-sm font-black uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">{title}</p>
-      <pre className="simple-scrollbar max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white p-4 text-xs font-semibold text-gray-700 dark:bg-[#17141c] dark:text-gray-200">
+      <pre className="simple-scrollbar max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white p-4 text-xs font-semibold text-gray-700 dark:bg-[#101821] dark:text-gray-200">
         {data ? JSON.stringify(toFriendlyAuditData(data), null, 2) : uiText.reports.noData}
       </pre>
     </div>
@@ -4715,10 +4737,10 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
   }
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-[#d9c17a]/70 bg-white p-5 shadow-soft dark:border-[#d9c17a]/30 dark:bg-[#1f1b26]">
+      <section className="rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a85d]">{uiText.reports.title}</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2f8c8f]">{uiText.reports.title}</p>
             <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">{uiText.reports.exports}</h2>
             <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{uiText.reports.exportHelp}</p>
           </div>
@@ -4731,10 +4753,10 @@ function Reports({ salonId, appointments, employees, cashEntries = [], setCashEn
               values={['todos', ...employees.map((item) => String(item.id))]}
             />
             <div className="flex items-end gap-2">
-              <button type="button" onClick={() => exportReport('pdf')} disabled={Boolean(exporting)} className="focus-ring min-h-12 flex-1 rounded-2xl border border-[#d9c17a] bg-[#fff8e1] px-4 py-3 text-sm font-black text-[#6f5612] shadow-sm transition hover:bg-[#ffefb0] disabled:opacity-70 dark:border-[#d9c17a]/40 dark:bg-[#3a311f] dark:text-[#ffe6a1]">
+              <button type="button" onClick={() => exportReport('pdf')} disabled={Boolean(exporting)} className="focus-ring min-h-12 flex-1 rounded-xl border border-[#b8c8d4] bg-[#eef6f6] px-4 py-3 text-sm font-black text-[#1f686a] shadow-sm transition hover:bg-[#dceeee] disabled:opacity-70 dark:border-white/10 dark:bg-[#16252c] dark:text-[#b8eeeb]">
                 {exporting === 'pdf' ? 'Exportando...' : 'Exportar PDF'}
               </button>
-              <button type="button" onClick={() => exportReport('excel')} disabled={Boolean(exporting)} className="focus-ring min-h-12 flex-1 rounded-2xl bg-graphite px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#343039] disabled:opacity-70 dark:bg-lilacSoft dark:text-graphite">
+              <button type="button" onClick={() => exportReport('excel')} disabled={Boolean(exporting)} className="focus-ring min-h-12 flex-1 rounded-xl bg-graphite px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#253341] disabled:opacity-70 dark:bg-[#8fd4d2] dark:text-[#101821]">
                 {exporting === 'excel' ? 'Exportando...' : 'Exportar Excel'}
               </button>
             </div>
@@ -5020,8 +5042,6 @@ async function exportReportsPdf(reportData, salonSettings) {
 }
 
 async function exportReportsExcel(reportData, salonSettings) {
-  const XLSX = await import('xlsx')
-  const workbook = XLSX.utils.book_new()
   const summaryRows = [
     { Indicador: 'Salão', Valor: salonSettings?.salonName || 'Salão' },
     { Indicador: 'Período', Valor: reportPeriodLabel(reportData) },
@@ -5032,17 +5052,53 @@ async function exportReportsExcel(reportData, salonSettings) {
     { Indicador: 'Comissão paga', Valor: reportData.totals.commissionPaid },
     { Indicador: 'Comissão pendente', Valor: reportData.totals.commissionPending }
   ]
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Resumo')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows)), 'Funcionários')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(employeeExportRows(reportData.employeeRows).map((row) => ({
+
+  const employeeRows = employeeExportRows(reportData.employeeRows)
+  const sheets = [
+    ['Resumo', summaryRows],
+    ['Funcionarios', employeeRows],
+    ['Comissoes', employeeRows.map((row) => ({
     'Funcionario': row.Funcionario,
     'Comissão total': row['Comissão total'],
     'Comissão paga': row['Comissão paga'],
     'Comissão pendente': row['Comissão pendente']
-  }))), 'Comissões')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.periodEntries)), 'Movimentações')
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(movementExportRows(reportData.pendingEntries)), 'Pendentes')
-  XLSX.writeFile(workbook, `relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.xlsx`)
+    }))],
+    ['Movimentacoes', movementExportRows(reportData.periodEntries)],
+    ['Pendentes', movementExportRows(reportData.pendingEntries)]
+  ]
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"></head><body>${sheets.map(([title, rows]) => (
+    `<h2>${escapeHtml(title)}</h2>${rowsToHtmlTable(rows)}`
+  )).join('<br>')}</body></html>`
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `relatorio-financeiro-${reportData.startDate}-${reportData.endDate}.xls`
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function rowsToHtmlTable(rows) {
+  const safeRows = Array.isArray(rows) ? rows : []
+  const columns = [...new Set(safeRows.flatMap((row) => Object.keys(row ?? {})))]
+  if (!columns.length) return '<table><tbody><tr><td>Sem dados</td></tr></tbody></table>'
+
+  return `<table border="1"><thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr></thead><tbody>${safeRows.map((row) => (
+    `<tr>${columns.map((column) => `<td>${escapeHtml(row?.[column])}</td>`).join('')}</tr>`
+  )).join('')}</tbody></table>`
 }
 
 function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances = [], setAdvances, employees, periodType, startDate, selectedEmployeeId, onPeriodTypeChange, onStartDateChange, onSelectedEmployeeChange, setCommissionPayments, user, setAuditLogs, notify }) {
@@ -5135,7 +5191,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
   })
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-blush/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26] sm:p-6">
+    <section className="min-w-0 overflow-hidden rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26] sm:p-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-goldSoft">Lançamentos financeiros</p>
@@ -5635,7 +5691,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
                   <div key={weekDate} className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
                     <p className="font-bold capitalize">{formatDate(weekDate)}</p>
                     <div className="mt-3 space-y-2">
-                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#17141c]">{item.time} · {item.client}</p>)}
+                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#101821]">{item.time} · {item.client}</p>)}
                       {dayItems.length === 0 && <p className="text-sm font-semibold text-gray-500">Sem agendamentos.</p>}
                     </div>
                   </div>
@@ -5788,7 +5844,6 @@ function Settings({ salonId, settings, setSettings, notify }) {
 
     setSaving(true)
     try {
-      console.log('salon_id usado para salvar configuracoes:', salonId)
       const saved = normalizeSalonSettings(await updateSalonRecord(salonId, payload))
       setSettings((current) => ({ ...current, ...saved }))
       notify?.('Salvo com sucesso')
@@ -5802,7 +5857,7 @@ function Settings({ salonId, settings, setSettings, notify }) {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <form onSubmit={saveSalonSettings} className="space-y-6 rounded-2xl border border-blush bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#1c1922] sm:p-8">
+      <form onSubmit={saveSalonSettings} className="space-y-6 rounded-xl border border-blush bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#141d26] sm:p-8">
         <div>
           <h3 className="text-xl font-bold">Configurações do salão</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Ajuste os dados de atendimento, recepção e funcionamento do salão.</p>
@@ -5866,7 +5921,7 @@ function Modal({ title, children, onClose, maxWidth = 'max-w-xl', zClass = 'z-40
 
   return (
     <div className={`fixed inset-0 ${zClass} flex items-center justify-center bg-graphite/35 px-4 py-6`}>
-      <div ref={modalRef} className={`simple-scrollbar max-h-[92vh] w-full ${maxWidth} overflow-y-auto rounded-3xl border border-blush bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#1f1b26]`}>
+      <div ref={modalRef} className={`simple-scrollbar max-h-[92vh] w-full ${maxWidth} overflow-y-auto rounded-2xl border border-blush bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]`}>
         <div className="mb-4 flex items-center justify-between gap-4">
           <h3 className="text-xl font-bold">{title}</h3>
           <button onClick={onClose} className={`${buttonSecondary} px-3 py-2`}>Fechar</button>
@@ -5929,9 +5984,9 @@ function Toast({ toast, onClose }) {
 
 function Toggle({ label, checked, onChange }) {
   return (
-    <label className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-graphite dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100">
+    <label className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-graphite dark:border-white/10 dark:bg-[#101821] dark:text-gray-100">
       <span className="min-w-0 break-words">{label}</span>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-5 w-5 accent-[#c9a85d]" />
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-5 w-5 accent-[#2f8c8f]" />
     </label>
   )
 }
@@ -6105,12 +6160,12 @@ function CheckboxGroup({ label, options, selected, onToggle }) {
       <legend className="px-1 text-sm font-semibold text-gray-600 dark:text-gray-300">{label}</legend>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {(options || []).map((option) => (
-          <label key={option} className="flex min-w-0 items-start gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm font-semibold text-graphite dark:border-white/10 dark:bg-[#17141c] dark:text-gray-100">
+          <label key={option} className="flex min-w-0 items-start gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm font-semibold text-graphite dark:border-white/10 dark:bg-[#101821] dark:text-gray-100">
             <input
               type="checkbox"
               checked={(selected || []).includes(option)}
               onChange={() => onToggle(option)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#c9a85d]"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#2f8c8f]"
             />
             <span className="min-w-0 break-words">{option}</span>
           </label>
