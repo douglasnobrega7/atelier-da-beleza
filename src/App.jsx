@@ -870,6 +870,19 @@ function toList(value) {
   return []
 }
 
+function normalizeArray(val) {
+  if (!val) return []
+  if (Array.isArray(val)) return val
+  return [val]
+}
+
+function normalizeFunctionArray(val) {
+  return normalizeArray(val)
+    .flatMap((item) => typeof item === 'string' ? item.split(',') : [item])
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+}
+
 function formatServices(services) {
   if (Array.isArray(services)) return services.join(', ')
   if (typeof services === 'string') return services
@@ -887,12 +900,22 @@ function formatServiceFunctions(category) {
 function getCompatibleServicesForProfessional(professional, serviceItems = services) {
   if (!professional) return []
 
-  const professionalFunctions = toList(professional.role).map((item) => item.toLowerCase())
-  if (professionalFunctions.length === 0) return []
+  const employeeFunctions = normalizeFunctionArray(professional.functions ?? professional.funcoes ?? professional.position ?? professional.role)
+  const employeeFunctionsLower = employeeFunctions.map((func) => func.toLowerCase())
+  if (employeeFunctions.length === 0) return []
 
-  return (serviceItems || []).filter((service) => (
-    toList(service.category).some((category) => professionalFunctions.includes(category.toLowerCase()))
-  ))
+  return (serviceItems || []).filter((service) => {
+    const serviceFunctions = normalizeFunctionArray(service.functions ?? service.category)
+
+    console.log({
+      serviceFunctions,
+      employeeFunctions
+    })
+
+    return serviceFunctions.some((func) =>
+      employeeFunctionsLower.includes(func.toLowerCase())
+    )
+  })
 }
 
 function isServiceCompatibleWithProfessional(service, professional) {
@@ -972,6 +995,7 @@ function normalizeServiceRecord(row) {
     durationMinutes: field(row, 'durationMinutes', 'duration_minutes'),
     responsible: field(row, 'responsible') ?? '',
     category: field(row, 'category') ?? '',
+    functions: field(row, 'functions') ?? field(row, 'category') ?? '',
     commission_percent: commissionPercent,
     commissionPercent
   }
