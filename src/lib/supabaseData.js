@@ -845,7 +845,7 @@ export async function fetchCommissionPayments(salonId) {
     const data = await runQuery(bySalon(TABLES.commissionPayments, salonId).order('paid_at', { ascending: false }))
     return Array.isArray(data) ? data : []
   } catch (error) {
-    if (isMissingTableError(error?.original ?? error)) {
+    if (isMissingTableError(error?.original ?? error) || isMissingPayloadColumnError(error, ['paid_at'])) {
       try {
         const data = await runQuery(bySalon(TABLES.legacyCommissionPayments, salonId).order('paid_at', { ascending: false }))
         return Array.isArray(data) ? data : []
@@ -908,9 +908,22 @@ export async function createCashMovement(salonId, payload) {
   try {
     return await insertRow(TABLES.cashMovements, salonId, payload, cashMovementPayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['cancelled_reason', 'updated_at'])) throw error
-    const { cancelledReason, cancelled_reason, updatedAt, updated_at, ...compatiblePayload } = payload
-    return insertRow(TABLES.cashMovements, salonId, compatiblePayload, cashMovementPayload)
+    if (!isMissingPayloadColumnError(error, ['cancelled_reason', 'updated_at', 'discount', 'desconto', 'observacao', 'notes'])) throw error
+    const compatiblePayload = cashMovementPayload(payload, salonId, true)
+    delete compatiblePayload.cancelled_reason
+    delete compatiblePayload.updated_at
+    delete compatiblePayload.discount
+    delete compatiblePayload.desconto
+    delete compatiblePayload.notes
+    delete compatiblePayload.observacao
+    const data = await runQuery(
+      supabase
+        .from(TABLES.cashMovements)
+        .insert(compatiblePayload)
+        .select('*')
+        .single()
+    )
+    return { ...payload, ...data }
   }
 }
 
@@ -919,9 +932,24 @@ export async function updateCashMovement(salonId, id, payload) {
   try {
     return await updateRow(TABLES.cashMovements, salonId, id, timestampedPayload, cashMovementPayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['cancelled_reason', 'updated_at'])) throw error
-    const { cancelledReason, cancelled_reason, updatedAt, updated_at, ...compatiblePayload } = timestampedPayload
-    return updateRow(TABLES.cashMovements, salonId, id, compatiblePayload, cashMovementPayload)
+    if (!isMissingPayloadColumnError(error, ['cancelled_reason', 'updated_at', 'discount', 'desconto', 'observacao', 'notes'])) throw error
+    const compatiblePayload = cashMovementPayload(timestampedPayload, salonId, false)
+    delete compatiblePayload.cancelled_reason
+    delete compatiblePayload.updated_at
+    delete compatiblePayload.discount
+    delete compatiblePayload.desconto
+    delete compatiblePayload.notes
+    delete compatiblePayload.observacao
+    const data = await runQuery(
+      supabase
+        .from(TABLES.cashMovements)
+        .update(compatiblePayload)
+        .eq('id', id)
+        .eq('salon_id', salonId)
+        .select('*')
+        .single()
+    )
+    return { ...timestampedPayload, ...data }
   }
 }
 

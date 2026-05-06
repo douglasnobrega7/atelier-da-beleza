@@ -3657,11 +3657,16 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
       const savedEntry = normalizeCashMovementRecord(existingEntry?.id
         ? await updateCashMovementRecord(salonId, existingEntry.id, payload)
         : await createCashMovementRecord(salonId, payload))
+      const appointmentPaymentPayload = {
+        status: appointmentStatus,
+        paymentMethod: normalizedMethod,
+        payment_method: normalizedMethod,
+        paymentStatus,
+        payment_status: paymentStatus
+      }
       const updatedAppointment = normalizeAppointmentRecord({
         ...appointment,
-        ...(await updateAppointmentRecord(salonId, appointment.id, {
-          status: appointmentStatus
-        }))
+        ...(await updateAppointmentRecord(salonId, appointment.id, appointmentPaymentPayload))
       }, employees)
 
       setEntries((current) => {
@@ -3683,7 +3688,11 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
             const updatedAppointment = normalizeAppointmentRecord({
               ...appointment,
               ...(await updateAppointmentRecord(salonId, appointment.id, {
-                status: appointmentStatus
+                status: appointmentStatus,
+                paymentMethod: normalizedMethod,
+                payment_method: normalizedMethod,
+                paymentStatus,
+                payment_status: paymentStatus
               }))
             }, employees)
             setEntries((current) => current.some((entry) => String(cashAppointmentId(entry) ?? '') === String(appointment.id))
@@ -3732,7 +3741,11 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
         const updatedAppointment = normalizeAppointmentRecord({
           ...appointment,
           ...(await updateAppointmentRecord(salonId, appointment.id, {
-            status: 'concluido'
+            status: 'concluido',
+            paymentMethod: normalizedMethod,
+            payment_method: normalizedMethod,
+            paymentStatus: 'pago',
+            payment_status: 'pago'
           }))
         }, employees)
         setAppointments?.((current) => current.map((item) => String(item.id) === String(appointment.id) ? updatedAppointment : item))
