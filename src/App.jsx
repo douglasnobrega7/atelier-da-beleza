@@ -906,12 +906,6 @@ function getCompatibleServicesForProfessional(professional, serviceItems = servi
 
   return (serviceItems || []).filter((service) => {
     const serviceFunctions = normalizeFunctionArray(service.functions ?? service.category)
-
-    console.log({
-      serviceFunctions,
-      employeeFunctions
-    })
-
     return serviceFunctions.some((func) =>
       employeeFunctionsLower.includes(func.toLowerCase())
     )
@@ -5164,7 +5158,7 @@ function EmployeeResultsReport({ salonId, cashEntries, setCashEntries, advances 
     const employee = employees.find((item) => String(item.id) === String(employeeId) || item.name === cashEmployeeName(entry))
     acc[key] = acc[key] ?? {
       id: key,
-      employeeId: key,
+      employeeId: employeeId ? String(employeeId) : '',
       employeeName: employee?.name ?? cashEmployeeName(entry) ?? 'Funcionário',
       appointments: 0,
       revenue: 0,
