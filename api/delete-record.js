@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 const requests = new Map()
-const allowedTables = new Set(['clients', 'employees', 'advances'])
+const allowedTables = new Set(['clients', 'employees', 'advances', 'audit_logs'])
 
 function getSupabaseUrl() {
   return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL

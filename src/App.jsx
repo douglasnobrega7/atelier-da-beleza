@@ -42,11 +42,11 @@ import {
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 let services = []
 
-const cardBase = 'min-w-0 overflow-hidden rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]'
-const panelBase = 'min-w-0 overflow-hidden rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]'
-const inputBase = 'focus-ring w-full min-w-0 rounded-xl border border-[#cdd8e1] bg-white px-4 py-3 text-graphite shadow-sm placeholder:text-gray-400 disabled:bg-gray-100 disabled:text-gray-500 dark:border-white/10 dark:bg-[#101821] dark:text-gray-100 dark:placeholder:text-white/40 dark:disabled:bg-white/5 dark:disabled:text-white/40'
-const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl bg-[#17212b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#253341] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#8fd4d2] dark:text-[#101821] dark:hover:bg-[#a7dfdd]'
-const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-[#cdd8e1] bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-pearl dark:border-white/10 dark:bg-[#182331] dark:text-gray-100 dark:hover:bg-white/10'
+const cardBase = 'min-w-0 overflow-hidden rounded-xl border border-[#c8d6df] bg-white p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
+const panelBase = 'min-w-0 overflow-hidden rounded-xl border border-[#c8d6df] bg-white p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
+const inputBase = 'focus-ring w-full min-w-0 rounded-xl border border-[#b9c9d4] bg-white px-4 py-3 text-graphite shadow-sm placeholder:text-gray-500 disabled:bg-gray-100 disabled:text-gray-500 dark:border-[#334555] dark:bg-[#101923] dark:text-[#f4f8fa] dark:placeholder:text-[#8da1b0] dark:disabled:bg-white/5 dark:disabled:text-white/40'
+const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl bg-[#17212b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#253341] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#7cc9c6] dark:text-[#0f151c] dark:hover:bg-[#96d8d5]'
+const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-[#b9c9d4] bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-[#eef3f6] dark:border-[#334555] dark:bg-[#101923] dark:text-[#f4f8fa] dark:hover:bg-[#1d2b38]'
 const buttonDanger = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25'
 const badgeBase = 'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-bold'
 const appointmentCardBase = 'min-w-0 overflow-visible rounded-xl border p-4 shadow-soft transition'
@@ -2046,7 +2046,7 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
   const displaySalonName = getSidebarSalonName(salonName)
 
   return (
-    <aside className="border-b border-blush/80 bg-white/90 px-4 py-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#101821]/95 lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+    <aside className="border-b border-[#c8d6df] bg-white px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#0f1821] lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
       <div className="flex items-center justify-between gap-4 lg:block">
         <div className="min-w-0 break-words">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃO</p>
@@ -2062,14 +2062,14 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
             key={item.id}
             onClick={() => onNavigate(item.id)}
             className={`focus-ring min-w-max rounded-xl px-4 py-3 text-left text-sm font-semibold transition lg:w-full ${
-              activePage === item.id ? 'bg-[#dfeaf0] text-graphite shadow-sm dark:bg-[#8fd4d2] dark:text-[#101821]' : 'text-gray-600 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'
+              activePage === item.id ? 'bg-[#dfeaf0] text-graphite shadow-sm dark:bg-[#7cc9c6] dark:text-[#0f151c]' : 'text-gray-700 hover:bg-[#eef3f6] dark:text-[#d8e3ea] dark:hover:bg-[#1d2b38]'
             }`}
           >
             {item.label}
           </button>
         ))}
       </nav>
-      <div className="mt-6 hidden rounded-xl border border-blush bg-pearl p-4 dark:border-white/10 dark:bg-white/5 lg:block">
+      <div className="mt-6 hidden rounded-xl border border-[#c8d6df] bg-[#f5f7fa] p-4 dark:border-[#334555] dark:bg-[#15202a] lg:block">
         <p className="font-semibold">{user.name}</p>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{user.title}</p>
         <button onClick={onLogout} className={`${buttonSecondary} mt-4 w-full`}>
@@ -2097,11 +2097,11 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
   }
 
   return (
-    <header className="border-b border-blush/70 bg-white/80 px-4 py-4 backdrop-blur dark:border-white/10 dark:bg-[#101821]/84 sm:px-6 lg:px-8">
+    <header className="border-b border-[#c8d6df] bg-white px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#101923] sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-graphite">{title}</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Hoje, {formatDate(todayIso)} · atendimento rápido e organizado</p>
+          <h2 className="text-2xl font-bold text-graphite dark:text-[#f4f8fa]">{title}</h2>
+          <p className="text-sm font-semibold text-gray-600 dark:text-[#b8c7d2]">Hoje, {formatDate(todayIso)} · atendimento rápido e organizado</p>
         </div>
         {canSearchGlobal && <div className="relative w-full sm:max-w-xs">
           <input
@@ -2123,7 +2123,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
         </div>}
         <div className="flex flex-wrap items-center gap-3">
           <ThemeToggle theme={theme} onChange={onThemeChange} />
-          <div className="rounded-full border border-blush bg-white px-4 py-2 text-sm font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
+          <div className="rounded-full border border-[#c8d6df] bg-white px-4 py-2 text-sm font-semibold text-gray-700 dark:border-[#334555] dark:bg-[#15202a] dark:text-[#f4f8fa]">
             {user.role === 'admin' ? 'Perfil Admin' : user.role === 'professional' ? 'Perfil Profissional' : 'Funcionário Caixa'}
           </div>
         </div>
@@ -2134,11 +2134,11 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
 
 function ThemeToggle({ theme, onChange }) {
   return (
-    <div className="inline-flex rounded-full border border-blush bg-white p-1 text-xs font-bold shadow-sm dark:border-white/10 dark:bg-[#182331]">
-      <button type="button" onClick={() => onChange('light')} className={`rounded-full px-3 py-2 transition ${theme === 'light' ? 'bg-[#dfeaf0] text-graphite' : 'text-gray-500 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'}`}>
+    <div className="inline-flex rounded-full border border-[#c8d6df] bg-white p-1 text-xs font-bold shadow-sm dark:border-[#334555] dark:bg-[#15202a]">
+      <button type="button" onClick={() => onChange('light')} className={`rounded-full px-3 py-2 transition ${theme === 'light' ? 'bg-[#dfeaf0] text-graphite' : 'text-gray-600 hover:bg-[#eef3f6] dark:text-[#d8e3ea] dark:hover:bg-[#1d2b38]'}`}>
         Modo claro
       </button>
-      <button type="button" onClick={() => onChange('dark')} className={`rounded-full px-3 py-2 transition ${theme === 'dark' ? 'bg-[#8fd4d2] text-[#101821]' : 'text-gray-500 hover:bg-pearl dark:text-gray-300 dark:hover:bg-white/10'}`}>
+      <button type="button" onClick={() => onChange('dark')} className={`rounded-full px-3 py-2 transition ${theme === 'dark' ? 'bg-[#7cc9c6] text-[#0f151c]' : 'text-gray-600 hover:bg-[#eef3f6] dark:text-[#d8e3ea] dark:hover:bg-[#1d2b38]'}`}>
         Modo escuro
       </button>
     </div>
@@ -2165,7 +2165,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     vales: user.role === 'admin' || user.role === 'cashier' ? <Advances salonId={salonId} user={user} employees={employees} advances={advances} setAdvances={setAdvances} setCashEntries={setCashEntries} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
     estoque: user.role === 'admin' ? <Inventory user={user} items={inventoryItems} setItems={setInventoryItems} notify={notify} /> : <AccessDenied />,
     relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} advances={advances} setAdvances={setAdvances} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
-    auditoria: user.role === 'admin' ? <AuditTrail auditLogs={auditLogs} /> : <AccessDenied />,
+    auditoria: user.role === 'admin' ? <AuditTrail salonId={salonId} auditLogs={auditLogs} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
@@ -3868,7 +3868,7 @@ function CashRegister({ salonId, user, entries, setEntries, closures, setClosure
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]">
+      <section className="rounded-xl border border-[#c8d6df] bg-white p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.18em] text-[#2f8c8f]">{uiText.cash.title}</p>
@@ -4638,31 +4638,128 @@ function formatAuditDate(value) {
   return parsed.toLocaleString('pt-BR')
 }
 
-function AuditTrail({ auditLogs = [] }) {
+function auditLogDateFilterValue(log) {
+  const value = log?.createdAt ?? log?.created_at
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10)
+  return parsed.toLocaleDateString('sv-SE')
+}
+
+function AuditTrail({ salonId, auditLogs = [], setAuditLogs, notify }) {
   const [selectedLog, setSelectedLog] = useState(null)
-  const rows = [...auditLogs].sort((a, b) => String(b.createdAt ?? b.created_at ?? '').localeCompare(String(a.createdAt ?? a.created_at ?? '')))
+  const [filters, setFilters] = useState({ startDate: '', endDate: '' })
+  const [selectedIds, setSelectedIds] = useState([])
+  const rows = [...auditLogs]
+    .filter((log) => {
+      const date = auditLogDateFilterValue(log)
+      return (!filters.startDate || date >= filters.startDate) &&
+        (!filters.endDate || date <= filters.endDate)
+    })
+    .sort((a, b) => String(b.createdAt ?? b.created_at ?? '').localeCompare(String(a.createdAt ?? a.created_at ?? '')))
+  const visibleIds = rows.map((row) => String(row.id)).filter(Boolean)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+
+  function toggleSelected(id, checked) {
+    const normalizedId = String(id)
+    setSelectedIds((current) => checked
+      ? Array.from(new Set([...current, normalizedId]))
+      : current.filter((item) => item !== normalizedId))
+  }
+
+  function toggleAllVisible(checked) {
+    setSelectedIds((current) => checked
+      ? Array.from(new Set([...current, ...visibleIds]))
+      : current.filter((id) => !visibleIds.includes(id)))
+  }
+
+  function clearFilters() {
+    setFilters({ startDate: '', endDate: '' })
+  }
+
+  async function clearSelectedLogs() {
+    if (selectedIds.length === 0) {
+      notify?.('Selecione pelo menos um registro para limpar.', 'error')
+      return
+    }
+    if (!window.confirm(`Tem certeza que deseja apagar ${selectedIds.length} registro(s) de auditoria?`)) return
+
+    try {
+      await Promise.all(selectedIds.map((id) => deleteSalonRecordViaApi({
+        salonId,
+        table: 'audit_logs',
+        id,
+        reason: 'Auditoria limpa pelo admin'
+      })))
+      setAuditLogs?.((current) => (current || []).filter((log) => !selectedIds.includes(String(log.id))))
+      setSelectedIds([])
+      setSelectedLog(null)
+      notify?.('Registros de auditoria limpos com sucesso.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
+  }
+
   return (
     <div className="space-y-5">
-      <section className="rounded-xl border border-blush/80 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-[#141d26]">
+      <section className="rounded-xl border border-[#c8d6df] bg-white p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2f8c8f]">{uiText.audit.title}</p>
             <h2 className="mt-1 text-2xl font-black text-graphite dark:text-gray-100">{uiText.audit.title}</h2>
             <p className="mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{uiText.audit.subtitle}</p>
           </div>
-          <div className="flex gap-2">
-            <button type="button" disabled className="focus-ring rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#182331]">Exportar PDF</button>
-            <button type="button" disabled className="focus-ring rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-400 dark:border-white/10 dark:bg-[#182331]">Exportar Excel</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled className="focus-ring rounded-xl border border-[#c8d6df] bg-white px-4 py-3 text-sm font-black text-gray-500 opacity-70 dark:border-[#334555] dark:bg-[#101923] dark:text-[#8da1b0]">Exportar PDF</button>
+            <button type="button" disabled className="focus-ring rounded-xl border border-[#c8d6df] bg-white px-4 py-3 text-sm font-black text-gray-500 opacity-70 dark:border-[#334555] dark:bg-[#101923] dark:text-[#8da1b0]">Exportar Excel</button>
           </div>
         </div>
       </section>
+      <Panel title="Filtros">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
+          <Field label="Data inicial" type="date" value={filters.startDate} onChange={(value) => setFilters({ ...filters, startDate: value })} />
+          <Field label="Data final" type="date" value={filters.endDate} onChange={(value) => setFilters({ ...filters, endDate: value })} />
+          <button type="button" onClick={clearFilters} className={buttonSecondary}>Limpar filtros</button>
+          <button type="button" onClick={clearSelectedLogs} disabled={selectedIds.length === 0} className={buttonDanger}>
+            Limpar selecionados
+          </button>
+        </div>
+        <p className="mt-3 text-sm font-semibold text-gray-600 dark:text-[#b8c7d2]">
+          {rows.length} registro(s) encontrados. {selectedIds.length} selecionado(s).
+        </p>
+      </Panel>
       <Panel title="Histórico de auditoria">
         {rows.length ? (
           <Table
             rows={rows}
-            columns={['createdAt', 'userName', 'action', 'entityType', 'reason', 'details']}
-            labels={['Data', 'Usuário', 'Ação', 'Tipo', 'Motivo', 'Ver detalhes']}
+            columns={['select', 'createdAt', 'userName', 'action', 'entityType', 'reason', 'details']}
+            labels={[
+              <input
+                key="select-all"
+                type="checkbox"
+                className="h-4 w-4 accent-[#2f8c8f]"
+                checked={allVisibleSelected}
+                onChange={(event) => toggleAllVisible(event.target.checked)}
+                aria-label="Selecionar todos os registros visíveis"
+              />,
+              'Data',
+              'Usuário',
+              'Ação',
+              'Tipo',
+              'Motivo',
+              'Ver detalhes'
+            ]}
             formatValue={(key, value, row) => {
+              if (key === 'select') return (
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#2f8c8f]"
+                  checked={selectedIds.includes(String(row.id))}
+                  onChange={(event) => toggleSelected(row.id, event.target.checked)}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label="Selecionar registro de auditoria"
+                />
+              )
               if (key === 'createdAt') return formatAuditDate(row.createdAt ?? row.created_at)
               if (key === 'userName') return row.userName || row.user_name || '-'
               if (key === 'action') return <StatusBadge tone="cyan">{auditActionLabel(row.action)}</StatusBadge>
@@ -6259,8 +6356,8 @@ function Table({ rows, columns, labels, formatValue, onRowClick }) {
     <div className="simple-scrollbar overflow-x-auto">
       <table className="w-full min-w-[640px] text-left text-sm">
         <thead>
-          <tr className="border-b border-gray-100 text-gray-500 dark:border-white/10 dark:text-gray-400">
-            {labels.map((label) => <th key={label} className="px-3 py-3 font-semibold">{label}</th>)}
+          <tr className="border-b border-[#c8d6df] text-gray-700 dark:border-[#334555] dark:text-[#b8c7d2]">
+            {labels.map((label, index) => <th key={typeof label === 'string' ? label : `label-${index}`} className="px-3 py-3 font-bold">{label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -6269,14 +6366,14 @@ function Table({ rows, columns, labels, formatValue, onRowClick }) {
             return (
               <tr
                 key={row.id ?? index}
-                className={`border-b border-gray-50 transition hover:bg-pearl dark:border-white/5 dark:hover:bg-white/5 ${onRowClick ? 'cursor-pointer' : ''}`}
+                className={`border-b border-[#e3ebf0] transition hover:bg-[#eef3f6] dark:border-[#253542] dark:hover:bg-[#1d2b38] ${onRowClick ? 'cursor-pointer' : ''}`}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 onKeyDown={onRowClick ? (event) => {
                   if (event.key === 'Enter' || event.key === ' ') onRowClick(row)
                 } : undefined}
               >
-                {columns.map((column) => <td key={column} className="px-3 py-3 font-medium text-gray-700 dark:text-gray-200">{formatValue(column, row[column], row)}</td>)}
+                {columns.map((column) => <td key={column} className="px-3 py-3 font-semibold text-gray-800 dark:text-[#eef5f7]">{formatValue(column, row[column], row)}</td>)}
               </tr>
             )
           })}
