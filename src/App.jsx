@@ -42,6 +42,7 @@ import {
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 let services = []
 
+const BRAND_LOGO_SRC = '/painel-salao-logo.png'
 const cardBase = 'min-w-0 overflow-hidden rounded-xl border border-[#b7c9d4] bg-[#f6fafb] p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
 const panelBase = 'min-w-0 overflow-hidden rounded-xl border border-[#b7c9d4] bg-[#f6fafb] p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
 const inputBase = 'focus-ring w-full min-w-0 rounded-xl border border-[#aebfcb] bg-[#f8fbfc] px-4 py-3 text-graphite shadow-sm placeholder:text-gray-500 disabled:bg-[#e2ebf0] disabled:text-gray-500 dark:border-[#334555] dark:bg-[#101923] dark:text-[#f4f8fa] dark:placeholder:text-[#8da1b0] dark:disabled:bg-white/5 dark:disabled:text-white/40'
@@ -2085,6 +2086,7 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
               <div className="mb-6 flex justify-end">
                 <ThemeToggle theme={theme} onChange={onThemeChange} />
               </div>
+              <BrandLogo className="mb-6 h-20 w-64 ring-1 ring-white/50 dark:ring-white/10" />
               <div className="mb-10 inline-flex items-center gap-3 rounded-full border border-[#cdd8e1] bg-white/80 px-4 py-2 text-sm font-semibold text-goldSoft shadow-sm dark:border-white/10 dark:bg-white/10">
                 Sistema inteligente para gestão de salão
               </div>
@@ -2158,6 +2160,7 @@ function AuthLoadingScreen({ theme, onThemeChange }) {
           <div className="mb-6 flex justify-end">
             <ThemeToggle theme={theme} onChange={onThemeChange} />
           </div>
+          <BrandLogo className="mx-auto mb-6 h-20 w-64 ring-1 ring-[#d7e0e7] dark:ring-white/10" />
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-goldSoft">Salão Pro</p>
           <h1 className="mt-3 text-2xl font-bold">Carregando sessão...</h1>
         </div>
@@ -2185,6 +2188,17 @@ function Field({ label, value, onChange, type = 'text', placeholder = '', requir
   )
 }
 
+function BrandLogo({ className = '', compact = false }) {
+  return (
+    <img
+      src={BRAND_LOGO_SRC}
+      alt="Painel Salão"
+      className={`${compact ? 'h-12 w-32' : 'h-16 w-48'} rounded-xl object-cover object-center shadow-sm ${className}`}
+      loading="lazy"
+    />
+  )
+}
+
 function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout, onReturnToPlatform }) {
   const displaySalonName = getSidebarSalonName(salonName)
   const isPlatformOwner = user.role === 'platform_owner'
@@ -2193,9 +2207,11 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout, onRe
     <aside className={`border-b px-4 py-4 shadow-sm lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6 ${isPlatformOwner ? 'border-[#1d2938] bg-[#080d14] text-white' : 'border-[#b9cad4] bg-[#edf4f6] dark:border-[#2c3c49] dark:bg-[#0f1821]'}`}>
       <div className="flex items-center justify-between gap-4 lg:block">
         <div className="min-w-0 break-words">
+          <BrandLogo className="mb-4 hidden ring-1 ring-white/10 lg:block" />
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">{isPlatformOwner ? 'PLATAFORMA' : 'SALÃO'}</p>
           {(displaySalonName || isPlatformOwner) && <h1 className={`text-xl font-bold ${isPlatformOwner ? 'text-white' : 'text-graphite'}`}>{isPlatformOwner ? 'Painel Master' : displaySalonName}</h1>}
         </div>
+        <BrandLogo compact className="ring-1 ring-white/10 lg:hidden" />
           <button onClick={onLogout} className={`${buttonSecondary} px-3 py-2 lg:hidden`}>
           Sair
         </button>
@@ -2214,6 +2230,7 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout, onRe
         ))}
       </nav>
       <div className="mt-6 hidden rounded-xl border border-[#c8d6df] bg-[#f5f7fa] p-4 dark:border-[#334555] dark:bg-[#15202a] lg:block">
+        <BrandLogo compact className="mb-4 opacity-90" />
         <p className="font-semibold">{user.name}</p>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{user.title}</p>
         {user.platformOwnerSession && (
@@ -2248,9 +2265,12 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
   return (
     <header className="border-b border-[#b9cad4] bg-[#edf4f6] px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#101923] sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-graphite dark:text-[#f4f8fa]">{title}</h2>
-          <p className="text-sm font-semibold text-gray-600 dark:text-[#b8c7d2]">Hoje, {formatDate(todayIso)} · atendimento rápido e organizado</p>
+        <div className="flex min-w-0 items-center gap-4">
+          <BrandLogo compact className="hidden shrink-0 ring-1 ring-[#b9cad4] dark:ring-white/10 md:block" />
+          <div className="min-w-0">
+            <h2 className="truncate text-2xl font-bold text-graphite dark:text-[#f4f8fa]">{title}</h2>
+            <p className="text-sm font-semibold text-gray-600 dark:text-[#b8c7d2]">Hoje, {formatDate(todayIso)} · atendimento rápido e organizado</p>
+          </div>
         </div>
         {canSearchGlobal && <div className="relative w-full sm:max-w-xs">
           <input
@@ -2411,9 +2431,11 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
   if (loading && !data) return <PlatformSkeleton />
 
   return (
-    <div className="min-h-[calc(100vh-7rem)] w-full max-w-full overflow-hidden rounded-xl border border-[#1f2b3b] bg-[#080d14] p-4 text-white shadow-2xl sm:p-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
+    <div className="relative min-h-[calc(100vh-7rem)] w-full max-w-full overflow-hidden rounded-xl border border-[#1f2b3b] bg-[#080d14] p-4 text-white shadow-2xl sm:p-6">
+      <BrandLogo className="pointer-events-none absolute right-6 top-6 hidden h-24 w-72 opacity-20 blur-[0.2px] ring-1 ring-white/10 xl:block" />
+      <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
+          <BrandLogo className="mb-5 ring-1 ring-white/10 xl:hidden" />
           <span className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">
             Dono da Plataforma
           </span>
@@ -2546,6 +2568,7 @@ function PlatformList({ title, items }) {
 function PlatformSkeleton() {
   return (
     <div className="rounded-xl border border-[#1f2b3b] bg-[#080d14] p-6 text-white">
+      <BrandLogo className="mb-6 h-20 w-64 opacity-80 ring-1 ring-white/10" />
       <div className="h-8 w-64 animate-pulse rounded-lg bg-white/10" />
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-28 animate-pulse rounded-xl bg-white/10" />)}
