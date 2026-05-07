@@ -2375,7 +2375,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   const createInitialAppointmentForm = () => {
     const employee = employees.find((item) => item.name === defaultEmployeeName)
     const firstService = getCompatibleServicesForProfessional(employee)[0] ?? { name: '', price: 0 }
-    return { client: clients[0]?.name ?? '', service: firstService.name, employeeName: defaultEmployeeName, date: todayIso, time: '', paymentMethod: '', value: firstService.price ?? 0 }
+    return { client: '', service: firstService.name, employeeName: defaultEmployeeName, date: todayIso, time: '', paymentMethod: '', value: firstService.price ?? 0 }
   }
   const [form, setForm] = useState(createInitialAppointmentForm)
   const [formMessage, setFormMessage] = useState({ type: '', text: '' })
@@ -2829,7 +2829,7 @@ function BlockTimeModal({ user, employees, date, onClose, onSave }) {
 
 function QuickServiceModal({ clients, employees, onClose, onSave }) {
   const firstService = services[0] ?? { name: '', price: 0 }
-  const [form, setForm] = useState({ client: clients[0]?.name ?? '', service: firstService.name, employeeName: employees.find((item) => item.active)?.name ?? '', paymentMethod: 'pix', value: firstService.price })
+  const [form, setForm] = useState({ client: '', service: firstService.name, employeeName: employees.find((item) => item.active)?.name ?? '', paymentMethod: 'pix', value: firstService.price })
 
   return (
     <Modal title="Atender agora" onClose={onClose}>
@@ -2989,7 +2989,7 @@ function TimeSlotPicker({ value, onChange, slots }) {
   )
 }
 
-function ClientSearchInput({ label, value, onChange, clients }) {
+function ClientSearchInput({ label, value, onChange, clients, placeholder = 'Selecione ou digite o cliente' }) {
   const [focused, setFocused] = useState(false)
   const query = value.trim().toLowerCase()
   const suggestions = query ? clients.filter((client) => {
@@ -3001,7 +3001,7 @@ function ClientSearchInput({ label, value, onChange, clients }) {
     <div className="relative">
       <label className="block">
         <span className="mb-1 block text-sm font-semibold text-gray-600">{label}</span>
-        <input className={inputBase} value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} placeholder="Digite o nome da cliente" />
+        <input className={inputBase} value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} placeholder={placeholder} />
       </label>
       {focused && suggestions.length > 0 && (
         <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-blush bg-white shadow-soft dark:border-white/10 dark:bg-[#182331]">
