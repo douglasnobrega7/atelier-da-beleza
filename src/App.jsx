@@ -5750,21 +5750,38 @@ function EditCashMovementModal({ salonId, entry, onClose, onSaved, onRemoved, us
 
 function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salonSettings, notify }) {
   const employee = employees.find((item) => isProfessional(item) && isEmployeeForUser(item, user))
-  const employeeServices = toList(employee?.services || '')
+  const compatibleServices = getCompatibleServicesForProfessional(employee, services)
+  const serviceOptions = compatibleServices.map((item) => item.name)
   const [date, setDate] = useState(todayIso)
   const [view, setView] = useState('day')
-  const [serviceName, setServiceName] = useState(employeeServices[0] ?? services[0]?.name ?? '')
+  const [serviceName, setServiceName] = useState(serviceOptions[0] ?? '')
   const [selectedSlot, setSelectedSlot] = useState(null)
+
+  useEffect(() => {
+    if (serviceOptions.length === 0) {
+      if (serviceName) setServiceName('')
+      return
+    }
+    if (!serviceOptions.includes(serviceName)) {
+      setServiceName(serviceOptions[0])
+    }
+  }, [serviceOptions.join('|'), serviceName])
 
   if (!employee) return <AccessDenied />
 
-  const selectedService = services.find((item) => item.name === serviceName)
+  const selectedService = compatibleServices.find((item) => item.name === serviceName)
   const weekDates = getWeekDates(date)
   const dayAppointments = appointments.filter((item) => item.date === date)
   const weekAppointments = appointments.filter((item) => weekDates.includes(item.date))
-  const availableSlots = getAvailableSlots({ employee, date, service: selectedService, appointments, blockedSlots, salonSettings })
+  const availableSlots = selectedService
+    ? getAvailableSlots({ employee, date, service: selectedService, appointments, blockedSlots, salonSettings })
+    : []
   const occupiedSlots = getOccupiedSlots({ employee, date, appointments })
-  const serviceOptions = employeeServices.length ? employeeServices : services.filter((item) => item.responsible === employee.name).map((item) => item.name)
+  const nextAppointments = dayAppointments
+    .filter((item) => !isCancelledStatus(item.status))
+    .sort((a, b) => String(a.time ?? '').localeCompare(String(b.time ?? '')))
+  const finishedToday = dayAppointments.filter((item) => isCompletedStatus(item.status)).length
+  const employeeFunctionsLabel = formatEmployeeFunctions(employee.functions) || 'Função não informada'
 
   function requestSlot(data) {
     if (!data.client.trim() || !data.service.trim()) {
@@ -5793,49 +5810,83 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Metric title="Minha agenda" value={formatDate(date)} detail={employee.name} />
-        <Metric title="Horários livres" value={availableSlots.length} detail={selectedService?.name ?? 'Serviço'} />
-        <Metric title="Agendamentos do dia" value={dayAppointments.length} detail="Somente meus atendimentos" />
-      </div>
+    <div className="mx-auto max-w-6xl space-y-5">
+      <section className="rounded-xl border border-[#c8d6df] bg-white p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2f8c8f]">Minha agenda</p>
+            <h3 className="mt-1 text-2xl font-black text-graphite dark:text-[#f4f8fa]">{employee.name}</h3>
+            <p className="mt-1 text-sm font-semibold text-gray-600 dark:text-[#b8c7d2]">
+              {employeeFunctionsLabel}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
+            <Metric title="Data" value={formatDate(date)} detail="Dia selecionado" />
+            <Metric title="Atendimentos" value={dayAppointments.length} detail={`${finishedToday} concluído(s)`} />
+            <Metric title="Horários livres" value={availableSlots.length} detail={selectedService?.name ?? 'Selecione um serviço'} />
+          </div>
+        </div>
+      </section>
 
-      <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-        <Panel title="Meus Horários disponíveis">
+      <Panel title="Consultar horários">
+        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
           <div className="space-y-4">
             <DatePickerBar value={date} onChange={setDate} />
-            <Select label="Serviço desejado" value={serviceName} onChange={setServiceName} options={serviceOptions.length ? serviceOptions : services.map((item) => item.name)} />
-            <div className="inline-flex rounded-2xl border border-blush bg-pearl p-1 text-sm font-bold dark:border-white/10 dark:bg-white/5">
-              <button type="button" onClick={() => setView('day')} className={`rounded-xl px-5 py-2 transition ${view === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Dia</button>
-              <button type="button" onClick={() => setView('week')} className={`rounded-xl px-5 py-2 transition ${view === 'week' ? 'bg-graphite text-white shadow-sm dark:bg-lilacSoft dark:text-graphite' : 'hover:bg-white dark:hover:bg-white/10'}`}>Semana</button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {availableSlots.map((slot) => (
-                <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100">
-                  {slot} · Solicitar agendamento
-                </button>
-              ))}
-              {availableSlots.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Sem Horários disponíveis nesta data.</p>}
+            {serviceOptions.length > 0 ? (
+              <Select label="Serviço" value={serviceName} onChange={setServiceName} options={serviceOptions} />
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-100">
+                Nenhum serviço foi encontrado para a função {employeeFunctionsLabel}.
+              </div>
+            )}
+            <div className="rounded-2xl border border-[#c8d6df] bg-[#f5f7fa] p-4 text-sm font-semibold text-gray-700 dark:border-[#334555] dark:bg-[#101923] dark:text-[#d8e3ea]">
+              <p>Jornada: <strong>{employee.workStart} às {employee.workEnd}</strong></p>
+              <p className="mt-1">Intervalo: <strong>{employee.breakStart && employee.breakEnd ? `${employee.breakStart} às ${employee.breakEnd}` : 'Sem intervalo'}</strong></p>
+              <p className="mt-1">Salão: <strong>{formatSalonHoursForDate(salonSettings, date)}</strong></p>
             </div>
           </div>
-        </Panel>
 
-        <Panel title={view === 'day' ? 'Meus agendamentos do dia' : 'Minha semana'}>
+          <div className="min-w-0">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h4 className="text-base font-bold text-graphite dark:text-[#f4f8fa]">Horários disponíveis</h4>
+              <p className="text-sm font-semibold text-gray-600 dark:text-[#b8c7d2]">{selectedService?.name ?? 'Sem serviço selecionado'}</p>
+            </div>
+            {availableSlots.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+                {availableSlots.map((slot) => (
+                  <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className="focus-ring rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-100 dark:hover:bg-emerald-500/25">
+                    {slot}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState>{serviceOptions.length > 0 ? 'Sem horários disponíveis para este serviço nesta data.' : 'Cadastre serviços compatíveis com a função do profissional.'}</EmptyState>
+            )}
+          </div>
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
+        <Panel title={view === 'day' ? 'Atendimentos do dia' : 'Resumo da semana'}>
+          <div className="mb-4 inline-flex rounded-2xl border border-[#c8d6df] bg-[#f5f7fa] p-1 text-sm font-bold dark:border-[#334555] dark:bg-[#101923]">
+            <button type="button" onClick={() => setView('day')} className={`rounded-xl px-5 py-2 transition ${view === 'day' ? 'bg-graphite text-white shadow-sm dark:bg-[#7cc9c6] dark:text-[#0f151c]' : 'hover:bg-white dark:hover:bg-[#1d2b38]'}`}>Dia</button>
+            <button type="button" onClick={() => setView('week')} className={`rounded-xl px-5 py-2 transition ${view === 'week' ? 'bg-graphite text-white shadow-sm dark:bg-[#7cc9c6] dark:text-[#0f151c]' : 'hover:bg-white dark:hover:bg-[#1d2b38]'}`}>Semana</button>
+          </div>
           {view === 'day' ? (
             <div className="space-y-3">
-              {dayAppointments.map((item) => <LineItem key={item.id} label={`${item.time} · ${item.client} · ${item.service}`} value={formatAppointmentStatus(item.status)} />)}
-              {dayAppointments.length === 0 && <p className="rounded-2xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold text-gray-600">Nenhum agendamento nesta data.</p>}
+              {nextAppointments.map((item) => <LineItem key={item.id} label={`${item.time} · ${item.client}`} value={`${item.service} · ${formatAppointmentStatus(item.status)}`} />)}
+              {nextAppointments.length === 0 && <EmptyState>Nenhum atendimento nesta data.</EmptyState>}
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2">
               {weekDates.map((weekDate) => {
                 const dayItems = weekAppointments.filter((item) => item.date === weekDate)
                 return (
-                  <div key={weekDate} className="rounded-2xl border border-gray-100 bg-pearl p-4 dark:border-white/10 dark:bg-white/5">
+                  <div key={weekDate} className="rounded-2xl border border-[#c8d6df] bg-[#f5f7fa] p-4 dark:border-[#334555] dark:bg-[#101923]">
                     <p className="font-bold capitalize">{formatDate(weekDate)}</p>
                     <div className="mt-3 space-y-2">
-                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#101821]">{item.time} · {item.client}</p>)}
-                      {dayItems.length === 0 && <p className="text-sm font-semibold text-gray-500">Sem agendamentos.</p>}
+                      {dayItems.map((item) => <p key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold dark:bg-[#16212c]">{item.time} · {item.client}</p>)}
+                      {dayItems.length === 0 && <p className="text-sm font-semibold text-gray-600 dark:text-[#b8c7d2]">Sem atendimentos.</p>}
                     </div>
                   </div>
                 )
@@ -5843,9 +5894,20 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
             </div>
           )}
         </Panel>
+
+        <Panel title="Horários ocupados">
+          <div className="space-y-3">
+            {occupiedSlots.map((appointment) => (
+              <div key={appointment.id} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm dark:border-rose-400/30 dark:bg-rose-500/15">
+                <p className="font-bold text-rose-800 dark:text-rose-100">{appointment.time} · {appointment.client}</p>
+                <p className="mt-1 font-semibold text-rose-700 dark:text-rose-200">{appointment.service} · {formatAppointmentStatus(appointment.status)}</p>
+              </div>
+            ))}
+            {occupiedSlots.length === 0 && <EmptyState>Nenhum horário ocupado nesta data.</EmptyState>}
+          </div>
+        </Panel>
       </div>
 
-      <AvailabilityPanel employee={employee} date={date} service={selectedService} salonSettings={salonSettings} availableSlots={availableSlots} occupiedSlots={occupiedSlots} />
       {selectedSlot && <ScheduleRequestModal employee={employee} slot={selectedSlot} date={date} serviceName={serviceName} onClose={() => setSelectedSlot(null)} onSubmit={requestSlot} />}
     </div>
   )
@@ -5853,7 +5915,7 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
 
 function ScheduleRequestModal({ employee, slot, date, serviceName, onClose, onSubmit }) {
   const [form, setForm] = useState({ client: '', phone: '', service: serviceName, notes: '' })
-  const employeeServices = toList(employee.services || '')
+  const employeeServices = getCompatibleServicesForProfessional(employee, services).map((item) => item.name)
 
   return (
     <Modal title="Solicitar agendamento" onClose={onClose}>
@@ -5863,7 +5925,7 @@ function ScheduleRequestModal({ employee, slot, date, serviceName, onClose, onSu
         </div>
         <Field label="Nome da cliente" value={form.client} onChange={(value) => setForm({ ...form, client: value })} required />
         <Field label="Telefone da cliente (opcional)" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />
-        <Select label="Serviço desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employeeServices.length ? employeeServices : services.map((item) => item.name)} />
+        <Select label="Serviço desejado" value={form.service} onChange={(value) => setForm({ ...form, service: value })} options={employeeServices} />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-gray-600">Observação (opcional)</span>
           <textarea className={`${inputBase} min-h-24`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
