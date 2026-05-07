@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 const requests = new Map()
+const allowedTables = new Set(['clients', 'employees', 'advances'])
 
 function getSupabaseUrl() {
   return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -11,7 +12,7 @@ function setSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
 }
 
-function rateLimit(req, limit = 30, windowMs = 60_000) {
+function rateLimit(req, limit = 40, windowMs = 60_000) {
   const forwardedFor = req.headers['x-forwarded-for']
   const ip = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0]?.trim()
   const key = ip || req.socket?.remoteAddress || 'unknown'
@@ -34,11 +35,11 @@ function getBearerToken(req) {
 }
 
 function safeError(error) {
-  console.error('delete-user:', error)
-  return 'Nao foi possivel remover o usuario.'
+  console.error('delete-record:', error)
+  return 'Nao foi possivel apagar o registro.'
 }
 
-async function requireAdmin(supabase, req) {
+async function requireAdmin(supabase, req, salonId) {
   const token = getBearerToken(req)
   if (!token) {
     const error = new Error('Nao autenticado')
@@ -61,13 +62,42 @@ async function requireAdmin(supabase, req) {
 
   if (profileError) throw profileError
 
-  if (String(profile?.role ?? '').trim().toLowerCase() !== 'admin' || !profile?.salon_id) {
+  const isAdmin = String(profile?.role ?? '').trim().toLowerCase() === 'admin'
+  const sameSalon = String(profile?.salon_id ?? '') === String(salonId)
+  if (!isAdmin || !sameSalon) {
     const error = new Error('Acesso negado')
     error.status = 403
     throw error
   }
 
   return profile
+}
+
+async function deleteEmployeeLogin(supabase, employee, salonId) {
+  const authUserId = employee?.user_id
+  const loginEmail = employee?.login_email || employee?.email
+
+  const { data: profile } = authUserId
+    ? await supabase.from('users').select('id, role, salon_id').eq('id', authUserId).eq('salon_id', salonId).maybeSingle()
+    : loginEmail
+      ? await supabase.from('users').select('id, role, salon_id').eq('email', loginEmail).eq('salon_id', salonId).maybeSingle()
+      : { data: null }
+
+  if (!profile?.id || String(profile.role ?? '').trim().toLowerCase() === 'admin') return
+
+  const { error: authError } = await supabase.auth.admin.deleteUser(profile.id)
+  if (authError) {
+    const message = String(authError.message ?? '').toLowerCase()
+    if (!message.includes('not found') && !message.includes('does not exist')) throw authError
+  }
+
+  const { error: dbError } = await supabase
+    .from('users')
+    .delete()
+    .eq('id', profile.id)
+    .eq('salon_id', salonId)
+
+  if (dbError) throw dbError
 }
 
 export default async function handler(req, res) {
@@ -83,17 +113,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { user_id, email } = req.body ?? {}
-    const normalizedUserId = user_id?.trim()
-    const normalizedEmail = email?.trim().toLowerCase()
+    const { salon_id, table, id } = req.body ?? {}
+    const normalizedSalonId = salon_id?.trim?.() ?? salon_id
+    const normalizedTable = String(table ?? '').trim()
+    const normalizedId = id?.trim?.() ?? id
 
     const supabaseUrl = getSupabaseUrl()
     if (!supabaseUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: 'Variaveis Supabase nao configuradas' })
     }
 
-    if (!normalizedUserId && !normalizedEmail) {
-      return res.status(400).json({ error: 'Informe user_id ou email' })
+    if (!normalizedSalonId || !normalizedId || !allowedTables.has(normalizedTable)) {
+      return res.status(400).json({ error: 'Informe salao, tabela e registro validos.' })
     }
 
     const supabase = createClient(
@@ -102,48 +133,29 @@ export default async function handler(req, res) {
       { auth: { persistSession: false, autoRefreshToken: false } }
     )
 
-    const adminProfile = await requireAdmin(supabase, req)
+    await requireAdmin(supabase, req, normalizedSalonId)
 
-    const query = supabase
-      .from('users')
-      .select('id, email, role, salon_id')
-      .eq('salon_id', adminProfile.salon_id)
+    const { data: record, error: recordError } = await supabase
+      .from(normalizedTable)
+      .select('*')
+      .eq('id', normalizedId)
+      .eq('salon_id', normalizedSalonId)
+      .maybeSingle()
 
-    const { data: targetProfile, error: targetError } = normalizedUserId
-      ? await query.eq('id', normalizedUserId).maybeSingle()
-      : await query.eq('email', normalizedEmail).maybeSingle()
+    if (recordError) throw recordError
+    if (!record) return res.status(404).json({ error: 'Registro nao encontrado neste salao.' })
 
-    if (targetError) throw targetError
-
-    if (!targetProfile) {
-      return res.status(200).json({ success: true, already_removed: true })
+    if (normalizedTable === 'employees') {
+      await deleteEmployeeLogin(supabase, record, normalizedSalonId)
     }
 
-    if (targetProfile.id === adminProfile.id || String(targetProfile.role ?? '').trim().toLowerCase() === 'admin') {
-      return res.status(403).json({ error: 'Nao e permitido remover este usuario' })
-    }
-
-    const { error: authError } = await supabase.auth.admin.deleteUser(targetProfile.id)
-
-    if (authError) {
-      console.error('Erro AUTH delete-user:', authError)
-      const authMessage = String(authError.message ?? '').toLowerCase()
-      if (authMessage.includes('not found') || authMessage.includes('does not exist')) {
-        return res.status(200).json({ success: true, already_removed: true })
-      }
-      return res.status(400).json({ error: 'Nao foi possivel remover o login.' })
-    }
-
-    const { error: dbError } = await supabase
-      .from('users')
+    const { error: deleteError } = await supabase
+      .from(normalizedTable)
       .delete()
-      .eq('id', targetProfile.id)
-      .eq('salon_id', adminProfile.salon_id)
+      .eq('id', normalizedId)
+      .eq('salon_id', normalizedSalonId)
 
-    if (dbError) {
-      console.error('Erro DB delete-user:', dbError)
-      return res.status(400).json({ error: 'Login removido, mas nao foi possivel remover o perfil.' })
-    }
+    if (deleteError) throw deleteError
 
     return res.status(200).json({ success: true })
   } catch (err) {

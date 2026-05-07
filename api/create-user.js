@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 const allowedRoles = new Set(['caixa', 'cashier', 'profissional', 'professional'])
 const requests = new Map()
 
+function getSupabaseUrl() {
+  return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+}
+
 function setSecurityHeaders(res) {
   res.setHeader('Cache-Control', 'no-store')
   res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -33,6 +37,51 @@ function getBearerToken(req) {
 function safeError(error) {
   console.error('create-user:', error)
   return 'Nao foi possivel criar o usuario.'
+}
+
+function isAlreadyRegisteredError(error) {
+  const message = String(error?.message ?? '').toLowerCase()
+  return message.includes('already registered') ||
+    message.includes('already been registered') ||
+    message.includes('user already exists') ||
+    message.includes('email_exists')
+}
+
+async function findAuthUserByEmail(supabase, email) {
+  const normalizedEmail = email.trim().toLowerCase()
+
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) throw error
+
+    const user = data?.users?.find((item) => item.email?.trim().toLowerCase() === normalizedEmail)
+    if (user) return user
+    if ((data?.users?.length ?? 0) < 1000) return null
+  }
+
+  return null
+}
+
+async function createOrReuseAuthUser(supabase, { email, password }) {
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true
+  })
+
+  if (!error) return data?.user ?? null
+  if (!isAlreadyRegisteredError(error)) throw error
+
+  const existingUser = await findAuthUserByEmail(supabase, email)
+  if (!existingUser?.id) throw error
+
+  const { error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, {
+    password,
+    email_confirm: true
+  })
+  if (updateError) throw updateError
+
+  return existingUser
 }
 
 async function requireAdmin(supabase, req, salonId) {
@@ -88,7 +137,8 @@ export default async function handler(req, res) {
     const normalizedSalonId = salon_id?.trim?.() ?? salon_id
     const normalizedRole = role === 'caixa' || role === 'cashier' ? 'caixa' : 'profissional'
 
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const supabaseUrl = getSupabaseUrl()
+    if (!supabaseUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: 'Variaveis Supabase nao configuradas' })
     }
 
@@ -109,44 +159,63 @@ export default async function handler(req, res) {
     }
 
     const supabase = createClient(
-      process.env.SUPABASE_URL,
+      supabaseUrl,
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false, autoRefreshToken: false } }
     )
 
     await requireAdmin(supabase, req, normalizedSalonId)
 
-    const { data: userData, error: authError } =
-      await supabase.auth.admin.createUser({
-        email: normalizedEmail,
-        password,
-        email_confirm: true
-      })
+    const { data: existingProfile, error: existingProfileError } = await supabase
+      .from('users')
+      .select('id, email, role, salon_id')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
 
-    if (authError) {
+    if (existingProfileError) throw existingProfileError
+    if (existingProfile && String(existingProfile.salon_id ?? '') !== String(normalizedSalonId)) {
+      return res.status(409).json({ error: 'Este e-mail ja pertence a outro salao.' })
+    }
+    if (String(existingProfile?.role ?? '').trim().toLowerCase() === 'admin') {
+      return res.status(409).json({ error: 'Este e-mail pertence a um admin.' })
+    }
+
+    let authUser
+    try {
+      authUser = await createOrReuseAuthUser(supabase, {
+        email: normalizedEmail,
+        password
+      })
+    } catch (authError) {
       console.error('Erro AUTH create-user:', authError)
       return res.status(400).json({ error: 'Nao foi possivel criar o login.' })
     }
 
-    if (!userData?.user?.id) {
+    if (!authUser?.id) {
       return res.status(500).json({ error: 'Auth nao retornou usuario criado' })
     }
 
-    const { error: dbError } = await supabase.from('users').insert({
-      id: userData.user.id,
+    const userProfile = {
+      id: authUser.id,
       email: normalizedEmail,
       name: normalizedName,
       role: normalizedRole,
       salon_id: normalizedSalonId
-    })
+    }
+
+    const profileQuery = existingProfile
+      ? supabase.from('users').update(userProfile).eq('email', normalizedEmail)
+      : supabase.from('users').insert(userProfile)
+
+    const { error: dbError } = await profileQuery
 
     if (dbError) {
       console.error('Erro DB create-user:', dbError)
-      await supabase.auth.admin.deleteUser(userData.user.id)
+      if (!existingProfile) await supabase.auth.admin.deleteUser(authUser.id)
       return res.status(400).json({ error: 'Nao foi possivel salvar o perfil do usuario.' })
     }
 
-    return res.status(200).json({ success: true })
+    return res.status(200).json({ success: true, user_id: authUser.id })
   } catch (err) {
     const status = err.status || 500
     return res.status(status).json({ error: status >= 500 ? safeError(err) : err.message })

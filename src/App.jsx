@@ -14,7 +14,6 @@ import {
   createService as createServiceRecord,
   databaseNotConfiguredMessage,
   deleteAppointment as deleteAppointmentRecord,
-  deleteEmployee as deleteEmployeeRecord,
   deleteService as deleteServiceRecord,
   ensureAdminSalon,
   fetchAdvances as fetchAdvancesFromSupabase,
@@ -1464,6 +1463,23 @@ async function getAuthenticatedApiHeaders() {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${data.session.access_token}`
   }
+}
+
+async function deleteSalonRecordViaApi({ salonId, table, id, reason }) {
+  const headers = await getAuthenticatedApiHeaders()
+  const response = await fetch('/api/delete-record', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ salon_id: salonId, table, id, reason })
+  })
+  const result = await response.json()
+
+  if (!response.ok) {
+    console.error('Erro API delete-record:', result)
+    throw new Error(result.error || 'Nao foi possivel apagar o registro.')
+  }
+
+  return result
 }
 
 function normalizeRole(role) {
@@ -3050,6 +3066,24 @@ function Clients({ salonId, user, clients, setClients, appointments, notify }) {
     }
   }
 
+  async function removeClient(client) {
+    if (!canDeactivate) return
+    if (!window.confirm(`Tem certeza que deseja apagar o cliente ${client.name}?`)) return
+
+    try {
+      await deleteSalonRecordViaApi({
+        salonId,
+        table: 'clients',
+        id: client.id,
+        reason: `Cliente apagado pelo admin: ${client.name}`
+      })
+      setClients((current) => current.filter((item) => item.id !== client.id))
+      notify?.('Cliente apagado com sucesso.')
+    } catch (error) {
+      handleDataActionError(error, notify)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3079,9 +3113,10 @@ function Clients({ salonId, user, clients, setClients, appointments, notify }) {
             <p className="mt-1 text-gray-600">Esse cliente costuma fazer {insights.favoriteService}.</p>
           </div>
           {canEdit && (
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={() => openEdit(item)} className={buttonSecondary}>Editar Cliente</button>
               {canDeactivate && <button onClick={() => toggleClient(item)} className={buttonSecondary}>{item.active ? 'Desativar' : 'Ativar'}</button>}
+              {canDeactivate && <button onClick={() => removeClient(item)} className={buttonDanger}>Apagar</button>}
             </div>
           )}
               </>
@@ -3352,6 +3387,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
             throw new Error(result.error || "Erro ao criar login")
           }
 
+          saved.userId = result.user_id ?? saved.userId
         } catch (loginError) {
           notify?.('Funcionário salvo, mas erro ao criar login', 'error')
           setModalOpen(false)
@@ -3359,6 +3395,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
         }
 
         const savedWithLogin = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, saved.id, {
+          user_id: saved.userId,
           login_email: loginEmail,
           login_status: 'ativo'
         }))
@@ -3408,44 +3445,18 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
     ))
 
     if (hasLinkedFutureAppointments) {
-      if (!window.confirm('Este funcionário possui agendamentos vinculados. Deseja apenas desativá-lo?')) return
-      try {
-        const saved = normalizeEmployeeRecord(await updateEmployeeRecord(salonId, employee.id, { active: false }))
-        setEmployees((current) => current.map((item) => item.id === employee.id ? saved : item))
-        notify?.('Funcionário desativado com sucesso')
-      } catch (error) {
-        handleDataActionError(error, notify)
-      }
-      return
+      if (!window.confirm('Este funcionário possui agendamentos futuros. Deseja apagar mesmo assim? Revise a agenda depois.')) return
     }
 
     try {
-      const loginUserId = employee.userId ?? employee.user_id ?? ''
-      const loginEmail = employee.accessEmail ?? employee.login_email ?? ''
-      const hasLogin = Boolean(loginUserId || loginEmail)
-
-      if (hasLogin) {
-        const headers = await getAuthenticatedApiHeaders()
-        const response = await fetch('/api/delete-user', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            user_id: loginUserId,
-            email: loginEmail
-          })
-        })
-
-        const result = await response.json()
-
-        if (!response.ok) {
-          console.error('Erro API delete-user:', result)
-          throw new Error(result.error || 'Erro ao remover login')
-        }
-      }
-
-      await deleteEmployeeRecord(salonId, employee.id)
+      await deleteSalonRecordViaApi({
+        salonId,
+        table: 'employees',
+        id: employee.id,
+        reason: `Funcionario apagado pelo admin: ${employee.name}`
+      })
       setEmployees((current) => current.filter((item) => item.id !== employee.id))
-      notify?.(hasLogin ? 'Funcionário e login removidos com sucesso.' : 'Funcionário removido com sucesso')
+      notify?.('Funcionário removido com sucesso.')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -4306,27 +4317,31 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
 
   async function removeAdvance(item, reason) {
     if (!String(reason ?? '').trim()) {
-      notify?.('Informe o motivo do cancelamento.', 'error')
+      notify?.('Informe o motivo da exclusão.', 'error')
       return
     }
     try {
-    const cancelledAt = new Date().toISOString()
-    const updatedAdvance = normalizeAdvanceRecord(await updateAdvanceRecord(salonId, item.id, { status: 'cancelado', cancelledAt, cancelled_at: cancelledAt, cancelledReason: reason, cancelled_reason: reason }))
     await recordAuditLog({
       salonId,
       user,
-      action: 'cancelamento_vale',
+      action: 'exclusao_vale',
       entityType: 'advance',
       entityId: item.id,
       oldData: item,
-      newData: updatedAdvance,
+      newData: null,
       reason,
       onCreated: (log) => setAuditLogs?.((current) => [log, ...(current || [])])
     })
-    setAdvances((current) => current.map((advance) => advance.id === item.id ? updatedAdvance : advance))
+    await deleteSalonRecordViaApi({
+      salonId,
+      table: 'advances',
+      id: item.id,
+      reason
+    })
+    setAdvances((current) => current.filter((advance) => advance.id !== item.id))
     setCashEntries((current) => current.filter((entry) => String(entry.id) !== String(`advance-${item.id}`)))
     setCancelTarget(null)
-    notify?.('Vale excluído.')
+    notify?.('Vale apagado com sucesso.')
     } catch (error) {
       handleDataActionError(error, notify)
     }
@@ -4365,7 +4380,7 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
           <div className="mt-4 flex flex-wrap gap-2">
             <button onClick={() => openEdit(item)} className={buttonSecondary}>{uiText.common.edit}</button>
             {advanceStatus(item) === 'pendente' && <button onClick={() => setDiscountTarget(item)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">Marcar descontado</button>}
-            {canDelete && advanceStatus(item) !== 'cancelado' && <button onClick={() => setCancelTarget(item)} className={buttonDanger}>Cancelar</button>}
+            {canDelete && <button onClick={() => setCancelTarget(item)} className={buttonDanger}>Apagar</button>}
           </div>
         </>
       )} />
@@ -4379,9 +4394,9 @@ function Advances({ salonId, user, employees, advances, setAdvances, setCashEntr
       {modalOpen && <AdvanceModal employees={employees} advance={editing} onClose={() => setModalOpen(false)} onSave={saveAdvance} />}
       {cancelTarget && (
         <ReasonModal
-          title="Cancelar vale"
-          description={`Informe o motivo para cancelar o vale de ${advanceEmployeeName(cancelTarget)}.`}
-          confirmLabel="Cancelar vale"
+          title="Apagar vale"
+          description={`Informe o motivo para apagar definitivamente o vale de ${advanceEmployeeName(cancelTarget)}.`}
+          confirmLabel="Apagar vale"
           danger
           onClose={() => setCancelTarget(null)}
           onConfirm={(reason) => removeAdvance(cancelTarget, reason)}

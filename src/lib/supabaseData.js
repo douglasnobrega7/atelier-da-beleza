@@ -117,6 +117,7 @@ function employeePayload(payload = {}, salonId, includeSalon = false) {
     role: includeSalon || hasField(payload, 'role') || hasField(payload, 'employeeType') || hasField(payload, 'employee_type') || hasField(payload, 'tipoUsuario') || hasField(payload, 'tipo_usuario') ? normalizedEmployeeType : undefined,
     functions: includeSalon || hasField(payload, 'functions') || hasField(payload, 'funcoes') || hasField(payload, 'role') || hasField(payload, 'position') ? employeeFunctionsText : undefined,
     email: includeSalon || hasField(payload, 'email') || hasField(payload, 'loginEmail') || hasField(payload, 'accessEmail') || hasField(payload, 'login_email') ? payload.email ?? payload.loginEmail ?? payload.accessEmail ?? payload.login_email ?? '' : undefined,
+    user_id: includeSalon || hasField(payload, 'userId') || hasField(payload, 'user_id') ? payload.userId ?? payload.user_id ?? null : undefined,
     login_active: includeSalon || hasField(payload, 'loginActive') || hasField(payload, 'login_active') || hasField(payload, 'loginStatus') || hasField(payload, 'login_status') ? Boolean(payload.loginActive ?? payload.login_active ?? String(payload.loginStatus ?? payload.login_status).toLowerCase() === 'ativo') : undefined,
     active: includeSalon || hasField(payload, 'active') || hasField(payload, 'status') || hasField(payload, 'workStatus') ? Boolean(payload.active ?? String(payload.status ?? payload.workStatus ?? 'ativo').toLowerCase() !== 'inativo') : undefined,
     funcoes: includeSalon || hasField(payload, 'functions') || hasField(payload, 'funcoes') || hasField(payload, 'role') || hasField(payload, 'position') ? employeeFunctionsList : undefined,
@@ -596,9 +597,9 @@ export async function createEmployee(salonId, payload) {
   try {
     return await insertRow(TABLES.employees, salonId, payload, employeePayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes', 'email', 'login_active', 'active'])) throw error
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes', 'email', 'user_id', 'login_active', 'active'])) throw error
     console.error('erro real do Supabase:', error?.original ?? error)
-    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, email, loginActive, login_active, active, ...compatiblePayload } = payload
+    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, email, userId, user_id, loginActive, login_active, active, ...compatiblePayload } = payload
     return insertRow(TABLES.employees, salonId, compatiblePayload, legacyEmployeePayload)
   }
 }
@@ -607,9 +608,9 @@ export async function updateEmployee(salonId, id, payload) {
   try {
     return await updateRow(TABLES.employees, salonId, id, payload, employeePayload)
   } catch (error) {
-    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes', 'email', 'login_active', 'active'])) throw error
+    if (!isMissingPayloadColumnError(error, ['employee_name', 'functions', 'employee_type', 'tipo_usuario', 'funcoes', 'email', 'user_id', 'login_active', 'active'])) throw error
     console.error('erro real do Supabase:', error?.original ?? error)
-    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, email, loginActive, login_active, active, ...compatiblePayload } = payload
+    const { employeeName, employee_name, employeeType, employee_type, tipoUsuario, tipo_usuario, functions, funcoes, email, userId, user_id, loginActive, login_active, active, ...compatiblePayload } = payload
     return updateRow(TABLES.employees, salonId, id, compatiblePayload, legacyEmployeePayload)
   }
 }
