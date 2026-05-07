@@ -166,6 +166,38 @@ grant usage, select on sequence public.backup_logs_id_seq to authenticated, serv
 grant usage, select on sequence public.login_attempts_id_seq to authenticated, service_role;
 grant usage, select on sequence public.session_logs_id_seq to authenticated, service_role;
 
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
+update auth.users
+set
+  raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'platform_owner'),
+  raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'platform_owner', 'name', 'Douglas Nobrega')
+where auth.users.email = 'douglasnobrega@salaopro.com';
+
+do $$
+declare
+  table_record record;
+  policy_name text;
+begin
+  for table_record in
+    select c.relname as table_name
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and c.relrowsecurity
+  loop
+    policy_name := 'platform_owner_all_' || table_record.table_name;
+    execute format('drop policy if exists %I on public.%I', policy_name, table_record.table_name);
+    execute format(
+      'create policy %I on public.%I for all to authenticated using ((auth.jwt() -> ''app_metadata'' ->> ''role'') = ''platform_owner'') with check ((auth.jwt() -> ''app_metadata'' ->> ''role'') = ''platform_owner'')',
+      policy_name,
+      table_record.table_name
+    );
+  end loop;
+end $$;
+
 drop policy if exists "platform owner manages subscriptions" on public.subscriptions;
 create policy "platform owner manages subscriptions"
 on public.subscriptions

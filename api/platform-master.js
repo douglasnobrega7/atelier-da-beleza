@@ -358,6 +358,10 @@ async function deleteSalon(supabase, owner, body) {
   const { data: profiles, error: profilesError } = await supabase.from('users').select('id, role').eq('salon_id', salonId)
   if (profilesError) throw profilesError
 
+  const { data: salonEmployees, error: employeesError } = await supabase.from('employees').select('id').eq('salon_id', salonId)
+  if (employeesError && !isMissingTableError(employeesError)) throw employeesError
+  const employeeIds = (salonEmployees ?? []).map((employee) => employee.id).filter(Boolean)
+
   const targetProfiles = (profiles ?? []).filter((profile) => String(profile.role).toLowerCase() !== 'platform_owner')
   for (const profile of targetProfiles) {
     if (isUuid(profile.id)) {
@@ -367,7 +371,13 @@ async function deleteSalon(supabase, owner, body) {
   }
 
   await writePlatformAudit(supabase, owner, 'exclusao_salao', { salon_id: salonId }, salonId)
-  const tables = ['subscriptions', 'session_logs', 'login_attempts', 'backup_logs', 'audit_logs', 'cash_closures', 'employee_commission_payments', 'commission_payments', 'cash_movements', 'advances', 'appointments', 'stock_items', 'services', 'clients', 'employees', 'users']
+
+  if (employeeIds.length) {
+    const { error: commissionError } = await supabase.from('commission_payments').delete().in('employee_id', employeeIds)
+    if (commissionError && !isMissingTableError(commissionError)) throw commissionError
+  }
+
+  const tables = ['subscriptions', 'session_logs', 'login_attempts', 'backup_logs', 'audit_logs', 'cash_closures', 'cash_closings', 'employee_commission_payments', 'cash_movements', 'advances', 'appointments', 'stock_items', 'services', 'clients', 'employees', 'users']
   for (const table of tables) {
     const { error } = await supabase.from(table).delete().eq('salon_id', salonId)
     if (error && !isMissingTableError(error)) throw error
