@@ -4,7 +4,16 @@ const requests = new Map()
 const allowedTables = new Set(['clients', 'employees', 'advances', 'audit_logs'])
 
 function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  return process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    'https://aginagtxlavplmswywys.supabase.co'
+}
+
+function getSupabaseServiceKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SECRET_KEY
 }
 
 function setSecurityHeaders(res) {
@@ -37,6 +46,11 @@ function getBearerToken(req) {
 function safeError(error) {
   console.error('delete-record:', error)
   return 'Nao foi possivel apagar o registro.'
+}
+
+function isUuid(id) {
+  const text = String(id ?? '').trim()
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
 }
 
 async function requireAdmin(supabase, req, salonId) {
@@ -119,8 +133,9 @@ export default async function handler(req, res) {
     const normalizedId = id?.trim?.() ?? id
 
     const supabaseUrl = getSupabaseUrl()
-    if (!supabaseUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return res.status(500).json({ error: 'Variaveis Supabase nao configuradas' })
+    const serviceKey = getSupabaseServiceKey()
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Configure SUPABASE_SERVICE_ROLE_KEY na Vercel.' })
     }
 
     if (!normalizedSalonId || !normalizedId || !allowedTables.has(normalizedTable)) {
@@ -129,11 +144,28 @@ export default async function handler(req, res) {
 
     const supabase = createClient(
       supabaseUrl,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      serviceKey,
       { auth: { persistSession: false, autoRefreshToken: false } }
     )
 
     await requireAdmin(supabase, req, normalizedSalonId)
+
+    if (normalizedTable === 'audit_logs') {
+      if (!isUuid(normalizedId)) return res.status(400).json({ error: 'Registro de auditoria invalido.' })
+
+      const { count, error: deleteAuditError } = await supabase
+        .from('audit_logs')
+        .delete({ count: 'exact' })
+        .eq('id', normalizedId)
+        .eq('salon_id', normalizedSalonId)
+
+      if (deleteAuditError) {
+        console.error('Erro DB delete audit log:', deleteAuditError)
+        return res.status(400).json({ error: deleteAuditError.message || 'Nao foi possivel apagar o registro de auditoria.' })
+      }
+
+      return res.status(200).json({ success: true, deleted: count ?? 0 })
+    }
 
     const { data: record, error: recordError } = await supabase
       .from(normalizedTable)

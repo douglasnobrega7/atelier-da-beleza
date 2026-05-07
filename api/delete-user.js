@@ -3,7 +3,16 @@ import { createClient } from '@supabase/supabase-js'
 const requests = new Map()
 
 function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  return process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    'https://aginagtxlavplmswywys.supabase.co'
+}
+
+function getSupabaseServiceKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SECRET_KEY
 }
 
 function setSecurityHeaders(res) {
@@ -88,8 +97,9 @@ export default async function handler(req, res) {
     const normalizedEmail = email?.trim().toLowerCase()
 
     const supabaseUrl = getSupabaseUrl()
-    if (!supabaseUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return res.status(500).json({ error: 'Variaveis Supabase nao configuradas' })
+    const serviceKey = getSupabaseServiceKey()
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Configure SUPABASE_SERVICE_ROLE_KEY na Vercel.' })
     }
 
     if (!normalizedUserId && !normalizedEmail) {
@@ -98,7 +108,7 @@ export default async function handler(req, res) {
 
     const supabase = createClient(
       supabaseUrl,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      serviceKey,
       { auth: { persistSession: false, autoRefreshToken: false } }
     )
 

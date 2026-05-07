@@ -3389,7 +3389,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 
           saved.userId = result.user_id ?? saved.userId
         } catch (loginError) {
-          notify?.('Funcionário salvo, mas erro ao criar login', 'error')
+          notify?.(`Funcionário salvo, mas erro ao criar login: ${loginError.message}`, 'error')
           setModalOpen(false)
           return
         }

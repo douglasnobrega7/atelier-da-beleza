@@ -4,7 +4,16 @@ const allowedRoles = new Set(['caixa', 'cashier', 'profissional', 'professional'
 const requests = new Map()
 
 function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  return process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    'https://aginagtxlavplmswywys.supabase.co'
+}
+
+function getSupabaseServiceKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SECRET_KEY
 }
 
 function setSecurityHeaders(res) {
@@ -138,8 +147,9 @@ export default async function handler(req, res) {
     const normalizedRole = role === 'caixa' || role === 'cashier' ? 'caixa' : 'profissional'
 
     const supabaseUrl = getSupabaseUrl()
-    if (!supabaseUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return res.status(500).json({ error: 'Variaveis Supabase nao configuradas' })
+    const serviceKey = getSupabaseServiceKey()
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Configure SUPABASE_SERVICE_ROLE_KEY na Vercel.' })
     }
 
     if (!normalizedEmail || !password || !normalizedName || !normalizedSalonId) {
@@ -160,7 +170,7 @@ export default async function handler(req, res) {
 
     const supabase = createClient(
       supabaseUrl,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      serviceKey,
       { auth: { persistSession: false, autoRefreshToken: false } }
     )
 
@@ -188,7 +198,7 @@ export default async function handler(req, res) {
       })
     } catch (authError) {
       console.error('Erro AUTH create-user:', authError)
-      return res.status(400).json({ error: 'Nao foi possivel criar o login.' })
+      return res.status(400).json({ error: authError.message || 'Nao foi possivel criar o login.' })
     }
 
     if (!authUser?.id) {
@@ -212,7 +222,7 @@ export default async function handler(req, res) {
     if (dbError) {
       console.error('Erro DB create-user:', dbError)
       if (!existingProfile) await supabase.auth.admin.deleteUser(authUser.id)
-      return res.status(400).json({ error: 'Nao foi possivel salvar o perfil do usuario.' })
+      return res.status(400).json({ error: dbError.message || 'Nao foi possivel salvar o perfil do usuario.' })
     }
 
     return res.status(200).json({ success: true, user_id: authUser.id })
