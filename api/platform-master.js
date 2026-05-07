@@ -61,7 +61,7 @@ function isUuid(id) {
 
 function safeError(error) {
   console.error('platform-master:', error)
-  return 'Nao foi possivel executar a acao do painel master.'
+  return error?.message || 'Nao foi possivel executar a acao do painel master.'
 }
 
 function isMissingTableError(error) {
@@ -156,7 +156,7 @@ async function writePlatformAudit(supabase, owner, action, details = {}, salonId
     user_name: owner?.name ?? owner?.email ?? 'platform_owner',
     action,
     entity_type: 'platform',
-    entity_id: salonId ? String(salonId) : null,
+    entity_id: salonId && isUuid(salonId) ? salonId : null,
     new_data: details,
     reason: details.reason ?? 'Acao executada pelo Painel da Plataforma',
     created_at: new Date().toISOString()
