@@ -156,6 +156,16 @@ alter table public.backup_logs enable row level security;
 alter table public.login_attempts enable row level security;
 alter table public.session_logs enable row level security;
 
+grant select, insert, update, delete on table public.subscriptions to authenticated, service_role;
+grant select, insert, update, delete on table public.backup_logs to authenticated, service_role;
+grant select, insert, update, delete on table public.login_attempts to authenticated, service_role;
+grant select, insert, update, delete on table public.session_logs to authenticated, service_role;
+
+grant usage, select on sequence public.subscriptions_id_seq to authenticated, service_role;
+grant usage, select on sequence public.backup_logs_id_seq to authenticated, service_role;
+grant usage, select on sequence public.login_attempts_id_seq to authenticated, service_role;
+grant usage, select on sequence public.session_logs_id_seq to authenticated, service_role;
+
 drop policy if exists "platform owner manages subscriptions" on public.subscriptions;
 create policy "platform owner manages subscriptions"
 on public.subscriptions
