@@ -1339,6 +1339,10 @@ const cashierMenu = [
   { id: 'vales', label: 'Vales' }
 ]
 
+const platformMenu = [
+  { id: 'plataforma', label: 'Painel da Plataforma' }
+]
+
 const professionalMenu = [
   { id: 'minha-agenda', label: 'Minha Agenda' },
   { id: 'perfil', label: 'Perfil' }
@@ -1406,6 +1410,13 @@ function getStoredTheme() {
 
 const sessionPersistenceKey = 'salon-session-persistence'
 const browserSessionKey = 'salon-browser-session-active'
+const platformUsernameMap = {
+  douglasnobrega: 'douglasnobrega@salaopro.com'
+}
+const premiumPlan = {
+  name: 'Plano Premium',
+  amount: 49.90
+}
 
 const premiumSuccessMessages = {
   saved: '✔ Alterações salvas com sucesso',
@@ -1481,14 +1492,43 @@ async function deleteSalonRecordViaApi({ salonId, table, id, reason }) {
   return result
 }
 
+function getLoginEmail(login) {
+  const normalizedLogin = String(login ?? '').trim().toLowerCase()
+  if (!normalizedLogin) return ''
+  return platformUsernameMap[normalizedLogin] ?? normalizedLogin
+}
+
+async function callPlatformMasterApi(payload, method = 'POST') {
+  const headers = await getAuthenticatedApiHeaders()
+  const response = await fetch('/api/platform-master', {
+    method,
+    headers,
+    body: method === 'GET' ? undefined : JSON.stringify(payload)
+  })
+  const result = await response.json()
+
+  if (!response.ok) {
+    console.error('Erro API platform-master:', result)
+    throw new Error(result.error || 'Nao foi possivel executar a acao master.')
+  }
+
+  return result
+}
+
+async function fetchPlatformMasterData() {
+  return callPlatformMasterApi(null, 'GET')
+}
+
 function normalizeRole(role) {
   const normalizedRole = String(role ?? '').trim().toLowerCase()
+  if (normalizedRole === 'platform_owner') return 'platform_owner'
   if (normalizedRole === 'caixa' || normalizedRole === 'cashier') return 'cashier'
   if (normalizedRole === 'profissional' || normalizedRole === 'professional') return 'professional'
   return normalizedRole === 'admin' ? 'admin' : ''
 }
 
 function getRoleTitle(role) {
+  if (role === 'platform_owner') return 'Dono da Plataforma'
   if (role === 'admin') return 'Admin'
   if (role === 'cashier') return 'Funcionário Caixa'
   return 'Profissional'
@@ -1511,6 +1551,7 @@ function normalizeUserProfile(profile, employees = []) {
     name: employee?.name ?? profile.name,
     title: getRoleTitle(role),
     email: profile.email,
+    username: profile.username ?? '',
     phone: employee?.phone ?? ''
   }
 }
@@ -1532,6 +1573,7 @@ function createAdminFallbackUser(authUser) {
 }
 
 function getInitialPageForRole(role) {
+  if (role === 'platform_owner') return 'plataforma'
   if (role === 'admin') return 'dashboard'
   if (role === 'cashier') return 'caixa'
   if (role === 'professional') return 'minha-agenda'
@@ -1548,6 +1590,9 @@ function App() {
   const [currentSalonId, setCurrentSalonId] = useState(null)
   const [databaseStatus, setDatabaseStatus] = useState({ notConfigured: false, message: '' })
   const [dataLoading, setDataLoading] = useState(false)
+  const [platformLoading, setPlatformLoading] = useState(false)
+  const [platformData, setPlatformData] = useState(null)
+  const [platformSalonUser, setPlatformSalonUser] = useState(null)
   const [cashEntries, setCashEntries] = useState([])
   const [cashClosures, setCashClosures] = useState([])
   const [commissionPayments, setCommissionPayments] = useState([])
@@ -1708,7 +1753,9 @@ function App() {
     let profile = loadedProfile
 
     try {
-      profile = await ensureAdminSalon(loadedProfile, authUser)
+      if (normalizeRole(loadedProfile?.role) === 'admin') {
+        profile = await ensureAdminSalon(loadedProfile, authUser)
+      }
     } catch (error) {
       console.error('Erro ao criar salão no primeiro login:', error)
     }
@@ -1718,8 +1765,14 @@ function App() {
 
     setCurrentUser(user)
     setCurrentSalonId(salonId)
+    setPlatformSalonUser(null)
     setActivePage(getInitialPageForRole(user.role))
-    await loadSalonData(salonId)
+    if (user.role === 'platform_owner') {
+      clearSalonData()
+      await loadPlatformData()
+    } else {
+      await loadSalonData(salonId)
+    }
     return user
   }
 
@@ -1776,10 +1829,27 @@ function App() {
     setToast({ text, type, id: Date.now() })
   }
 
+  async function loadPlatformData() {
+    setPlatformLoading(true)
+    try {
+      const data = await fetchPlatformMasterData()
+      setPlatformData(data)
+      setDatabaseStatus({ notConfigured: false, message: '' })
+      return data
+    } catch (error) {
+      console.error('Erro ao carregar painel master:', error)
+      notify?.(error.message ?? 'Não foi possível carregar o painel master.', 'error')
+      throw error
+    } finally {
+      setPlatformLoading(false)
+    }
+  }
+
   async function handleLogin(email, password, keepConnected) {
+    const loginEmail = getLoginEmail(email)
     try {
       const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
+        email: loginEmail,
         password: password.trim()
       })
 
@@ -1792,6 +1862,31 @@ function App() {
       if (!authUser?.id) return { success: false, error: 'Login sem usuário retornado pelo Auth.' }
 
       const activeProfile = await loadProfileForAuthUser(authUser, { createMissingProfile: true })
+      if (activeProfile?.login_active === false) {
+        await supabase.auth.signOut()
+        return { success: false, error: 'Login desativado. Entre em contato com o administrador.' }
+      }
+
+      const role = normalizeRole(activeProfile?.role)
+      if (role !== 'platform_owner') {
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .select('status, next_due_date')
+          .eq('salon_id', activeProfile?.salon_id)
+          .maybeSingle()
+        const status = subscription?.status ?? 'ativo'
+        const dueDate = subscription?.next_due_date
+        const dueExpired = dueDate && String(dueDate).slice(0, 10) < todayIso
+        if (status !== 'ativo' || dueExpired) {
+          await supabase.auth.signOut()
+          return { success: false, error: 'Sua assinatura está inativa. Entre em contato com o suporte.' }
+        }
+      }
+
+      await supabase
+        .from('users')
+        .update({ last_login_at: new Date().toISOString() })
+        .eq('id', authUser.id)
 
       if (keepConnected) {
         window.localStorage.setItem(sessionPersistenceKey, 'local')
@@ -1816,10 +1911,47 @@ function App() {
     window.sessionStorage.removeItem(browserSessionKey)
     setCurrentUser(null)
     setCurrentSalonId(null)
+    setPlatformSalonUser(null)
+    setPlatformData(null)
     setDatabaseStatus({ notConfigured: false, message: '' })
     clearSalonData()
     setActivePage('dashboard')
     setAgendaProfessional('all')
+  }
+
+  async function accessSalonAsPlatformOwner(salon) {
+    if (!salon?.id) return
+    try {
+      await callPlatformMasterApi({ action: 'access_salon', salon_id: salon.id })
+      const platformOwner = currentUser
+      setPlatformSalonUser(platformOwner)
+      const temporaryUser = {
+        ...platformOwner,
+        role: 'admin',
+        title: 'Admin temporário',
+        salon_id: salon.id,
+        salonId: salon.id,
+        platformOwnerSession: true,
+        name: platformOwner.name || 'Dono da Plataforma'
+      }
+      setCurrentUser(temporaryUser)
+      setCurrentSalonId(salon.id)
+      setActivePage('dashboard')
+      await loadSalonData(salon.id)
+      notify('Acesso temporário ao salão registrado na auditoria.')
+    } catch (error) {
+      notify(error.message ?? 'Não foi possível acessar o salão.', 'error')
+    }
+  }
+
+  async function returnToPlatformPanel() {
+    if (!platformSalonUser) return
+    setCurrentUser(platformSalonUser)
+    setCurrentSalonId(null)
+    setPlatformSalonUser(null)
+    clearSalonData()
+    setActivePage('plataforma')
+    await loadPlatformData()
   }
 
   function openAgendaForProfessional(name) {
@@ -1835,14 +1967,22 @@ function App() {
     return <LoginScreen onLogin={handleLogin} theme={theme} onThemeChange={setTheme} />
   }
 
-  const menu = currentUser.role === 'admin' ? adminMenu : currentUser.role === 'professional' ? professionalMenu : cashierMenu
+  const menu = currentUser.role === 'platform_owner'
+    ? platformMenu
+    : currentUser.platformOwnerSession
+      ? adminMenu.filter((item) => !['caixa', 'vales', 'relatorios'].includes(item.id))
+      : currentUser.role === 'admin'
+        ? adminMenu
+        : currentUser.role === 'professional'
+          ? professionalMenu
+          : cashierMenu
   const allowedPages = menu.map((item) => item.id)
   const safePage = allowedPages.includes(activePage) ? activePage : allowedPages[0]
 
   return (
     <div className="min-h-screen bg-[#e8eff3] text-graphite transition-colors dark:bg-[#0f151c] dark:text-gray-100">
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <Sidebar user={currentUser} menu={menu} activePage={safePage} salonName={salonSettings.salonName} onNavigate={setActivePage} onLogout={handleLogout} />
+        <Sidebar user={currentUser} menu={menu} activePage={safePage} salonName={salonSettings.salonName} onNavigate={setActivePage} onLogout={handleLogout} onReturnToPlatform={platformSalonUser ? returnToPlatformPanel : null} />
         <main className="flex-1 overflow-hidden">
           <Topbar
             title={menu.find((item) => item.id === safePage)?.label ?? 'Atelier'}
@@ -1901,6 +2041,10 @@ function App() {
                 setAgendaProfessional={setAgendaProfessional}
                 onOpenAgendaForProfessional={openAgendaForProfessional}
                 notify={notify}
+                platformData={platformData}
+                platformLoading={platformLoading}
+                onRefreshPlatform={loadPlatformData}
+                onAccessSalonAsOwner={accessSalonAsPlatformOwner}
               />
             </PageErrorBoundary>
           </section>
@@ -1964,11 +2108,11 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
             <h2 className="mt-2 text-3xl font-bold">Acesse sua conta</h2>
             <div className="mt-7 space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-gray-600">E-mail</span>
+                <span className="mb-2 block text-sm font-semibold text-gray-600">Login ou e-mail</span>
                 <input
                   className={inputBase}
-                  type="email"
-                  placeholder="E-mail"
+                  type="text"
+                  placeholder="Login ou e-mail"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -2041,15 +2185,16 @@ function Field({ label, value, onChange, type = 'text', placeholder = '', requir
   )
 }
 
-function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
+function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout, onReturnToPlatform }) {
   const displaySalonName = getSidebarSalonName(salonName)
+  const isPlatformOwner = user.role === 'platform_owner'
 
   return (
-    <aside className="border-b border-[#b9cad4] bg-[#edf4f6] px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#0f1821] lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+    <aside className={`border-b px-4 py-4 shadow-sm lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6 ${isPlatformOwner ? 'border-[#1d2938] bg-[#080d14] text-white' : 'border-[#b9cad4] bg-[#edf4f6] dark:border-[#2c3c49] dark:bg-[#0f1821]'}`}>
       <div className="flex items-center justify-between gap-4 lg:block">
         <div className="min-w-0 break-words">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃO</p>
-          {displaySalonName && <h1 className="text-xl font-bold text-graphite">{displaySalonName}</h1>}
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">{isPlatformOwner ? 'PLATAFORMA' : 'SALÃO'}</p>
+          {(displaySalonName || isPlatformOwner) && <h1 className={`text-xl font-bold ${isPlatformOwner ? 'text-white' : 'text-graphite'}`}>{isPlatformOwner ? 'Painel Master' : displaySalonName}</h1>}
         </div>
           <button onClick={onLogout} className={`${buttonSecondary} px-3 py-2 lg:hidden`}>
           Sair
@@ -2071,6 +2216,11 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
       <div className="mt-6 hidden rounded-xl border border-[#c8d6df] bg-[#f5f7fa] p-4 dark:border-[#334555] dark:bg-[#15202a] lg:block">
         <p className="font-semibold">{user.name}</p>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{user.title}</p>
+        {user.platformOwnerSession && (
+          <button onClick={onReturnToPlatform} className={`${buttonPrimary} mt-4 w-full`}>
+            Voltar ao Master
+          </button>
+        )}
         <button onClick={onLogout} className={`${buttonSecondary} mt-4 w-full`}>
           Sair
         </button>
@@ -2123,7 +2273,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
         <div className="flex flex-wrap items-center gap-3">
           <ThemeToggle theme={theme} onChange={onThemeChange} />
           <div className="rounded-full border border-[#c8d6df] bg-white px-4 py-2 text-sm font-semibold text-gray-700 dark:border-[#334555] dark:bg-[#15202a] dark:text-[#f4f8fa]">
-            {user.role === 'admin' ? 'Perfil Admin' : user.role === 'professional' ? 'Perfil Profissional' : 'Funcionário Caixa'}
+            {user.role === 'platform_owner' ? 'Dono da Plataforma' : user.platformOwnerSession ? 'Admin temporário' : user.role === 'admin' ? 'Perfil Admin' : user.role === 'professional' ? 'Perfil Profissional' : 'Funcionário Caixa'}
           </div>
         </div>
       </div>
@@ -2144,11 +2294,15 @@ function ThemeToggle({ theme, onChange }) {
   )
 }
 
-function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, auditLogs, setAuditLogs, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify }) {
+function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, auditLogs, setAuditLogs, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify, platformData, platformLoading, onRefreshPlatform, onAccessSalonAsOwner }) {
   const employeeAppointments = appointments.filter((item) => getAppointmentEmployeeName(item, employees) === user.name)
   const visibleAppointments = appointments
   const activeClients = clients.filter((client) => client.active)
   const professionals = getProfessionals(employees)
+
+  if (user.role === 'platform_owner') {
+    return <PlatformMasterPanel data={platformData} loading={platformLoading} onRefresh={onRefreshPlatform} onAccessSalon={onAccessSalonAsOwner} notify={notify} />
+  }
 
   if (dataLoading) return <DataLoading />
 
@@ -2171,6 +2325,384 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
   }
 
   return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} cashEntries={cashEntries} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
+}
+
+function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }) {
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('todos')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [selectedSalon, setSelectedSalon] = useState(null)
+  const [resetUser, setResetUser] = useState(null)
+  const [busyAction, setBusyAction] = useState('')
+  const metrics = data?.metrics ?? {}
+  const salons = data?.salons ?? []
+  const users = data?.users ?? []
+  const search = query.trim().toLowerCase()
+  const filteredSalons = salons.filter((salon) => {
+    const text = `${salon.name ?? ''} ${salon.admin_name ?? ''} ${salon.admin_email ?? ''} ${salon.whatsapp ?? ''}`.toLowerCase()
+    const matchesSearch = !search || text.includes(search)
+    const matchesStatus = statusFilter === 'todos' || salon.subscription_status === statusFilter
+    return matchesSearch && matchesStatus
+  })
+  const selectedSalonUsers = selectedSalon
+    ? users.filter((user) => String(user.salon_id ?? '') === String(selectedSalon.id))
+    : []
+
+  async function runMasterAction(action, payload, successMessage) {
+    setBusyAction(action)
+    try {
+      await callPlatformMasterApi({ action, ...payload })
+      await onRefresh?.()
+      notify?.(successMessage)
+      return true
+    } catch (error) {
+      notify?.(error.message ?? 'Não foi possível executar a ação.', 'error')
+      return false
+    } finally {
+      setBusyAction('')
+    }
+  }
+
+  async function changeSalonStatus(salon, status) {
+    await runMasterAction(
+      'update_salon_status',
+      { salon_id: salon.id, status },
+      status === 'ativo' ? 'Salão ativado.' : status === 'suspenso' ? 'Salão suspenso.' : 'Salão marcado como inativo.'
+    )
+  }
+
+  async function removeSalon(salon) {
+    if (!window.confirm(`Excluir definitivamente o salão ${salon.name}? Esta ação remove usuários e dados vinculados.`)) return
+    await runMasterAction('delete_salon', { salon_id: salon.id }, 'Salão excluído.')
+    if (selectedSalon?.id === salon.id) setSelectedSalon(null)
+  }
+
+  async function toggleUserLogin(user) {
+    await runMasterAction(
+      'update_user_login',
+      { user_id: user.id, active: !user.login_active },
+      user.login_active ? 'Login desativado.' : 'Login ativado.'
+    )
+  }
+
+  async function exportPlatform(format) {
+    const rows = salons.map((salon) => ({
+      Salao: salon.name,
+      Admin: salon.admin_name,
+      Email: salon.admin_email,
+      WhatsApp: salon.whatsapp,
+      Status: salon.subscription_status,
+      Plano: premiumPlan.name,
+      Valor: premiumPlan.amount,
+      Vencimento: salon.next_due_date ?? '',
+      Funcionarios: salon.employees_count,
+      Clientes: salon.clients_count,
+      Faturamento: salon.revenue
+    }))
+    if (format === 'pdf') {
+      await exportSimplePdf('Relatório Geral da Plataforma', rows, 'relatorio-geral-plataforma.pdf')
+    } else {
+      exportHtmlExcel('Relatorio Geral', rows, 'relatorio-geral-plataforma.xls')
+    }
+    await callPlatformMasterApi({ action: 'export_platform', format })
+    notify?.(format === 'pdf' ? 'Relatório PDF exportado.' : 'Relatório Excel exportado.')
+  }
+
+  if (loading && !data) return <PlatformSkeleton />
+
+  return (
+    <div className="min-h-[calc(100vh-7rem)] rounded-xl border border-[#1f2b3b] bg-[#080d14] p-4 text-white shadow-2xl sm:p-6">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <span className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">
+            Dono da Plataforma
+          </span>
+          <h2 className="mt-3 text-3xl font-black">Painel da Plataforma</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-300">Plano único Premium · {money.format(premiumPlan.amount)}/mês · gestão SaaS multi-salões.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setCreateOpen(true)} className="rounded-xl bg-cyan-200 px-4 py-3 text-sm font-black text-[#07111f] transition hover:bg-cyan-100">Criar salão</button>
+          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15">{loading ? 'Atualizando...' : 'Atualizar'}</button>
+          <button type="button" onClick={() => exportPlatform('pdf')} className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15">PDF geral</button>
+          <button type="button" onClick={() => exportPlatform('excel')} className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15">Excel geral</button>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <PlatformMetric title="Total de salões" value={metrics.total_salons ?? 0} detail="Base cadastrada" />
+        <PlatformMetric title="Salões ativos" value={metrics.active_salons ?? 0} detail="Assinatura em dia" />
+        <PlatformMetric title="Salões suspensos" value={metrics.suspended_salons ?? 0} detail="Acesso bloqueado" />
+        <PlatformMetric title="Usuários" value={metrics.total_users ?? 0} detail={`${metrics.total_clients ?? 0} clientes`} />
+        <PlatformMetric title="Faturamento movimentado" value={money.format(metrics.total_revenue ?? 0)} detail="Soma operacional" />
+        <PlatformMetric title="Atendimentos" value={metrics.total_appointments ?? 0} detail="Total da plataforma" />
+        <PlatformMetric title="Crescimento mensal" value={`${Number(metrics.monthly_growth ?? 0).toFixed(1)}%`} detail="Novos salões" />
+        <PlatformMetric title="Assinatura" value={money.format(premiumPlan.amount)} detail={premiumPlan.name} />
+      </div>
+
+      <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+        <section className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+          <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+            <input className="rounded-xl border border-white/10 bg-[#0d1522] px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Busca global por salão, dono, email ou WhatsApp" />
+            <select className="rounded-xl border border-white/10 bg-[#0d1522] px-4 py-3 text-sm font-semibold text-white" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="todos">Todos status</option>
+              <option value="ativo">Ativo</option>
+              <option value="inativo">Inativo</option>
+              <option value="suspenso">Suspenso</option>
+            </select>
+          </div>
+          <div className="simple-scrollbar mt-4 overflow-x-auto">
+            <table className="w-full min-w-[1120px] text-left text-sm">
+              <thead className="text-xs uppercase tracking-[0.12em] text-slate-400">
+                <tr>
+                  {['Salão', 'Dono/admin', 'Email', 'WhatsApp', 'Status', 'Assinatura', 'Vencimento', 'Equipe', 'Clientes', 'Faturamento', 'Ações'].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSalons.map((salon) => (
+                  <tr key={salon.id} className="border-t border-white/10 align-top text-slate-100 hover:bg-white/[0.04]">
+                    <td className="px-3 py-3 font-black">{salon.name}</td>
+                    <td className="px-3 py-3">{salon.admin_name || '-'}</td>
+                    <td className="px-3 py-3">{salon.admin_email || '-'}</td>
+                    <td className="px-3 py-3">{salon.whatsapp || '-'}</td>
+                    <td className="px-3 py-3"><PlatformStatus status={salon.subscription_status} /></td>
+                    <td className="px-3 py-3">{premiumPlan.name}<br /><span className="text-xs text-slate-400">{money.format(premiumPlan.amount)}/mês</span></td>
+                    <td className="px-3 py-3">{salon.next_due_date ? formatDate(String(salon.next_due_date).slice(0, 10)) : '-'}</td>
+                    <td className="px-3 py-3">{salon.employees_count}</td>
+                    <td className="px-3 py-3">{salon.clients_count}</td>
+                    <td className="px-3 py-3">{money.format(salon.revenue ?? 0)}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => onAccessSalon?.(salon)} className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-black text-[#07111f]">Acessar</button>
+                        <button type="button" onClick={() => setSelectedSalon(salon)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black text-white">Usuários</button>
+                        <button type="button" onClick={() => changeSalonStatus(salon, 'suspenso')} disabled={busyAction !== ''} className="rounded-lg border border-amber-300/30 px-3 py-2 text-xs font-black text-amber-100">Suspender</button>
+                        <button type="button" onClick={() => changeSalonStatus(salon, 'ativo')} disabled={busyAction !== ''} className="rounded-lg border border-emerald-300/30 px-3 py-2 text-xs font-black text-emerald-100">Ativar</button>
+                        <button type="button" onClick={() => removeSalon(salon)} disabled={busyAction !== ''} className="rounded-lg border border-rose-300/30 px-3 py-2 text-xs font-black text-rose-100">Excluir</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!filteredSalons.length && <p className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm font-semibold text-slate-300">Nenhum salão encontrado.</p>}
+        </section>
+
+        <section className="space-y-4">
+          <PlatformList title="Últimos salões criados" items={(data?.latest_salons ?? []).map((salon) => `${salon.name} · ${formatDate(String(salon.created_at ?? '').slice(0, 10))}`)} />
+          <PlatformList title="Últimos logins" items={(data?.latest_logins ?? []).map((user) => `${user.name || user.email} · ${formatAuditDate(user.last_login_at)}`)} />
+          <PlatformList title="Maiores faturamentos" items={(data?.top_salons ?? []).map((salon) => `${salon.name}: ${money.format(salon.revenue ?? 0)}`)} />
+        </section>
+      </div>
+
+      {createOpen && <CreateSalonModal onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); await onRefresh?.(); notify?.('Salão criado com sucesso.') }} notify={notify} />}
+      {selectedSalon && (
+        <SalonUsersModal
+          salon={selectedSalon}
+          users={selectedSalonUsers}
+          onClose={() => setSelectedSalon(null)}
+          onToggleLogin={toggleUserLogin}
+          onResetPassword={setResetUser}
+          onExportClients={() => exportHtmlExcel(`Clientes ${selectedSalon.name}`, [], `clientes-${selectedSalon.id}.xls`)}
+        />
+      )}
+      {resetUser && <ResetPasswordModal user={resetUser} onClose={() => setResetUser(null)} onDone={async (password) => {
+        const ok = await runMasterAction('reset_password', { user_id: resetUser.id, temporary_password: password }, 'Senha redefinida.')
+        if (ok) setResetUser(null)
+      }} />}
+    </div>
+  )
+}
+
+function PlatformMetric({ title, value, detail }) {
+  return (
+    <div className="min-h-[120px] rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035))] p-4 shadow-xl">
+      <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{title}</p>
+      <p className="mt-3 text-2xl font-black text-white">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-400">{detail}</p>
+    </div>
+  )
+}
+
+function PlatformStatus({ status }) {
+  const tones = {
+    ativo: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-100',
+    inativo: 'border-slate-300/20 bg-slate-300/10 text-slate-200',
+    suspenso: 'border-rose-300/30 bg-rose-300/10 text-rose-100'
+  }
+  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase ${tones[status] ?? tones.inativo}`}>{status || 'inativo'}</span>
+}
+
+function PlatformList({ title, items }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+      <h3 className="text-sm font-black uppercase tracking-[0.14em] text-slate-300">{title}</h3>
+      <div className="mt-3 space-y-2">
+        {(items?.length ? items : ['Sem dados']).map((item, index) => (
+          <div key={`${item}-${index}`} className="rounded-lg border border-white/10 bg-[#0d1522] px-3 py-2 text-sm font-semibold text-slate-200">{item}</div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PlatformSkeleton() {
+  return (
+    <div className="rounded-xl border border-[#1f2b3b] bg-[#080d14] p-6 text-white">
+      <div className="h-8 w-64 animate-pulse rounded-lg bg-white/10" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-28 animate-pulse rounded-xl bg-white/10" />)}
+      </div>
+    </div>
+  )
+}
+
+function CreateSalonModal({ onClose, onCreated, notify }) {
+  const [form, setForm] = useState({
+    salonName: '',
+    whatsapp: '',
+    adminName: '',
+    adminEmail: '',
+    temporaryPassword: '',
+    status: 'ativo',
+    nextDueDate: ''
+  })
+  const [saving, setSaving] = useState(false)
+
+  async function submit(event) {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await callPlatformMasterApi({
+        action: 'create_salon',
+        salon_name: form.salonName,
+        whatsapp: form.whatsapp,
+        admin_name: form.adminName,
+        admin_email: form.adminEmail,
+        temporary_password: form.temporaryPassword,
+        status: form.status,
+        next_due_date: form.nextDueDate || null
+      })
+      await onCreated?.()
+    } catch (error) {
+      notify?.(error.message ?? 'Não foi possível criar o salão.', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title="Criar salão Premium" onClose={onClose} maxWidth="max-w-3xl" zClass="z-50">
+      <form onSubmit={submit} className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Nome do salão" value={form.salonName} onChange={(value) => setForm({ ...form, salonName: value })} required />
+          <Field label="WhatsApp" value={form.whatsapp} onChange={(value) => setForm({ ...form, whatsapp: value })} />
+          <Field label="Nome do dono" value={form.adminName} onChange={(value) => setForm({ ...form, adminName: value })} required />
+          <Field label="E-mail do admin" type="email" value={form.adminEmail} onChange={(value) => setForm({ ...form, adminEmail: value })} required />
+          <Field label="Senha temporária" type="password" value={form.temporaryPassword} onChange={(value) => setForm({ ...form, temporaryPassword: value })} required />
+          <Field label="Vencimento assinatura" type="date" value={form.nextDueDate} onChange={(value) => setForm({ ...form, nextDueDate: value })} />
+        </div>
+        <Select label="Status inicial" value={form.status} onChange={(value) => setForm({ ...form, status: value })} options={['Ativo', 'Inativo', 'Suspenso']} values={['ativo', 'inativo', 'suspenso']} />
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm font-bold text-cyan-900">
+          Plano Premium único: {money.format(premiumPlan.amount)}/mês. A senha temporária aparece apenas nesta criação.
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button type="submit" disabled={saving} className={buttonPrimary}>{saving ? 'Criando...' : 'Criar salão'}</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function SalonUsersModal({ salon, users, onClose, onToggleLogin, onResetPassword }) {
+  return (
+    <Modal title={`Árvore de usuários · ${salon.name}`} onClose={onClose} maxWidth="max-w-5xl" zClass="z-50">
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-4">
+          {['admin', 'caixa', 'profissional', 'platform_owner'].map((role) => (
+            <Metric key={role} title={role === 'platform_owner' ? 'Master' : role} value={String(users.filter((user) => String(user.role).toLowerCase() === role).length)} detail="logins" />
+          ))}
+        </div>
+        <Table
+          rows={users}
+          columns={['name', 'email', 'role', 'login_active', 'last_login_at', 'created_at', 'actions']}
+          labels={['Nome', 'Email', 'Perfil', 'Status', 'Último login', 'Criação', 'Ações']}
+          formatValue={(key, value, row) => {
+            if (key === 'login_active') return <StatusBadge tone={value === false ? 'rose' : 'green'}>{value === false ? 'Inativo' : 'Ativo'}</StatusBadge>
+            if (key === 'last_login_at' || key === 'created_at') return formatAuditDate(value)
+            if (key === 'actions') return (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => onResetPassword(row)} className={buttonSecondary}>Redefinir senha</button>
+                <button type="button" onClick={() => onToggleLogin(row)} className={row.login_active === false ? buttonPrimary : buttonDanger}>{row.login_active === false ? 'Ativar' : 'Desativar'}</button>
+              </div>
+            )
+            return value || '-'
+          }}
+        />
+      </div>
+    </Modal>
+  )
+}
+
+function ResetPasswordModal({ user, onClose, onDone }) {
+  const [password, setPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function submit(event) {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await onDone(password)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title={`Redefinir senha · ${user.name || user.email}`} onClose={onClose} maxWidth="max-w-lg" zClass="z-[60]">
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Nova senha temporária" type="password" value={password} onChange={setPassword} required />
+        <p className="text-sm font-semibold text-gray-600">A senha não será salva nem exibida depois desta ação.</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={buttonSecondary}>Cancelar</button>
+          <button type="submit" disabled={saving || password.length < 8} className={buttonPrimary}>{saving ? 'Salvando...' : 'Redefinir'}</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+async function exportSimplePdf(title, rows, filename) {
+  const [{ default: jsPDF }, autoTableModule] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ])
+  const autoTable = autoTableModule.default
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const columns = [...new Set((rows || []).flatMap((row) => Object.keys(row ?? {})))]
+  doc.setFontSize(16)
+  doc.text(title, 40, 40)
+  autoTable(doc, {
+    startY: 62,
+    head: [columns],
+    body: (rows?.length ? rows : [{}]).map((row) => columns.map((column) => row?.[column] ?? '')),
+    styles: { fontSize: 7 }
+  })
+  doc.save(filename)
+}
+
+function exportHtmlExcel(title, rows, filename) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><h2>${escapeHtml(title)}</h2>${rowsToHtmlTable(rows)}</body></html>`
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function CashierDashboard({ appointments, employees, cashEntries, advances }) {
