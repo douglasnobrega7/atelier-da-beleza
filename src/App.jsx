@@ -42,11 +42,11 @@ import {
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 let services = []
 
-const cardBase = 'min-w-0 overflow-hidden rounded-xl border border-[#c8d6df] bg-white p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
-const panelBase = 'min-w-0 overflow-hidden rounded-xl border border-[#c8d6df] bg-white p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
-const inputBase = 'focus-ring w-full min-w-0 rounded-xl border border-[#b9c9d4] bg-white px-4 py-3 text-graphite shadow-sm placeholder:text-gray-500 disabled:bg-gray-100 disabled:text-gray-500 dark:border-[#334555] dark:bg-[#101923] dark:text-[#f4f8fa] dark:placeholder:text-[#8da1b0] dark:disabled:bg-white/5 dark:disabled:text-white/40'
+const cardBase = 'min-w-0 overflow-hidden rounded-xl border border-[#b7c9d4] bg-[#f6fafb] p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
+const panelBase = 'min-w-0 overflow-hidden rounded-xl border border-[#b7c9d4] bg-[#f6fafb] p-5 shadow-soft dark:border-[#334555] dark:bg-[#16212c]'
+const inputBase = 'focus-ring w-full min-w-0 rounded-xl border border-[#aebfcb] bg-[#f8fbfc] px-4 py-3 text-graphite shadow-sm placeholder:text-gray-500 disabled:bg-[#e2ebf0] disabled:text-gray-500 dark:border-[#334555] dark:bg-[#101923] dark:text-[#f4f8fa] dark:placeholder:text-[#8da1b0] dark:disabled:bg-white/5 dark:disabled:text-white/40'
 const buttonPrimary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl bg-[#17212b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#253341] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#7cc9c6] dark:text-[#0f151c] dark:hover:bg-[#96d8d5]'
-const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-[#b9c9d4] bg-white px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-[#eef3f6] dark:border-[#334555] dark:bg-[#101923] dark:text-[#f4f8fa] dark:hover:bg-[#1d2b38]'
+const buttonSecondary = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-[#aebfcb] bg-[#f6fafb] px-4 py-2.5 text-sm font-semibold text-graphite transition hover:bg-[#e4edf2] dark:border-[#334555] dark:bg-[#101923] dark:text-[#f4f8fa] dark:hover:bg-[#1d2b38]'
 const buttonDanger = 'focus-ring inline-flex min-h-10 max-w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25'
 const badgeBase = 'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-bold'
 const appointmentCardBase = 'min-w-0 overflow-visible rounded-xl border p-4 shadow-soft transition'
@@ -1841,7 +1841,7 @@ function App() {
   const safePage = allowedPages.includes(activePage) ? activePage : allowedPages[0]
 
   return (
-    <div className="min-h-screen bg-pearl text-graphite transition-colors dark:bg-[#0f151c] dark:text-gray-100">
+    <div className="min-h-screen bg-[#e8eff3] text-graphite transition-colors dark:bg-[#0f151c] dark:text-gray-100">
       <div className="flex min-h-screen flex-col lg:flex-row">
         <Sidebar user={currentUser} menu={menu} activePage={safePage} salonName={salonSettings.salonName} onNavigate={setActivePage} onLogout={handleLogout} />
         <main className="flex-1 overflow-hidden">
@@ -2046,7 +2046,7 @@ function Sidebar({ user, menu, activePage, salonName, onNavigate, onLogout }) {
   const displaySalonName = getSidebarSalonName(salonName)
 
   return (
-    <aside className="border-b border-[#c8d6df] bg-white px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#0f1821] lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+    <aside className="border-b border-[#b9cad4] bg-[#edf4f6] px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#0f1821] lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
       <div className="flex items-center justify-between gap-4 lg:block">
         <div className="min-w-0 break-words">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-goldSoft">SALÃO</p>
@@ -2097,7 +2097,7 @@ function Topbar({ title, user, theme, onThemeChange, clients, employees, appoint
   }
 
   return (
-    <header className="border-b border-[#c8d6df] bg-white px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#101923] sm:px-6 lg:px-8">
+    <header className="border-b border-[#b9cad4] bg-[#edf4f6] px-4 py-4 shadow-sm dark:border-[#2c3c49] dark:bg-[#101923] sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-graphite dark:text-[#f4f8fa]">{title}</h2>
