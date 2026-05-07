@@ -5,6 +5,11 @@ alter table if exists public.salons
   add column if not exists whatsapp text not null default '',
   add column if not exists subscription_status text not null default 'ativo',
   add column if not exists subscription_due_date date,
+  add column if not exists plan_started_at timestamptz,
+  add column if not exists plan_expires_at timestamptz,
+  add column if not exists plan_status text default 'active',
+  add column if not exists last_payment_at timestamptz,
+  add column if not exists renewal_price numeric default 49.90,
   add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
 
@@ -102,6 +107,58 @@ alter table if exists public.salons
 
 alter table if exists public.salons
   add constraint salons_subscription_status_check check (subscription_status in ('ativo', 'inativo', 'suspenso'));
+
+alter table if exists public.salons
+  drop constraint if exists salons_plan_status_check;
+
+alter table if exists public.salons
+  add constraint salons_plan_status_check check (plan_status in ('active', 'warning', 'expired', 'blocked'));
+
+update public.salons
+set
+  plan_started_at = coalesce(plan_started_at, created_at, now()),
+  plan_expires_at = coalesce(plan_expires_at, (subscription_due_date::timestamptz + interval '1 day' - interval '1 millisecond'), (coalesce(created_at, now()) + interval '30 days')),
+  renewal_price = coalesce(renewal_price, 49.90);
+
+update public.salons
+set plan_expires_at = (subscription_due_date::timestamptz + interval '1 day' - interval '1 millisecond')
+where subscription_due_date is not null
+  and plan_expires_at::time = time '00:00:00'
+  and plan_expires_at::date = subscription_due_date;
+
+create or replace function public.refresh_salon_plan_statuses()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.salons
+  set plan_status = case
+      when plan_expires_at is null then 'active'
+      when now() > plan_expires_at + interval '3 days' then 'blocked'
+      when now() > plan_expires_at then 'expired'
+      when plan_expires_at <= now() + interval '7 days' then 'warning'
+      else 'active'
+    end,
+    subscription_status = case
+      when plan_expires_at is not null and now() > plan_expires_at + interval '3 days' then 'suspenso'
+      else subscription_status
+    end,
+    subscription_due_date = coalesce(subscription_due_date, plan_expires_at::date),
+    updated_at = now()
+  where plan_status is distinct from case
+      when plan_expires_at is null then 'active'
+      when now() > plan_expires_at + interval '3 days' then 'blocked'
+      when now() > plan_expires_at then 'expired'
+      when plan_expires_at <= now() + interval '7 days' then 'warning'
+      else 'active'
+    end
+    or subscription_due_date is null;
+end;
+$$;
+
+select public.refresh_salon_plan_statuses();
 
 insert into public.subscriptions (salon_id, status, amount, next_due_date)
 select id, subscription_status, 49.90, subscription_due_date

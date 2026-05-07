@@ -230,6 +230,42 @@ function formatSalonHoursForDate(salonSettings, date) {
   return hours ? `${hours.open} às ${hours.close}` : 'Fechado'
 }
 
+function startOfLocalDay(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function parsePlanDate(value) {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getPlanDaysRemaining(plan) {
+  const expiresAt = parsePlanDate(plan?.planExpiresAt ?? plan?.plan_expires_at)
+  if (!expiresAt) return null
+  return Math.ceil((startOfLocalDay(expiresAt) - startOfLocalDay()) / 86400000)
+}
+
+function getComputedPlanStatus(plan) {
+  const explicit = String(plan?.planStatus ?? plan?.plan_status ?? 'active').toLowerCase()
+  const days = getPlanDaysRemaining(plan)
+  if (days !== null) {
+    if (days < -3) return 'blocked'
+    if (days < 0) return 'expired'
+    if (days <= 7) return 'warning'
+  }
+  return ['active', 'warning', 'expired', 'blocked'].includes(explicit) ? explicit : 'active'
+}
+
+function isPlanPartiallyBlocked(plan) {
+  return partiallyBlockedPlanStatuses.has(getComputedPlanStatus(plan))
+}
+
+function getRenewalWhatsappUrl(salonSettings) {
+  const text = `Olá, quero renovar o Painel Salão do salão ${salonSettings?.salonName || ''}.`
+  return `https://wa.me/${renewalWhatsappNumber}?text=${encodeURIComponent(text)}`
+}
+
 function getAppointmentSortKey(appointment) {
   return `${appointment?.date ?? ''} ${appointment?.time ?? appointment?.horario ?? ''}`
 }
@@ -1277,11 +1313,26 @@ function normalizeStockItemRecord(row) {
 }
 
 function normalizeSalonSettings(row) {
+  const planExpiresAt = field(row, 'planExpiresAt', 'plan_expires_at') ?? field(row, 'subscription_due_date')
+  const planStatus = getComputedPlanStatus({
+    planStatus: field(row, 'planStatus', 'plan_status'),
+    planExpiresAt
+  })
   return {
     salonName: field(row, 'name') ?? field(row, 'salonName', 'salon_name') ?? '',
     receptionWhatsapp: field(row, 'whatsapp') ?? field(row, 'receptionWhatsapp', 'reception_whatsapp') ?? '',
     workingDays: normalizeWorkingDays(field(row, 'workingDays', 'working_days')),
-    openingHours: normalizeOpeningHours(field(row, 'openingHours', 'opening_hours'))
+    openingHours: normalizeOpeningHours(field(row, 'openingHours', 'opening_hours')),
+    planStartedAt: field(row, 'planStartedAt', 'plan_started_at'),
+    plan_started_at: field(row, 'plan_started_at') ?? field(row, 'planStartedAt'),
+    planExpiresAt,
+    plan_expires_at: field(row, 'plan_expires_at') ?? field(row, 'planExpiresAt') ?? planExpiresAt,
+    planStatus,
+    plan_status: planStatus,
+    lastPaymentAt: field(row, 'lastPaymentAt', 'last_payment_at'),
+    last_payment_at: field(row, 'last_payment_at') ?? field(row, 'lastPaymentAt'),
+    renewalPrice: Number(field(row, 'renewalPrice', 'renewal_price') ?? premiumPlan.amount),
+    renewal_price: Number(field(row, 'renewal_price') ?? field(row, 'renewalPrice') ?? premiumPlan.amount)
   }
 }
 
@@ -1353,7 +1404,8 @@ const adminMenu = [
   { id: 'estoque', label: 'Estoque' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'auditoria', label: 'Auditoria' },
-  { id: 'configuracoes', label: 'Configurações' }
+  { id: 'configuracoes', label: 'Configurações' },
+  { id: 'renovacao', label: 'Renovação' }
 ]
 
 const cashierMenu = [
@@ -1361,7 +1413,8 @@ const cashierMenu = [
   { id: 'agenda', label: 'Agenda' },
   { id: 'clientes', label: 'Clientes' },
   { id: 'caixa', label: 'Caixa' },
-  { id: 'vales', label: 'Vales' }
+  { id: 'vales', label: 'Vales' },
+  { id: 'renovacao', label: 'Renovação' }
 ]
 
 const platformMenu = [
@@ -1442,6 +1495,15 @@ const premiumPlan = {
   name: 'Plano Premium',
   amount: 49.90
 }
+const planStatusLabels = {
+  active: 'Ativo',
+  warning: 'Vencendo',
+  expired: 'Expirado',
+  blocked: 'Bloqueado'
+}
+const partiallyBlockedPlanStatuses = new Set(['expired', 'blocked'])
+const renewalWhatsappNumber = '5592993887604'
+const renewalAllowedPages = new Set(['dashboard', 'configuracoes', 'renovacao'])
 
 const premiumSuccessMessages = {
   saved: '✔ Alterações salvas com sucesso',
@@ -1920,22 +1982,6 @@ function App() {
         return { success: false, error: 'Login desativado. Entre em contato com o administrador.' }
       }
 
-      const role = normalizeRole(activeProfile?.role)
-      if (role !== 'platform_owner') {
-        const { data: subscription } = await supabase
-          .from('subscriptions')
-          .select('status, next_due_date')
-          .eq('salon_id', activeProfile?.salon_id)
-          .maybeSingle()
-        const status = subscription?.status ?? 'ativo'
-        const dueDate = subscription?.next_due_date
-        const dueExpired = dueDate && String(dueDate).slice(0, 10) < todayIso
-        if (status !== 'ativo' || dueExpired) {
-          await supabase.auth.signOut()
-          return { success: false, error: 'Sua assinatura está inativa. Entre em contato com o suporte.' }
-        }
-      }
-
       await supabase
         .from('users')
         .update({ last_login_at: new Date().toISOString() })
@@ -2020,7 +2066,9 @@ function App() {
     return <LoginScreen onLogin={handleLogin} theme={theme} onThemeChange={setTheme} />
   }
 
-  const menu = currentUser.role === 'platform_owner'
+  const planStatus = getComputedPlanStatus(salonSettings)
+  const planBlocked = currentUser.role !== 'platform_owner' && !currentUser.platformOwnerSession && isPlanPartiallyBlocked(salonSettings)
+  const baseMenu = currentUser.role === 'platform_owner'
     ? platformMenu
     : currentUser.platformOwnerSession
       ? adminMenu.filter((item) => !['caixa', 'vales', 'relatorios'].includes(item.id))
@@ -2029,6 +2077,10 @@ function App() {
         : currentUser.role === 'professional'
           ? professionalMenu
           : cashierMenu
+  const blockedMenu = baseMenu.filter((item) => renewalAllowedPages.has(item.id))
+  const menu = planBlocked
+    ? (blockedMenu.length ? blockedMenu : [{ id: 'renovacao', label: 'Renovação' }])
+    : baseMenu
   const allowedPages = menu.map((item) => item.id)
   const safePage = allowedPages.includes(activePage) ? activePage : allowedPages[0]
 
@@ -2058,6 +2110,9 @@ function App() {
               <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200">
                 {databaseStatus.message}
               </div>
+            )}
+            {(currentUser.role === 'admin' || currentUser.platformOwnerSession) && !dataLoading && (
+              <PlanRenewalNotice salonSettings={salonSettings} onRenew={() => setActivePage('renovacao')} />
             )}
             <PageErrorBoundary resetKey={safePage}>
               <PageRouter
@@ -2090,6 +2145,8 @@ function App() {
                 setServices={setServiceItems}
                 salonSettings={salonSettings}
                 setSalonSettings={setSalonSettings}
+                planBlocked={planBlocked}
+                planStatus={planStatus}
                 agendaProfessional={agendaProfessional}
                 setAgendaProfessional={setAgendaProfessional}
                 onOpenAgendaForProfessional={openAgendaForProfessional}
@@ -2366,7 +2423,7 @@ function ThemeToggle({ theme, onChange }) {
   )
 }
 
-function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, auditLogs, setAuditLogs, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify, platformData, platformLoading, onRefreshPlatform, onAccessSalonAsOwner }) {
+function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, auditLogs, setAuditLogs, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, planBlocked, planStatus, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify, platformData, platformLoading, onRefreshPlatform, onAccessSalonAsOwner }) {
   const employeeAppointments = appointments.filter((item) => isAppointmentForUser(item, user, employees))
   const visibleAppointments = appointments
   const activeClients = clients.filter((client) => client.active)
@@ -2393,10 +2450,99 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     auditoria: user.role === 'admin' ? <AuditTrail salonId={salonId} auditLogs={auditLogs} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
     'minha-agenda': <ProfessionalAgenda user={user} appointments={appointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
-    configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
+    configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />,
+    renovacao: <RenewalPage salonSettings={salonSettings} planStatus={planStatus} />
   }
 
+  if (planBlocked && !renewalAllowedPages.has(page)) return <RenewalPage salonSettings={salonSettings} planStatus={planStatus} blocked />
   return pages[page] ?? <Agenda salonId={salonId} appointments={visibleAppointments} setAppointments={setAppointments} user={user} clients={activeClients} employees={professionals} allEmployees={employees} blockedSlots={blockedSlots} setBlockedSlots={setBlockedSlots} cashEntries={cashEntries} setCashEntries={setCashEntries} salonSettings={salonSettings} initialProfessionalFilter={agendaProfessional} onProfessionalFilterChange={setAgendaProfessional} notify={notify} />
+}
+
+function PlanRenewalNotice({ salonSettings, onRenew }) {
+  const [dismissed, setDismissed] = useState(false)
+  const status = getComputedPlanStatus(salonSettings)
+  const days = getPlanDaysRemaining(salonSettings)
+  if (status === 'active' || dismissed) return null
+
+  const expired = status === 'expired' || status === 'blocked'
+  const title = expired
+    ? 'Tudo pronto para continuar crescendo?'
+    : `Sua assinatura vence em ${days} dia${days === 1 ? '' : 's'}`
+  const description = expired
+    ? 'Seu Painel Salão expirou. Renove agora para continuar usando todos os recursos premium.'
+    : 'Renove para manter o Painel Salão ativo.'
+
+  return (
+    <>
+      <div className="mb-4 overflow-hidden rounded-2xl border border-violet-300/30 bg-[linear-gradient(135deg,rgba(91,33,182,0.96),rgba(14,116,144,0.88))] p-[1px] shadow-[0_0_40px_rgba(124,58,237,0.18)]">
+        <div className="flex flex-col gap-3 rounded-2xl bg-[#0b1220]/88 px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-violet-100">
+              {planStatusLabels[status] ?? 'Assinatura'}
+            </div>
+            <p className="mt-2 text-base font-black">{title}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-200">{description}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={onRenew} className="rounded-xl bg-white px-4 py-2 text-sm font-black text-[#111827] transition hover:shadow-[0_0_22px_rgba(255,255,255,0.35)]">Renovar agora</button>
+            <button type="button" onClick={() => setDismissed(true)} className="rounded-xl border border-white/15 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10">Depois</button>
+          </div>
+        </div>
+      </div>
+      {expired && <RenewalModal salonSettings={salonSettings} onClose={() => setDismissed(true)} onRenew={onRenew} />}
+    </>
+  )
+}
+
+function RenewalModal({ salonSettings, onClose, onRenew }) {
+  return (
+    <Modal title="Tudo pronto para continuar crescendo?" onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
+      <div className="rounded-2xl border border-violet-300/20 bg-[linear-gradient(135deg,rgba(124,58,237,0.18),rgba(14,165,233,0.12))] p-5">
+        <p className="text-lg font-black text-graphite dark:text-white">Seu Painel Salão expirou.</p>
+        <p className="mt-2 text-sm font-semibold text-gray-600 dark:text-slate-300">Renove agora para continuar usando todos os recursos premium.</p>
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <button type="button" onClick={onRenew} className={buttonPrimary}>Renovar agora</button>
+          <a href={getRenewalWhatsappUrl(salonSettings)} target="_blank" rel="noreferrer" className={buttonSecondary}>Falar no WhatsApp</a>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function RenewalPage({ salonSettings, planStatus, blocked = false }) {
+  const days = getPlanDaysRemaining(salonSettings)
+  const expiresText = salonSettings.planExpiresAt ? formatDate(String(salonSettings.planExpiresAt).slice(0, 10)) : 'Sem vencimento'
+  return (
+    <div className="mx-auto max-w-4xl space-y-5">
+      <section className="overflow-hidden rounded-2xl border border-violet-300/20 bg-[#0b1220] p-[1px] shadow-[0_0_45px_rgba(124,58,237,0.16)]">
+        <div className="rounded-2xl bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.28),transparent_42%),linear-gradient(135deg,#101827,#0b1220)] p-6 text-white sm:p-8">
+          <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-violet-100">{planStatusLabels[planStatus] ?? 'Plano'}</span>
+          <h2 className="mt-4 text-3xl font-black">Renovação do Painel Salão</h2>
+          <p className="mt-3 max-w-2xl text-sm font-semibold text-slate-300">
+            {blocked ? 'Seu acesso está em modo parcial até a renovação.' : 'Mantenha todos os recursos premium ativos para sua equipe.'}
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Vencimento</p>
+              <p className="mt-2 text-xl font-black">{expiresText}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Dias</p>
+              <p className="mt-2 text-xl font-black">{days === null ? '-' : days < 0 ? `${Math.abs(days)} vencido(s)` : `${days} restante(s)`}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Valor</p>
+              <p className="mt-2 text-xl font-black">{money.format(salonSettings.renewalPrice ?? premiumPlan.amount)}</p>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <a href={getRenewalWhatsappUrl(salonSettings)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-black text-[#111827] transition hover:shadow-[0_0_24px_rgba(255,255,255,0.28)]">Falar no WhatsApp</a>
+            <a href={getRenewalWhatsappUrl(salonSettings)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10">Renovar agora</a>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
 }
 
 function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }) {
@@ -2405,6 +2551,7 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedSalon, setSelectedSalon] = useState(null)
   const [resetUser, setResetUser] = useState(null)
+  const [historySalon, setHistorySalon] = useState(null)
   const [busyAction, setBusyAction] = useState('')
   const metrics = data?.metrics ?? {}
   const salons = data?.salons ?? []
@@ -2413,7 +2560,7 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
   const filteredSalons = salons.filter((salon) => {
     const text = `${salon.name ?? ''} ${salon.admin_name ?? ''} ${salon.admin_email ?? ''} ${salon.whatsapp ?? ''}`.toLowerCase()
     const matchesSearch = !search || text.includes(search)
-    const matchesStatus = statusFilter === 'todos' || salon.subscription_status === statusFilter
+    const matchesStatus = statusFilter === 'todos' || salon.plan_status === statusFilter
     return matchesSearch && matchesStatus
   })
   const selectedSalonUsers = selectedSalon
@@ -2449,6 +2596,25 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
     if (selectedSalon?.id === salon.id) setSelectedSalon(null)
   }
 
+  async function renewSalon(salon) {
+    await runMasterAction('renew_salon_plan', { salon_id: salon.id }, 'Plano renovado por mais 30 dias.')
+  }
+
+  async function blockSalonPlan(salon) {
+    await runMasterAction('set_plan_status', { salon_id: salon.id, status: 'blocked' }, 'Salão bloqueado.')
+  }
+
+  async function reactivateSalonPlan(salon) {
+    await runMasterAction('set_plan_status', { salon_id: salon.id, status: 'active' }, 'Salão reativado.')
+  }
+
+  async function changePlanDueDate(salon) {
+    const current = salon.plan_expires_at ? String(salon.plan_expires_at).slice(0, 10) : todayIso
+    const nextDate = window.prompt('Novo vencimento do plano (AAAA-MM-DD)', current)
+    if (!nextDate) return
+    await runMasterAction('update_plan_due_date', { salon_id: salon.id, plan_expires_at: nextDate }, 'Vencimento atualizado.')
+  }
+
   async function toggleUserLogin(user) {
     await runMasterAction(
       'update_user_login',
@@ -2464,9 +2630,10 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
       Email: salon.admin_email,
       WhatsApp: salon.whatsapp,
       Status: salon.subscription_status,
+      'Status plano': planStatusLabels[salon.plan_status] ?? salon.plan_status,
       Plano: premiumPlan.name,
       Valor: premiumPlan.amount,
-      Vencimento: salon.next_due_date ?? '',
+      Vencimento: salon.plan_expires_at ?? salon.next_due_date ?? '',
       Funcionarios: salon.employees_count,
       Clientes: salon.clients_count,
       'Receita SaaS': salon.saas_revenue ?? 0
@@ -2503,12 +2670,12 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <PlatformMetric title="Total de salões" value={metrics.total_salons ?? 0} detail="Base cadastrada" />
-        <PlatformMetric title="Salões ativos" value={metrics.active_salons ?? 0} detail="Assinatura em dia" />
-        <PlatformMetric title="Salões suspensos" value={metrics.suspended_salons ?? 0} detail="Acesso bloqueado" />
+        <PlatformMetric title="Ativos" value={metrics.active_salons ?? 0} detail="Plano em dia" />
+        <PlatformMetric title="Vencendo" value={metrics.warning_salons ?? 0} detail="7 dias ou menos" />
+        <PlatformMetric title="Expirados" value={metrics.expired_salons ?? 0} detail="Aguardando renovação" />
+        <PlatformMetric title="Bloqueados" value={metrics.blocked_salons ?? 0} detail="Modo parcial" />
+        <PlatformMetric title="MRR mensal" value={money.format(metrics.mrr_monthly ?? metrics.total_saas_revenue ?? 0)} detail={`${metrics.active_period_salons ?? 0} salão(ões) faturando`} />
         <PlatformMetric title="Salões cadastrados" value={metrics.registered_salons ?? metrics.total_salons ?? 0} detail="Contas na plataforma" />
-        <PlatformMetric title="Receita SaaS do período" value={money.format(metrics.total_saas_revenue ?? 0)} detail={`${metrics.active_period_salons ?? 0} salão(ões) ativo(s) em ${metrics.period_label ?? 'mês atual'}`} />
-        <PlatformMetric title="Assinatura" value={money.format(metrics.premium_amount ?? premiumPlan.amount)} detail={premiumPlan.name} />
       </div>
 
       <div className="mt-6 grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_260px]">
@@ -2517,16 +2684,17 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
             <input className="rounded-xl border border-white/10 bg-[#0d1522] px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Busca global por salão, dono, email ou WhatsApp" />
             <select className="rounded-xl border border-white/10 bg-[#0d1522] px-4 py-3 text-sm font-semibold text-white" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <option value="todos">Todos status</option>
-              <option value="ativo">Ativo</option>
-              <option value="inativo">Inativo</option>
-              <option value="suspenso">Suspenso</option>
+              <option value="active">Ativo</option>
+              <option value="warning">Vencendo</option>
+              <option value="expired">Expirado</option>
+              <option value="blocked">Bloqueado</option>
             </select>
           </div>
           <div className="simple-scrollbar mt-4 overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left text-sm">
+            <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  {['Salão', 'Dono/admin', 'Email', 'WhatsApp', 'Status', 'Assinatura', 'Vencimento', 'Equipe', 'Clientes', 'Receita SaaS', 'Ações'].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
+                  {['Salão', 'Dono/admin', 'Email', 'WhatsApp', 'Plano', 'Vencimento', 'Equipe', 'Clientes', 'MRR', 'Ações'].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -2536,18 +2704,20 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
                     <td className="px-3 py-3">{salon.admin_name || '-'}</td>
                     <td className="px-3 py-3">{salon.admin_email || '-'}</td>
                     <td className="px-3 py-3">{salon.whatsapp || '-'}</td>
-                    <td className="px-3 py-3"><PlatformStatus status={salon.subscription_status} /></td>
-                    <td className="px-3 py-3">{premiumPlan.name}<br /><span className="text-xs text-slate-400">{money.format(premiumPlan.amount)}/mês</span></td>
-                    <td className="px-3 py-3">{salon.next_due_date ? formatDate(String(salon.next_due_date).slice(0, 10)) : '-'}</td>
+                    <td className="px-3 py-3"><PlatformStatus status={salon.plan_status} /></td>
+                    <td className="px-3 py-3">{salon.plan_expires_at ? formatDate(String(salon.plan_expires_at).slice(0, 10)) : '-'}</td>
                     <td className="px-3 py-3">{salon.employees_count}</td>
                     <td className="px-3 py-3">{salon.clients_count}</td>
                     <td className="px-3 py-3">{money.format(salon.saas_revenue ?? 0)}</td>
                     <td className="px-3 py-3">
                       <div className="grid min-w-[92px] gap-2">
                         <button type="button" onClick={() => onAccessSalon?.(salon)} className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-black text-[#07111f]">Acessar</button>
+                        <button type="button" onClick={() => renewSalon(salon)} disabled={busyAction !== ''} className="rounded-lg border border-violet-300/30 px-3 py-2 text-xs font-black text-violet-100">Renovar +30</button>
+                        <button type="button" onClick={() => changePlanDueDate(salon)} disabled={busyAction !== ''} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black text-white">Vencimento</button>
+                        <button type="button" onClick={() => setHistorySalon(salon)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black text-white">Histórico</button>
                         <button type="button" onClick={() => setSelectedSalon(salon)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black text-white">Usuários</button>
-                        <button type="button" onClick={() => changeSalonStatus(salon, 'suspenso')} disabled={busyAction !== ''} className="rounded-lg border border-amber-300/30 px-3 py-2 text-xs font-black text-amber-100">Suspender</button>
-                        <button type="button" onClick={() => changeSalonStatus(salon, 'ativo')} disabled={busyAction !== ''} className="rounded-lg border border-emerald-300/30 px-3 py-2 text-xs font-black text-emerald-100">Ativar</button>
+                        <button type="button" onClick={() => blockSalonPlan(salon)} disabled={busyAction !== ''} className="rounded-lg border border-amber-300/30 px-3 py-2 text-xs font-black text-amber-100">Bloquear</button>
+                        <button type="button" onClick={() => reactivateSalonPlan(salon)} disabled={busyAction !== ''} className="rounded-lg border border-emerald-300/30 px-3 py-2 text-xs font-black text-emerald-100">Reativar</button>
                         <button type="button" onClick={() => removeSalon(salon)} disabled={busyAction !== ''} className="rounded-lg border border-rose-300/30 px-3 py-2 text-xs font-black text-rose-100">Excluir</button>
                       </div>
                     </td>
@@ -2581,6 +2751,7 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
         const ok = await runMasterAction('reset_password', { user_id: resetUser.id, temporary_password: password }, 'Senha redefinida.')
         if (ok) setResetUser(null)
       }} />}
+      {historySalon && <PlanHistoryModal salon={historySalon} auditLogs={data?.audit_logs ?? []} onClose={() => setHistorySalon(null)} />}
     </div>
   )
 }
@@ -2599,9 +2770,29 @@ function PlatformStatus({ status }) {
   const tones = {
     ativo: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-100',
     inativo: 'border-slate-300/20 bg-slate-300/10 text-slate-200',
-    suspenso: 'border-rose-300/30 bg-rose-300/10 text-rose-100'
+    suspenso: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
+    active: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-100',
+    warning: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
+    expired: 'border-orange-300/30 bg-orange-300/10 text-orange-100',
+    blocked: 'border-rose-300/30 bg-rose-300/10 text-rose-100'
   }
-  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase ${tones[status] ?? tones.inativo}`}>{status || 'inativo'}</span>
+  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase ${tones[status] ?? tones.inativo}`}>{planStatusLabels[status] ?? (status || 'inativo')}</span>
+}
+
+function PlanHistoryModal({ salon, auditLogs, onClose }) {
+  const items = auditLogs.filter((log) => String(log.salon_id ?? log.entity_id ?? '') === String(salon.id)).slice(0, 12)
+  return (
+    <Modal title={`Histórico · ${salon.name}`} onClose={onClose} maxWidth="max-w-2xl" zClass="z-50">
+      <div className="space-y-3">
+        {(items.length ? items : [{ action: 'Sem histórico recente', created_at: null, user_name: '' }]).map((item, index) => (
+          <div key={`${item.action}-${index}`} className="rounded-xl border border-gray-100 bg-pearl px-4 py-3 text-sm font-semibold dark:border-white/10 dark:bg-white/5">
+            <p className="font-black">{item.action}</p>
+            <p className="mt-1 text-gray-500 dark:text-gray-400">{item.created_at ? formatAuditDate(item.created_at) : 'Nenhum registro encontrado.'} {item.user_name ? `· ${item.user_name}` : ''}</p>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  )
 }
 
 function PlatformList({ title, items }) {

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const PREMIUM_AMOUNT = 49.90
 const allowedSalonStatus = new Set(['ativo', 'inativo', 'suspenso'])
+const allowedPlanStatus = new Set(['active', 'warning', 'expired', 'blocked'])
 const allowedUserRoles = new Set(['platform_owner', 'admin', 'caixa', 'profissional'])
 const requests = new Map()
 
@@ -48,6 +49,35 @@ function getBearerToken(req) {
 function normalizeStatus(status, fallback = 'ativo') {
   const normalized = String(status ?? fallback).trim().toLowerCase()
   return allowedSalonStatus.has(normalized) ? normalized : fallback
+}
+
+function normalizePlanStatus(status, fallback = 'active') {
+  const normalized = String(status ?? fallback).trim().toLowerCase()
+  return allowedPlanStatus.has(normalized) ? normalized : fallback
+}
+
+function addDays(date, days) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function endOfDayIso(value) {
+  const date = value ? new Date(value) : new Date()
+  if (Number.isNaN(date.getTime())) return null
+  date.setHours(23, 59, 59, 999)
+  return date.toISOString()
+}
+
+function getPlanStatus(planExpiresAt, fallback = 'active') {
+  if (!planExpiresAt) return normalizePlanStatus(fallback)
+  const expiresAt = new Date(planExpiresAt)
+  if (Number.isNaN(expiresAt.getTime())) return normalizePlanStatus(fallback)
+  const now = new Date()
+  if (now > addDays(expiresAt, 3)) return 'blocked'
+  if (now > expiresAt) return 'expired'
+  if (expiresAt <= addDays(now, 7)) return 'warning'
+  return 'active'
 }
 
 function normalizeEmail(email) {
@@ -167,6 +197,7 @@ async function writePlatformAudit(supabase, owner, action, details = {}, salonId
 }
 
 async function fetchPlatformData(supabase) {
+  await supabase.rpc('refresh_salon_plan_statuses')
   const [
     salonsResult,
     subscriptionsResult,
@@ -203,8 +234,10 @@ async function fetchPlatformData(supabase) {
     const salonClients = clients.filter((item) => String(item.salon_id ?? '') === String(salon.id))
     const salonEmployees = employees.filter((item) => String(item.salon_id ?? '') === String(salon.id))
     const subscriptionStatus = subscription?.status ?? salon.subscription_status ?? 'ativo'
+    const planExpiresAt = salon.plan_expires_at ?? salon.subscription_due_date ?? subscription?.next_due_date ?? null
+    const planStatus = getPlanStatus(planExpiresAt, salon.plan_status)
     const subscriptionCreatedAt = subscription?.created_at ? new Date(subscription.created_at) : null
-    const activeInPeriod = subscriptionStatus === 'ativo' && (!subscriptionCreatedAt || subscriptionCreatedAt <= periodEnd)
+    const activeInPeriod = ['active', 'warning'].includes(planStatus) && subscriptionStatus === 'ativo' && (!subscriptionCreatedAt || subscriptionCreatedAt <= periodEnd)
     const saasRevenue = activeInPeriod ? PREMIUM_AMOUNT : 0
 
     return {
@@ -212,8 +245,13 @@ async function fetchPlatformData(supabase) {
       admin_name: admin?.name ?? '',
       admin_email: admin?.email ?? '',
       subscription_status: subscriptionStatus,
+      plan_status: planStatus,
+      plan_started_at: salon.plan_started_at ?? null,
+      plan_expires_at: planExpiresAt,
+      last_payment_at: salon.last_payment_at ?? null,
+      renewal_price: Number(salon.renewal_price ?? PREMIUM_AMOUNT),
       subscription_amount: Number(subscription?.amount ?? PREMIUM_AMOUNT),
-      next_due_date: subscription?.next_due_date ?? salon.subscription_due_date ?? null,
+      next_due_date: planExpiresAt,
       employees_count: salonEmployees.length,
       clients_count: salonClients.length,
       users_count: salonUsers.length,
@@ -223,8 +261,11 @@ async function fetchPlatformData(supabase) {
     }
   })
 
-  const activeSalons = salons.filter((salon) => salon.subscription_status === 'ativo')
+  const activeSalons = salons.filter((salon) => salon.plan_status === 'active')
   const suspendedSalons = salons.filter((salon) => salon.subscription_status === 'suspenso')
+  const warningSalons = salons.filter((salon) => salon.plan_status === 'warning')
+  const expiredSalons = salons.filter((salon) => salon.plan_status === 'expired')
+  const blockedSalons = salons.filter((salon) => salon.plan_status === 'blocked')
   const activePeriodSalons = salons.filter((salon) => salon.active_in_period)
   const totalSaasRevenue = activePeriodSalons.reduce((sum, salon) => sum + Number(salon.saas_revenue ?? 0), 0)
 
@@ -234,6 +275,10 @@ async function fetchPlatformData(supabase) {
       registered_salons: salons.length,
       active_salons: activeSalons.length,
       suspended_salons: suspendedSalons.length,
+      warning_salons: warningSalons.length,
+      expired_salons: expiredSalons.length,
+      blocked_salons: blockedSalons.length,
+      mrr_monthly: activePeriodSalons.length * PREMIUM_AMOUNT,
       total_clients: clients.length,
       active_period_salons: activePeriodSalons.length,
       total_saas_revenue: totalSaasRevenue,
@@ -285,7 +330,11 @@ async function createSalon(supabase, owner, body) {
       name: salonName,
       whatsapp,
       subscription_status: status,
-      subscription_due_date: nextDueDate
+      subscription_due_date: nextDueDate,
+      plan_started_at: new Date().toISOString(),
+      plan_expires_at: nextDueDate ? endOfDayIso(nextDueDate) : addDays(new Date(), 30).toISOString(),
+      plan_status: status === 'suspenso' ? 'blocked' : 'active',
+      renewal_price: PREMIUM_AMOUNT
     })
     .select('*')
     .single()
@@ -344,6 +393,102 @@ async function updateSalonStatus(supabase, owner, body) {
   if (subscriptionError) throw subscriptionError
 
   await writePlatformAudit(supabase, owner, status === 'suspenso' ? 'suspensao_salao' : 'ativacao_salao', { status }, salonId)
+  return { success: true }
+}
+
+async function renewSalonPlan(supabase, owner, body) {
+  const salonId = body.salon_id
+  if (!salonId) {
+    const error = new Error('Informe o salao.')
+    error.status = 400
+    throw error
+  }
+
+  const { data: salon, error: salonError } = await supabase.from('salons').select('plan_expires_at').eq('id', salonId).maybeSingle()
+  if (salonError) throw salonError
+
+  const now = new Date()
+  const currentExpiration = salon?.plan_expires_at ? new Date(salon.plan_expires_at) : now
+  const baseDate = currentExpiration > now ? currentExpiration : now
+  const nextExpiration = addDays(baseDate, 30).toISOString()
+
+  const { error: updateError } = await supabase
+    .from('salons')
+    .update({
+      plan_started_at: now.toISOString(),
+      plan_expires_at: nextExpiration,
+      plan_status: 'active',
+      last_payment_at: now.toISOString(),
+      renewal_price: PREMIUM_AMOUNT,
+      subscription_status: 'ativo',
+      subscription_due_date: nextExpiration.slice(0, 10),
+      updated_at: now.toISOString()
+    })
+    .eq('id', salonId)
+  if (updateError) throw updateError
+
+  const { error: subscriptionError } = await supabase
+    .from('subscriptions')
+    .upsert({ salon_id: salonId, status: 'ativo', amount: PREMIUM_AMOUNT, next_due_date: nextExpiration.slice(0, 10), updated_at: now.toISOString() }, { onConflict: 'salon_id' })
+  if (subscriptionError) throw subscriptionError
+
+  await writePlatformAudit(supabase, owner, 'renovacao_plano', { days: 30, next_due_date: nextExpiration.slice(0, 10) }, salonId)
+  return { success: true, plan_expires_at: nextExpiration }
+}
+
+async function updatePlanDueDate(supabase, owner, body) {
+  const salonId = body.salon_id
+  const dueDate = body.plan_expires_at || body.next_due_date
+  if (!salonId || !dueDate) {
+    const error = new Error('Informe salao e vencimento.')
+    error.status = 400
+    throw error
+  }
+
+  const expiresAt = new Date(dueDate)
+  if (Number.isNaN(expiresAt.getTime())) {
+    const error = new Error('Data de vencimento invalida.')
+    error.status = 400
+    throw error
+  }
+
+  const planStatus = getPlanStatus(expiresAt.toISOString(), 'active')
+  const { error } = await supabase
+    .from('salons')
+    .update({
+      plan_expires_at: expiresAt.toISOString(),
+      plan_status: planStatus,
+      subscription_status: planStatus === 'blocked' ? 'suspenso' : 'ativo',
+      subscription_due_date: expiresAt.toISOString().slice(0, 10),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', salonId)
+  if (error) throw error
+
+  await writePlatformAudit(supabase, owner, 'alteracao_vencimento_plano', { next_due_date: expiresAt.toISOString().slice(0, 10), plan_status: planStatus }, salonId)
+  return { success: true }
+}
+
+async function setPlanStatus(supabase, owner, body) {
+  const salonId = body.salon_id
+  const status = normalizePlanStatus(body.status)
+  if (!salonId) {
+    const error = new Error('Informe o salao.')
+    error.status = 400
+    throw error
+  }
+
+  const { error } = await supabase
+    .from('salons')
+    .update({
+      plan_status: status,
+      subscription_status: status === 'blocked' ? 'suspenso' : 'ativo',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', salonId)
+  if (error) throw error
+
+  await writePlatformAudit(supabase, owner, status === 'blocked' ? 'bloqueio_plano' : 'reativacao_plano', { plan_status: status }, salonId)
   return { success: true }
 }
 
@@ -487,6 +632,9 @@ export default async function handler(req, res) {
       create_salon: createSalon,
       update_salon_status: updateSalonStatus,
       delete_salon: deleteSalon,
+      renew_salon_plan: renewSalonPlan,
+      update_plan_due_date: updatePlanDueDate,
+      set_plan_status: setPlanStatus,
       update_user_login: updateUserLogin,
       reset_password: resetPassword,
       access_salon: accessSalon,
