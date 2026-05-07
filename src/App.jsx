@@ -2859,7 +2859,7 @@ function DatePickerBar({ value, onChange }) {
   return (
     <div>
       <span className="mb-2 block text-sm font-semibold text-gray-600">Data</span>
-      <div className="grid grid-cols-[44px_1fr_44px_auto] gap-2">
+      <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] gap-2">
         <button type="button" onClick={() => onChange(shiftDate(value, -1))} className={`${buttonSecondary} px-3 py-2 text-lg`} aria-label="Dia anterior">
           &lt;
         </button>
@@ -2874,7 +2874,7 @@ function DatePickerBar({ value, onChange }) {
         <button type="button" onClick={() => onChange(shiftDate(value, 1))} className={`${buttonSecondary} px-3 py-2 text-lg`} aria-label="Próximo dia">
           &gt;
         </button>
-        <button type="button" onClick={() => onChange(getTodayIso())} className={buttonSecondary}>
+        <button type="button" onClick={() => onChange(getTodayIso())} className={`${buttonSecondary} col-span-3 w-full`}>
           Hoje
         </button>
       </div>
