@@ -2379,12 +2379,13 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   }
   const [form, setForm] = useState(createInitialAppointmentForm)
   const [formMessage, setFormMessage] = useState({ type: '', text: '' })
-  const [professionalFilter, setProfessionalFilter] = useState(initialProfessionalFilter)
+  const initialFilterValue = initialProfessionalFilter === 'all' ? defaultEmployeeName : initialProfessionalFilter
+  const [professionalFilter, setProfessionalFilter] = useState(initialFilterValue)
   const [agendaView, setAgendaView] = useState('day')
   const [blockModalOpen, setBlockModalOpen] = useState(false)
   const [quickModalOpen, setQuickModalOpen] = useState(false)
-  const selectedEmployee = employees.find((employee) => employee.name === form.employeeName)
   const filteredProfessional = employees.find((employee) => employee.name === professionalFilter)
+  const selectedEmployee = filteredProfessional ?? null
   const compatibleServices = getCompatibleServicesForProfessional(selectedEmployee)
   const selectedService = compatibleServices.find((item) => item.name === form.service)
   const availableSlots = getAvailableSlots({ employee: selectedEmployee, date: form.date, service: selectedService, appointments, blockedSlots, salonSettings })
@@ -2403,26 +2404,19 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
   const selectedClient = clients.find((client) => client.name === form.client)
   const selectedClientInsights = selectedClient ? getClientInsights(selectedClient.name, appointments) : null
 
-  function changeAppointmentProfessional(value) {
-    setForm((current) => ({ ...current, employeeName: value, service: '', value: 0, time: '' }))
-    setFormMessage({ type: '', text: '' })
-  }
-
   useEffect(() => {
-    const safeFilter = initialProfessionalFilter === 'all' || employees.some((item) => item.name === initialProfessionalFilter) ? initialProfessionalFilter : 'all'
+    const safeFilter = initialProfessionalFilter !== 'all' && employees.some((item) => item.name === initialProfessionalFilter)
+      ? initialProfessionalFilter
+      : defaultEmployeeName
     setProfessionalFilter(safeFilter)
-    if (safeFilter !== 'all') {
-      setForm((current) => current.employeeName === safeFilter ? current : { ...current, employeeName: safeFilter, service: '', value: 0, time: '' })
-    }
-  }, [initialProfessionalFilter, employees])
+    setForm((current) => current.employeeName === safeFilter ? current : { ...current, employeeName: safeFilter, service: '', value: 0, time: '' })
+  }, [initialProfessionalFilter, employees, defaultEmployeeName])
 
   function changeProfessionalFilter(value) {
     setProfessionalFilter(value)
     onProfessionalFilterChange?.(value)
-    if (value !== 'all') {
-      setForm((current) => ({ ...current, employeeName: value, service: '', value: 0, time: '' }))
-      setFormMessage({ type: '', text: '' })
-    }
+    setForm((current) => ({ ...current, employeeName: value === 'all' ? '' : value, service: '', value: 0, time: '' }))
+    setFormMessage({ type: '', text: '' })
   }
 
   async function updateStatus(id, status) {
@@ -2559,7 +2553,6 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     const requiredFields = [
       ['client', 'cliente'],
       ['service', 'serviço'],
-      ['employeeName', 'profissional'],
       ['date', 'data'],
       ['time', 'horário']
     ]
@@ -2572,7 +2565,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     }
 
     if (!selectedEmployee) {
-      setFormMessage({ type: 'error', text: 'Selecione um profissional ativo.' })
+      setFormMessage({ type: 'error', text: 'Selecione um profissional no filtro da agenda.' })
       notify?.('Erro ao salvar: selecione um profissional.', 'error')
       return
     }
@@ -2620,7 +2613,7 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
     try {
       const newAppointment = normalizeAppointmentRecord(await createAppointmentRecord(salonId, newAppointmentPayload), allEmployees)
       setAppointments((current) => [...current, newAppointment])
-      setForm({ ...createInitialAppointmentForm(), date: form.date, employeeName: form.employeeName, service: '', value: 0, time: '', paymentMethod: '' })
+      setForm({ ...createInitialAppointmentForm(), date: form.date, employeeName: selectedEmployee.name, service: '', value: 0, time: '', paymentMethod: '' })
       setFormMessage({ type: 'success', text: 'Agendamento criado com sucesso!' })
       notify?.('Agendamento criado.')
     } catch (error) {
@@ -2650,12 +2643,16 @@ function Agenda({ salonId, appointments, setAppointments, user, clients, employe
             const selected = compatibleServices.find((item) => item.name === value)
             setForm({ ...form, service: value, value: selected?.price ?? form.value, time: '' })
           }} options={['Selecione um serviço', ...compatibleServices.map((item) => item.name)]} values={['', ...compatibleServices.map((item) => item.name)]} disabled={!selectedEmployee || compatibleServices.length === 0} />
+          {!selectedEmployee && (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-100">
+              Selecione um profissional no filtro da agenda para escolher serviço e horário.
+            </p>
+          )}
           {selectedEmployee && compatibleServices.length === 0 && (
             <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
               Nenhum serviço disponível para a função deste profissional.
             </p>
           )}
-          <Select label="Profissional" value={form.employeeName} onChange={changeAppointmentProfessional} options={employees.filter((item) => item.active).map((item) => item.name)} />
           <DatePickerBar value={form.date} onChange={(value) => setForm({ ...form, date: value, time: '' })} />
           {selectedEmployee && (
             <div className="rounded-2xl border border-blush bg-pearl px-4 py-3 text-sm font-semibold text-gray-700">
