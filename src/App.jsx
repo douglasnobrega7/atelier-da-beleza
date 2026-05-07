@@ -1341,7 +1341,6 @@ const cashierMenu = [
 
 const professionalMenu = [
   { id: 'minha-agenda', label: 'Minha Agenda' },
-  { id: 'clientes', label: 'Clientes' },
   { id: 'perfil', label: 'Perfil' }
 ]
 
