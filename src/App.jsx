@@ -2397,7 +2397,7 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
       Vencimento: salon.next_due_date ?? '',
       Funcionarios: salon.employees_count,
       Clientes: salon.clients_count,
-      Faturamento: salon.revenue
+      'Receita SaaS': salon.saas_revenue ?? 0
     }))
     if (format === 'pdf') {
       await exportSimplePdf('Relatório Geral da Plataforma', rows, 'relatorio-geral-plataforma.pdf')
@@ -2411,7 +2411,7 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
   if (loading && !data) return <PlatformSkeleton />
 
   return (
-    <div className="min-h-[calc(100vh-7rem)] rounded-xl border border-[#1f2b3b] bg-[#080d14] p-4 text-white shadow-2xl sm:p-6">
+    <div className="min-h-[calc(100vh-7rem)] w-full max-w-full overflow-hidden rounded-xl border border-[#1f2b3b] bg-[#080d14] p-4 text-white shadow-2xl sm:p-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <span className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">
@@ -2428,19 +2428,17 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <PlatformMetric title="Total de salões" value={metrics.total_salons ?? 0} detail="Base cadastrada" />
         <PlatformMetric title="Salões ativos" value={metrics.active_salons ?? 0} detail="Assinatura em dia" />
         <PlatformMetric title="Salões suspensos" value={metrics.suspended_salons ?? 0} detail="Acesso bloqueado" />
-        <PlatformMetric title="Usuários" value={metrics.total_users ?? 0} detail={`${metrics.total_clients ?? 0} clientes`} />
-        <PlatformMetric title="Faturamento movimentado" value={money.format(metrics.total_revenue ?? 0)} detail="Soma operacional" />
-        <PlatformMetric title="Atendimentos" value={metrics.total_appointments ?? 0} detail="Total da plataforma" />
-        <PlatformMetric title="Crescimento mensal" value={`${Number(metrics.monthly_growth ?? 0).toFixed(1)}%`} detail="Novos salões" />
-        <PlatformMetric title="Assinatura" value={money.format(premiumPlan.amount)} detail={premiumPlan.name} />
+        <PlatformMetric title="Salões cadastrados" value={metrics.registered_salons ?? metrics.total_salons ?? 0} detail="Contas na plataforma" />
+        <PlatformMetric title="Receita SaaS do período" value={money.format(metrics.total_saas_revenue ?? 0)} detail={`${metrics.active_period_salons ?? 0} salão(ões) ativo(s) em ${metrics.period_label ?? 'mês atual'}`} />
+        <PlatformMetric title="Assinatura" value={money.format(metrics.premium_amount ?? premiumPlan.amount)} detail={premiumPlan.name} />
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-        <section className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+      <div className="mt-6 grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_260px]">
+        <section className="min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-4">
           <div className="grid gap-3 md:grid-cols-[1fr_180px]">
             <input className="rounded-xl border border-white/10 bg-[#0d1522] px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Busca global por salão, dono, email ou WhatsApp" />
             <select className="rounded-xl border border-white/10 bg-[#0d1522] px-4 py-3 text-sm font-semibold text-white" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -2451,10 +2449,10 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
             </select>
           </div>
           <div className="simple-scrollbar mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1120px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  {['Salão', 'Dono/admin', 'Email', 'WhatsApp', 'Status', 'Assinatura', 'Vencimento', 'Equipe', 'Clientes', 'Faturamento', 'Ações'].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
+                  {['Salão', 'Dono/admin', 'Email', 'WhatsApp', 'Status', 'Assinatura', 'Vencimento', 'Equipe', 'Clientes', 'Receita SaaS', 'Ações'].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -2469,9 +2467,9 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
                     <td className="px-3 py-3">{salon.next_due_date ? formatDate(String(salon.next_due_date).slice(0, 10)) : '-'}</td>
                     <td className="px-3 py-3">{salon.employees_count}</td>
                     <td className="px-3 py-3">{salon.clients_count}</td>
-                    <td className="px-3 py-3">{money.format(salon.revenue ?? 0)}</td>
+                    <td className="px-3 py-3">{money.format(salon.saas_revenue ?? 0)}</td>
                     <td className="px-3 py-3">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid min-w-[92px] gap-2">
                         <button type="button" onClick={() => onAccessSalon?.(salon)} className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-black text-[#07111f]">Acessar</button>
                         <button type="button" onClick={() => setSelectedSalon(salon)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black text-white">Usuários</button>
                         <button type="button" onClick={() => changeSalonStatus(salon, 'suspenso')} disabled={busyAction !== ''} className="rounded-lg border border-amber-300/30 px-3 py-2 text-xs font-black text-amber-100">Suspender</button>
@@ -2487,10 +2485,10 @@ function PlatformMasterPanel({ data, loading, onRefresh, onAccessSalon, notify }
           {!filteredSalons.length && <p className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm font-semibold text-slate-300">Nenhum salão encontrado.</p>}
         </section>
 
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           <PlatformList title="Últimos salões criados" items={(data?.latest_salons ?? []).map((salon) => `${salon.name} · ${formatDate(String(salon.created_at ?? '').slice(0, 10))}`)} />
           <PlatformList title="Últimos logins" items={(data?.latest_logins ?? []).map((user) => `${user.name || user.email} · ${formatAuditDate(user.last_login_at)}`)} />
-          <PlatformList title="Maiores faturamentos" items={(data?.top_salons ?? []).map((salon) => `${salon.name}: ${money.format(salon.revenue ?? 0)}`)} />
+          <PlatformList title="Assinaturas ativas" items={(data?.active_subscription_salons ?? []).map((salon) => `${salon.name}: ${money.format(salon.saas_revenue ?? 0)}`)} />
         </section>
       </div>
 

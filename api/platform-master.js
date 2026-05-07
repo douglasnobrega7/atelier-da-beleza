@@ -173,8 +173,6 @@ async function fetchPlatformData(supabase) {
     usersResult,
     clientsResult,
     employeesResult,
-    cashResult,
-    appointmentsResult,
     auditResult
   ] = await Promise.all([
     supabase.from('salons').select('*').order('created_at', { ascending: false }),
@@ -182,12 +180,10 @@ async function fetchPlatformData(supabase) {
     supabase.from('users').select('id, salon_id, email, name, role, created_at, last_login_at, login_active'),
     supabase.from('clients').select('id, salon_id'),
     supabase.from('employees').select('id, salon_id, active, login_active'),
-    supabase.from('cash_movements').select('id, salon_id, amount, service_value, salon_value, status, payment_status, type, date, created_at'),
-    supabase.from('appointments').select('id, salon_id, appointment_date, status, price'),
     supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(30)
   ])
 
-  const results = [salonsResult, subscriptionsResult, usersResult, clientsResult, employeesResult, cashResult, appointmentsResult, auditResult]
+  const results = [salonsResult, subscriptionsResult, usersResult, clientsResult, employeesResult, auditResult]
   const failed = results.find((result) => result.error)
   if (failed?.error) throw failed.error
 
@@ -195,8 +191,10 @@ async function fetchPlatformData(supabase) {
   const users = usersResult.data ?? []
   const clients = clientsResult.data ?? []
   const employees = employeesResult.data ?? []
-  const cashRows = cashResult.data ?? []
-  const appointments = appointmentsResult.data ?? []
+  const now = new Date()
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+  const periodLabel = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`
 
   const salons = (salonsResult.data ?? []).map((salon) => {
     const subscription = subscriptions.find((item) => String(item.salon_id) === String(salon.id))
@@ -204,50 +202,43 @@ async function fetchPlatformData(supabase) {
     const admin = salonUsers.find((item) => String(item.role).toLowerCase() === 'admin')
     const salonClients = clients.filter((item) => String(item.salon_id ?? '') === String(salon.id))
     const salonEmployees = employees.filter((item) => String(item.salon_id ?? '') === String(salon.id))
-    const salonCash = cashRows.filter((item) => String(item.salon_id ?? '') === String(salon.id))
-    const revenue = salonCash.reduce((sum, item) => {
-      const status = String(item.status ?? item.payment_status ?? '').toLowerCase()
-      const type = String(item.type ?? '').toLowerCase()
-      if (status === 'cancelado' || type === 'saida') return sum
-      return sum + Number(item.amount ?? item.service_value ?? 0)
-    }, 0)
+    const subscriptionStatus = subscription?.status ?? salon.subscription_status ?? 'ativo'
+    const subscriptionCreatedAt = subscription?.created_at ? new Date(subscription.created_at) : null
+    const activeInPeriod = subscriptionStatus === 'ativo' && (!subscriptionCreatedAt || subscriptionCreatedAt <= periodEnd)
+    const saasRevenue = activeInPeriod ? PREMIUM_AMOUNT : 0
 
     return {
       ...salon,
       admin_name: admin?.name ?? '',
       admin_email: admin?.email ?? '',
-      subscription_status: subscription?.status ?? salon.subscription_status ?? 'ativo',
+      subscription_status: subscriptionStatus,
       subscription_amount: Number(subscription?.amount ?? PREMIUM_AMOUNT),
       next_due_date: subscription?.next_due_date ?? salon.subscription_due_date ?? null,
       employees_count: salonEmployees.length,
       clients_count: salonClients.length,
       users_count: salonUsers.length,
-      revenue,
+      active_in_period: activeInPeriod,
+      saas_revenue: saasRevenue,
       subscription
     }
   })
 
   const activeSalons = salons.filter((salon) => salon.subscription_status === 'ativo')
   const suspendedSalons = salons.filter((salon) => salon.subscription_status === 'suspenso')
-  const totalRevenue = salons.reduce((sum, salon) => sum + Number(salon.revenue ?? 0), 0)
-  const now = new Date()
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const previousMonth = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`
-  const createdThisMonth = salons.filter((salon) => String(salon.created_at ?? '').startsWith(currentMonth)).length
-  const createdPreviousMonth = salons.filter((salon) => String(salon.created_at ?? '').startsWith(previousMonth)).length
-  const monthlyGrowth = createdPreviousMonth ? ((createdThisMonth - createdPreviousMonth) / createdPreviousMonth) * 100 : createdThisMonth * 100
+  const activePeriodSalons = salons.filter((salon) => salon.active_in_period)
+  const totalSaasRevenue = activePeriodSalons.reduce((sum, salon) => sum + Number(salon.saas_revenue ?? 0), 0)
 
   return {
     metrics: {
       total_salons: salons.length,
+      registered_salons: salons.length,
       active_salons: activeSalons.length,
       suspended_salons: suspendedSalons.length,
-      total_users: users.length,
       total_clients: clients.length,
-      total_revenue: totalRevenue,
-      total_appointments: appointments.length,
-      monthly_growth: monthlyGrowth
+      active_period_salons: activePeriodSalons.length,
+      total_saas_revenue: totalSaasRevenue,
+      period_label: periodLabel,
+      premium_amount: PREMIUM_AMOUNT
     },
     salons,
     users,
@@ -256,7 +247,7 @@ async function fetchPlatformData(supabase) {
       .filter((user) => user.last_login_at)
       .sort((a, b) => String(b.last_login_at).localeCompare(String(a.last_login_at)))
       .slice(0, 8),
-    top_salons: [...salons].sort((a, b) => Number(b.revenue) - Number(a.revenue)).slice(0, 8),
+    active_subscription_salons: [...salons].filter((salon) => salon.active_in_period).slice(0, 8),
     audit_logs: auditResult.data ?? []
   }
 }
