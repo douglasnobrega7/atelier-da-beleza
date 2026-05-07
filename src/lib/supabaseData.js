@@ -799,7 +799,7 @@ export async function fetchAppointments(salonId) {
   const rows = await runQuery(
     supabase
       .from(TABLES.appointments)
-      .select('*, employees!inner(name)')
+      .select('*, employees(name)')
       .eq('salon_id', salonId)
       .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true })

@@ -439,11 +439,35 @@ function isProfessional(employee) {
   return (employee?.employeeType ?? 'professional') === 'professional'
 }
 
+function comparableText(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+}
+
+function findEmployeeForUser(employees = [], user) {
+  if (!user) return null
+  return employees.find((employee) => (
+    (user.employeeId && String(employee.id) === String(user.employeeId)) ||
+    (user.id && employee.userId && String(employee.userId) === String(user.id)) ||
+    (employee.accessEmail && user.email && comparableText(employee.accessEmail) === comparableText(user.email)) ||
+    (employee.email && user.email && comparableText(employee.email) === comparableText(user.email)) ||
+    comparableText(employee.name) === comparableText(user.name)
+  )) ?? null
+}
+
 function isEmployeeForUser(employee, user) {
   if (!employee || !user) return false
-  return (user.employeeId && String(employee.id) === String(user.employeeId)) ||
-    (employee.accessEmail && user.email && employee.accessEmail.toLowerCase() === user.email.toLowerCase()) ||
-    employee.name === user.name
+  return findEmployeeForUser([employee], user) !== null
+}
+
+function isAppointmentForUser(appointment, user, employees = []) {
+  const employee = findEmployeeForUser(employees, user)
+  if (employee) return isAppointmentForEmployee(appointment, employee)
+  return comparableText(getAppointmentEmployeeName(appointment, employees)) === comparableText(user?.name)
 }
 
 function toEmployeeType(value) {
@@ -946,9 +970,9 @@ function normalizeEmployeeRecord(row) {
     ...row,
     salon_id: field(row, 'salon_id') ?? field(row, 'salonId'),
     salonId: field(row, 'salonId', 'salon_id'),
-    name: field(row, 'name') ?? field(row, 'employeeName', 'employee_name') ?? '',
-    employeeName: field(row, 'employeeName', 'employee_name') ?? field(row, 'name') ?? '',
-    employee_name: field(row, 'employee_name') ?? field(row, 'employeeName') ?? field(row, 'name') ?? '',
+    name: String(field(row, 'name') ?? field(row, 'employeeName', 'employee_name') ?? '').trim(),
+    employeeName: String(field(row, 'employeeName', 'employee_name') ?? field(row, 'name') ?? '').trim(),
+    employee_name: String(field(row, 'employee_name') ?? field(row, 'employeeName') ?? field(row, 'name') ?? '').trim(),
     phone: field(row, 'phone') ?? '',
     status,
     position: field(row, 'position') || rawFunctions,
@@ -1538,10 +1562,7 @@ function getRoleTitle(role) {
 function normalizeUserProfile(profile, employees = []) {
   const role = normalizeRole(profile?.role)
   if (!profile?.email || !role) return null
-  const employee = employees.find((item) => (
-    item.name === profile.name ||
-    item.accessEmail?.toLowerCase() === profile.email.toLowerCase()
-  ))
+  const employee = findEmployeeForUser(employees, profile)
   return {
     id: profile.id,
     salon_id: profile.salon_id,
@@ -1549,7 +1570,7 @@ function normalizeUserProfile(profile, employees = []) {
     role,
     dbRole: profile.role,
     employeeId: employee?.id,
-    name: employee?.name ?? profile.name,
+    name: employee?.name ?? String(profile.name ?? '').trim(),
     title: getRoleTitle(role),
     email: profile.email,
     username: profile.username ?? '',
@@ -1688,6 +1709,18 @@ function App() {
       const normalizedAppointments = (appointmentRows ?? []).map((appointment) => normalizeAppointmentRecord(appointment, normalizedEmployees))
       const normalizedAdvances = (advanceRows ?? []).map(normalizeAdvanceRecord)
       const advanceCashEntries = normalizedAdvances.filter(isValidAdvance).map((advance) => createAdvanceCashEntry(advance))
+      setCurrentUser((current) => {
+        if (!current || current.role === 'platform_owner') return current
+        if (String(current.salonId ?? current.salon_id ?? '') !== String(salonId)) return current
+        const employee = findEmployeeForUser(normalizedEmployees, current)
+        if (!employee) return current
+        return {
+          ...current,
+          employeeId: employee.id,
+          name: employee.name,
+          phone: employee.phone ?? current.phone
+        }
+      })
 
       setSalonSettings(normalizeSalonSettings(salonRow ?? {}))
       setClients((clientRows ?? []).map(normalizeClientRecord))
@@ -1821,6 +1854,25 @@ function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     window.localStorage.setItem('salon-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    if (!currentSalonId || currentUser?.role === 'platform_owner') return undefined
+    let lastRefreshAt = 0
+    const refreshSalonData = () => {
+      if (document.visibilityState === 'hidden') return
+      if (Date.now() - lastRefreshAt < 5000) return
+      lastRefreshAt = Date.now()
+      loadSalonData(currentSalonId).catch((error) => console.error('Erro ao atualizar dados do salão:', error))
+    }
+
+    window.addEventListener('focus', refreshSalonData)
+    document.addEventListener('visibilitychange', refreshSalonData)
+
+    return () => {
+      window.removeEventListener('focus', refreshSalonData)
+      document.removeEventListener('visibilitychange', refreshSalonData)
+    }
+  }, [currentSalonId, currentUser?.role])
 
   function notify(text, type = 'success') {
     if (type === 'success') {
@@ -2315,7 +2367,7 @@ function ThemeToggle({ theme, onChange }) {
 }
 
 function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointments, setAppointments, clients, setClients, cashEntries, setCashEntries, cashClosures, setCashClosures, commissionPayments, setCommissionPayments, auditLogs, setAuditLogs, advances, setAdvances, blockedSlots, setBlockedSlots, inventoryItems, setInventoryItems, employees, setEmployees, services, setServices, salonSettings, setSalonSettings, agendaProfessional, setAgendaProfessional, onOpenAgendaForProfessional, notify, platformData, platformLoading, onRefreshPlatform, onAccessSalonAsOwner }) {
-  const employeeAppointments = appointments.filter((item) => getAppointmentEmployeeName(item, employees) === user.name)
+  const employeeAppointments = appointments.filter((item) => isAppointmentForUser(item, user, employees))
   const visibleAppointments = appointments
   const activeClients = clients.filter((client) => client.active)
   const professionals = getProfessionals(employees)
@@ -2340,7 +2392,7 @@ function PageRouter({ page, user, salonId, databaseStatus, dataLoading, appointm
     relatorios: user.role === 'admin' ? <Reports salonId={salonId} appointments={appointments} employees={employees} cashEntries={cashEntries} setCashEntries={setCashEntries} advances={advances} setAdvances={setAdvances} commissionPayments={commissionPayments} setCommissionPayments={setCommissionPayments} user={user} salonSettings={salonSettings} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
     auditoria: user.role === 'admin' ? <AuditTrail salonId={salonId} auditLogs={auditLogs} setAuditLogs={setAuditLogs} notify={notify} /> : <AccessDenied />,
     perfil: <EmployeeProfile user={user} appointments={employeeAppointments} employees={employees} setEmployees={setEmployees} />,
-    'minha-agenda': <ProfessionalAgenda user={user} appointments={employeeAppointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
+    'minha-agenda': <ProfessionalAgenda user={user} appointments={appointments} employees={employees} blockedSlots={blockedSlots} salonSettings={salonSettings} notify={notify} />,
     configuracoes: user.role === 'admin' ? <Settings salonId={salonId} settings={salonSettings} setSettings={setSalonSettings} notify={notify} /> : <AccessDenied />
   }
 
@@ -3976,9 +4028,7 @@ function Employees({ salonId, user, employees = [], setEmployees, appointments, 
 
   async function removeEmployee(employee) {
     if (!canManage) return
-    const isCurrentUser = employee.id === user.employeeId ||
-      employee.name === user.name ||
-      employee.accessEmail?.toLowerCase() === user.email?.toLowerCase()
+    const isCurrentUser = isEmployeeForUser(employee, user)
 
     if (isCurrentUser) {
       notify?.('Você não pode remover seu próprio usuário', 'error')
@@ -6320,12 +6370,13 @@ function ProfessionalAgenda({ user, appointments, employees, blockedSlots, salon
 
   const selectedService = compatibleServices.find((item) => item.name === serviceName)
   const weekDates = getWeekDates(date)
-  const dayAppointments = appointments.filter((item) => item.date === date)
-  const weekAppointments = appointments.filter((item) => weekDates.includes(item.date))
+  const professionalAppointments = appointments.filter((item) => isAppointmentForEmployee(item, employee))
+  const dayAppointments = professionalAppointments.filter((item) => item.date === date)
+  const weekAppointments = professionalAppointments.filter((item) => weekDates.includes(item.date))
   const availableSlots = selectedService
-    ? getAvailableSlots({ employee, date, service: selectedService, appointments, blockedSlots, salonSettings })
+    ? getAvailableSlots({ employee, date, service: selectedService, appointments: professionalAppointments, blockedSlots, salonSettings })
     : []
-  const occupiedSlots = getOccupiedSlots({ employee, date, appointments })
+  const occupiedSlots = getOccupiedSlots({ employee, date, appointments: professionalAppointments })
   const nextAppointments = dayAppointments
     .filter((item) => !isCancelledStatus(item.status))
     .sort((a, b) => String(a.time ?? '').localeCompare(String(b.time ?? '')))
