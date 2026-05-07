@@ -2091,7 +2091,7 @@ function LoginScreen({ onLogin, theme, onThemeChange }) {
                 Sistema inteligente para gestão de salão
               </div>
               <h1 className="max-w-xl text-4xl font-bold leading-tight text-graphite sm:text-5xl">
-                Salão Pro
+                Painel Salão
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-gray-600 dark:text-gray-300">
                 Controle agenda, clientes, serviços, caixa, estoque e equipe em uma interface objetiva, moderna e preparada para operação diária.
@@ -2161,7 +2161,7 @@ function AuthLoadingScreen({ theme, onThemeChange }) {
             <ThemeToggle theme={theme} onChange={onThemeChange} />
           </div>
           <BrandLogo className="mx-auto mb-6 h-20 w-64 ring-1 ring-[#d7e0e7] dark:ring-white/10" />
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-goldSoft">Salão Pro</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-goldSoft">Painel Salão</p>
           <h1 className="mt-3 text-2xl font-bold">Carregando sessão...</h1>
         </div>
       </div>
