@@ -5402,6 +5402,7 @@ function auditActionLabel(action) {
   const labels = {
     edicao_vale: 'Edição de vale',
     cancelamento_vale: 'Cancelamento de vale',
+    exclusao_vale: 'Exclusão de vale',
     edicao_lancamento_financeiro: 'Edição de lançamento financeiro',
     cancelamento_lancamento_financeiro: 'Cancelamento de lançamento financeiro',
     pagamento_comissao: 'Pagamento de comissão',
@@ -5436,11 +5437,36 @@ function auditLogDateFilterValue(log) {
   return parsed.toLocaleDateString('sv-SE')
 }
 
+const STORE_AUDIT_ACTIONS = new Set([
+  'edicao_vale',
+  'cancelamento_vale',
+  'exclusao_vale',
+  'edicao_lancamento_financeiro',
+  'cancelamento_lancamento_financeiro',
+  'pagamento_comissao',
+  'fechamento_caixa',
+  'retirada_dono'
+])
+
+const STORE_AUDIT_ENTITY_TYPES = new Set([
+  'advance',
+  'cash_movement',
+  'commission_payment',
+  'cash_closure'
+])
+
+function isStoreAuditLog(log) {
+  const action = String(log?.action ?? '').toLowerCase()
+  const entityType = String(log?.entityType ?? log?.entity_type ?? '').toLowerCase()
+  return STORE_AUDIT_ACTIONS.has(action) || STORE_AUDIT_ENTITY_TYPES.has(entityType)
+}
+
 function AuditTrail({ salonId, auditLogs = [], setAuditLogs, notify }) {
   const [selectedLog, setSelectedLog] = useState(null)
   const [filters, setFilters] = useState({ startDate: '', endDate: '' })
   const [selectedIds, setSelectedIds] = useState([])
   const rows = [...auditLogs]
+    .filter(isStoreAuditLog)
     .filter((log) => {
       const date = auditLogDateFilterValue(log)
       return (!filters.startDate || date >= filters.startDate) &&

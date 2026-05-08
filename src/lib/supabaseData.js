@@ -19,6 +19,30 @@ export const TABLES = {
 export const databaseNotConfiguredMessage = 'Banco ainda não configurado para esta tela.'
 export const missingSalonIdMessage = 'salon_id ausente'
 
+const STORE_AUDIT_ACTIONS = new Set([
+  'edicao_vale',
+  'cancelamento_vale',
+  'exclusao_vale',
+  'edicao_lancamento_financeiro',
+  'cancelamento_lancamento_financeiro',
+  'pagamento_comissao',
+  'fechamento_caixa',
+  'retirada_dono'
+])
+
+const STORE_AUDIT_ENTITY_TYPES = new Set([
+  'advance',
+  'cash_movement',
+  'commission_payment',
+  'cash_closure'
+])
+
+function isStoreAuditLog(log) {
+  const action = String(log?.action ?? '').toLowerCase()
+  const entityType = String(log?.entityType ?? log?.entity_type ?? '').toLowerCase()
+  return STORE_AUDIT_ACTIONS.has(action) || STORE_AUDIT_ENTITY_TYPES.has(entityType)
+}
+
 export function isMissingTableError(error) {
   if (!error) return false
   const message = error.message?.toLowerCase() ?? ''
@@ -875,7 +899,7 @@ export async function createCommissionPayment(salonId, payload) {
 export async function fetchAuditLogs(salonId) {
   try {
     const data = await runQuery(bySalon(TABLES.auditLogs, salonId).order('created_at', { ascending: false }))
-    return Array.isArray(data) ? data : []
+    return Array.isArray(data) ? data.filter(isStoreAuditLog) : []
   } catch (error) {
     console.error('Erro audit_logs Supabase:', error?.original ?? error)
     return []
